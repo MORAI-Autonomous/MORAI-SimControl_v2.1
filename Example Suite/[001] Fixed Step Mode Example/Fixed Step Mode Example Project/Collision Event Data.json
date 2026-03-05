@@ -1,0 +1,44 @@
+{
+	"version": "1.0.0-alpha",
+	"createDate": "2026-03-05 14:59",
+	"interface":
+	{
+		"activate": true,
+		"recordEnabled": false,
+		"outputFormat": "CSV",
+		"name": "Collision Event Data",
+		"projectName": "MoraiProject_0",
+		"messageTemplateFileName": "Collision Event Data",
+		"networkType": "UDP",
+		"hertz": 60,
+		"direction": "SEND",
+		"hostAddr":
+		{
+			"ip": "127.0.0.1",
+			"port": 0
+		},
+		"destinationAddr":
+		{
+			"ip": "127.0.0.1",
+			"port": 9094
+		},
+		"entityList": [
+			{
+				"id": "Car_1",
+				"name": "Car_1",
+				"descriptorName": ""
+			}
+		],
+		"recordRelationDataModelList": [],
+		"rosInfo":
+		{
+			"topicName": "",
+			"messageType": ""
+		},
+		"canInfo":
+		{
+			"id": "",
+			"name": ""
+		}
+	}
+}
