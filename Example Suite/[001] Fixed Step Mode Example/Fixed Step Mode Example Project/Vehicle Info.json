@@ -8,7 +8,7 @@
 		"outputFormat": "CSV",
 		"name": "Vehicle Info",
 		"projectName": "MoraiProject_0",
-		"messageTemplateFileName": "Vehicle Info",
+		"messageTemplateFileName": "Vehicle Info with wheel",
 		"networkType": "UDP",
 		"hertz": 60,
 		"direction": "SEND",

@@ -2,7 +2,7 @@
 	"version": "1.0.0-alpha",
 	"messageTemplate":
 	{
-		"name": "Vehicle Info",
+		"name": "Vehicle Info with wheel",
 		"MessageType": "Entity",
 		"isControl": false,
 		"isSensor": false,
@@ -137,6 +137,37 @@
 						"name": "steer_angle",
 						"relationName": "GroundVehicleEntity",
 						"variableName": "ground_vehicle_attributes.vehicle_control_attributes.steer_angle",
+						"variableType": "FLOAT"
+					},
+					{
+						"name": "wheel_count",
+						"relationName": "GroundVehicleEntity",
+						"variableName": "ground_vehicle_attributes.wheel_count",
+						"variableType": "INT32"
+					}
+				]
+			},
+			{
+				"type": "REPEAT",
+				"relationName": "GroundVehicleEntity",
+				"repeatFieldName": "ground_vehicle_attributes.wheel_attributes",
+				"fieldList": [
+					{
+						"name": "x",
+						"relationName": "GroundVehicleEntity",
+						"variableName": "world_position.x",
+						"variableType": "FLOAT"
+					},
+					{
+						"name": "y",
+						"relationName": "GroundVehicleEntity",
+						"variableName": "world_position.y",
+						"variableType": "FLOAT"
+					},
+					{
+						"name": "z",
+						"relationName": "GroundVehicleEntity",
+						"variableName": "world_position.z",
 						"variableType": "FLOAT"
 					}
 				]

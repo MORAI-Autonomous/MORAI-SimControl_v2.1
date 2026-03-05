@@ -10,11 +10,11 @@
     <LogicFile filepath="MGeo" />
   </RoadNetwork>
   <Entities>
-    <ScenarioObject name="Car_1">
-      <Vehicle mass="0.0" model3d="MA Formula 4" name="Car_1" role="none" vehicleCategory="car">
+    <ScenarioObject name="Car_2">
+      <Vehicle mass="0.0" model3d="MA Formula 4" name="Car_2" role="none" vehicleCategory="car">
         <BoundingBox>
-          <Center x="1.3925" y="0.0" z="-0.0" />
-          <Dimensions height="1.545" length="4.355" width="1.805" />
+          <Center x="1.304051" y="-0.0" z="0.339117" />
+          <Dimensions height="1.318234" length="3.951894" width="1.703001" />
         </BoundingBox>
         <Performance maxAcceleration="0.0" maxAccelerationRate="0.0" maxDeceleration="0.0" maxDecelerationRate="0.0" maxSpeed="0.0" />
         <Axles>
@@ -24,11 +24,11 @@
         <Properties />
       </Vehicle>
     </ScenarioObject>
-    <ScenarioObject name="Car_2">
-      <Vehicle mass="0.0" model3d="MA Formula 4" name="Car_2" role="none" vehicleCategory="car">
+    <ScenarioObject name="Car_1">
+      <Vehicle mass="0.0" model3d="MA Formula 4" name="Car_1" role="none" vehicleCategory="car">
         <BoundingBox>
-          <Center x="1.304051" y="-0.0" z="0.339117" />
-          <Dimensions height="1.318234" length="3.951894" width="1.703001" />
+          <Center x="1.3925" y="0.0" z="-0.0" />
+          <Dimensions height="1.545" length="4.355" width="1.805" />
         </BoundingBox>
         <Performance maxAcceleration="0.0" maxAccelerationRate="0.0" maxDeceleration="0.0" maxDecelerationRate="0.0" maxSpeed="0.0" />
         <Axles>
@@ -65,7 +65,7 @@
           <PrivateAction>
             <TeleportAction>
               <Position>
-                <WorldPosition x="1067.294192" y="-1641.017459" z="3.306749" h="0.926265" p="-0.003149" r="0.019275" />
+                <WorldPosition x="1067.294192" y="-1641.017459" z="3.317505" h="0.926265" p="-0.003149" r="0.019275" />
               </Position>
             </TeleportAction>
           </PrivateAction>
