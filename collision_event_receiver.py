@@ -8,7 +8,7 @@ import time
 # Config
 # =========================
 COLLISION_EVENT_IP = "127.0.0.1"
-COLLISION_EVENT_PORT = 9090  # UE 송신 포트와 맞추세요
+COLLISION_EVENT_PORT = 9094  # UE 송신 포트와 맞추세요
 
 # 출력 옵션
 PRINT_FULL_ITEM = True      # True: 모든 필드 출력 / False: 요약만
