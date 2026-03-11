@@ -4,8 +4,6 @@ import time
 
 import protocol_defs as proto
 import tcp_transport as tcp
-
-
 class AutoCaller(threading.Thread):
     """
     FixedStep <-> SaveData를 max_calls 만큼 반복 호출.
@@ -22,7 +20,7 @@ class AutoCaller(threading.Thread):
         pending_add_fn,
         pending_pop_fn,
         step_count: int = 1,
-        timeout_sec: float = 2.0,
+        timeout_sec: float = 3.0,
         delay_sec: float = 0.0,
         progress_every: int = 50,
     ):

@@ -55,7 +55,7 @@ def print_key_bindings():
     print("Press [7] : Send TransformControlById (TCP 0x1105)")    
     print("Press [8] : Send TransformControl (UDP)")
     print("Press [A] : Send SetTrajectory (TCP 0x1106)")
-    #print(f"Press [9] : Toggle AutoCall (FixedStep <-> SaveData) x {MAX_CALL_NUM}")
+    print(f"Press [W] : Toggle AutoCall (FixedStep <-> SaveData) x {MAX_CALL_NUM}")
     print("Press [Q] : Quit\n")
 
 # =========================
@@ -141,7 +141,7 @@ def main():
                     params = prompt.prompt_transform_control()
                     commands.send_transform_control_udp(udp_send_sock, **params)
 
-                elif key == "9":
+                elif key in ("w", "W"):
                     # Toggle AutoCaller
                     if auto_caller is None or not auto_caller.is_alive():
                         auto_caller = ac.AutoCaller(

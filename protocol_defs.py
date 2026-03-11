@@ -83,7 +83,7 @@ VALID_MSG_TYPES = {
 # =========================
 # AutoCall defaults
 # =========================
-MAX_CALL_NUM = 1000
+MAX_CALL_NUM = 5000
 AUTO_TIMEOUT_SEC = 2.0
 AUTO_DELAY_BETWEEN_CMDS_SEC = 0.0  # 0.01 등으로 조절 가능
 
