@@ -59,13 +59,13 @@ def prompt_create_object() -> dict:
     print("\n── Create Object ──────────────────────────────")
     return {
         "entity_type":          _int  ("entity_type",          1   ),
-        "pos_x":                _float("pos x",                0.0 ),
-        "pos_y":                _float("pos y",                0.0 ),
-        "pos_z":                _float("pos z",                0.0 ),
-        "rot_x":                _float("rot x",                0.0 ),
-        "rot_y":                _float("rot y",                0.0 ),
-        "rot_z":                _float("rot z",                0.0 ),
-        "driving_mode":         _int  ("driving_mode",         1   ),
+        "pos_x":                _float("pos x",                267.5667 ),
+        "pos_y":                _float("pos y",                -299.4991 ),
+        "pos_z":                _float("pos z",                0.0522 ),
+        "rot_x":                _float("rot x",                -0.18 ),
+        "rot_y":                _float("rot y",                -179.982 ),
+        "rot_z":                _float("rot z",                -0.51 ),
+        "driving_mode":         _int  ("driving_mode",         2   ),
         "ground_vehicle_model": _int  ("ground_vehicle_model", 12   ),
     }
 

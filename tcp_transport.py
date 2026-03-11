@@ -296,3 +296,75 @@ def send_transform_control_by_id(
         f"rot=({rot_x:.2f},{rot_y:.2f},{rot_z:.2f}) "
         f"steer={steer_angle:.2f}"
     )
+
+
+# =========================
+# Trajectory Command
+# =========================
+
+
+def build_set_trajectory_payload(
+    entity_id: str,
+    follow_mode: int,
+    trajectory_name: str,
+    points,
+) -> bytes:
+    """
+    points: [(x, y, z, time), ...]
+    """
+
+    entity_id_bytes = entity_id.encode("utf-8")
+    name_bytes = trajectory_name.encode("utf-8")
+
+    payload = bytearray()
+
+    # entity id
+    payload += struct.pack("<I", len(entity_id_bytes))
+    payload += entity_id_bytes
+
+    # follow mode
+    payload += struct.pack("<i", follow_mode)
+
+    # trajectory name
+    payload += struct.pack("<I", len(name_bytes))
+    payload += name_bytes
+
+    # point count
+    payload += struct.pack("<I", len(points))
+
+    # points
+    for x, y, z, t in points:
+        payload += struct.pack("<dddd", x, y, z, t)
+
+    return bytes(payload)
+
+def send_set_trajectory(
+    sock: socket.socket,
+    request_id: int,
+    entity_id: str,
+    follow_mode: int,
+    trajectory_name: str,
+    points,
+):
+    payload = build_set_trajectory_payload(
+        entity_id=entity_id,
+        follow_mode=follow_mode,
+        trajectory_name=trajectory_name,
+        points=points,
+    )
+
+    header = build_header(
+        proto.MSG_CLASS_REQ,
+        proto.MSG_TYPE_SET_TRAJECTORY_COMMAND,
+        len(payload),
+        request_id,
+        proto.FLAG,
+    )
+
+    sock.sendall(header + payload)
+
+    print(
+        f"[SEND][TCP] SetTrajectory(0x1106) "
+        f"rid={request_id} id={entity_id} "
+        f"points={len(points)}"
+    )

@@ -54,6 +54,7 @@ def print_key_bindings():
     print("Press [6] : Send ManualControlById (TCP 0x1104)")
     print("Press [7] : Send TransformControlById (TCP 0x1105)")    
     print("Press [8] : Send TransformControl (UDP)")
+    print("Press [A] : Send SetTrajectory (TCP 0x1106)")
     #print(f"Press [9] : Toggle AutoCall (FixedStep <-> SaveData) x {MAX_CALL_NUM}")
     print("Press [Q] : Quit\n")
 
@@ -160,7 +161,24 @@ def main():
                         auto_caller.stop()
                         auto_caller = None
                 
-                
+                elif key in ("a", "A"):
+                    with lock:
+                        rid = request_id_ref["value"]
+                        request_id_ref["value"] += 1
+
+                    pending_add(pending, lock, rid, MSG_TYPE_SET_TRAJECTORY_COMMAND)
+
+                    tcp.send_set_trajectory(
+                        tcp_sock,
+                        request_id=rid,
+                        entity_id="Car_1",
+                        follow_mode=2,  # C++ 기준 2 -> follow
+                        trajectory_name="Route_1",
+                        points=[
+                            (237.4360, -299.4899, 0.0210, 2.0),
+                            (199.6393, -280.8129, 0.1524, 4.0),
+                        ],
+                    )
 
             except (ConnectionError, OSError) as e:
                 print(f"[ERROR] Connection lost: {e}")
