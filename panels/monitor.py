@@ -147,7 +147,7 @@ def build(parent: int | str) -> None:
                        callback=_on_start, width=70)
         dpg.add_button(label="Stop",  tag=_T["btn_stop"],
                        callback=_on_stop,  width=70)
-        dpg.add_text("● Stopped", tag=_T["status"], color=(180, 80, 80, 255))
+        dpg.add_text("Stopped", tag=_T["status"], color=(180, 80, 80, 255))
 
     dpg.add_separator(parent=parent)
 
