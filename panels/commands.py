@@ -64,8 +64,15 @@ def build(parent: int | str) -> None:
         with dpg.group(horizontal=True):
             dpg.add_button(label=">> AutoCaller", tag="btn_auto",
                            callback=_on_auto_toggle)
+            dpg.add_input_int(tag="auto_max_calls",
+                              default_value=proto.MAX_CALL_NUM,
+                              min_value=1, max_value=999999,
+                              step=0, width=90)
+        with dpg.group(horizontal=True):
             dpg.add_text("0", tag="auto_progress_text")
-            dpg.add_text(f"/ {proto.MAX_CALL_NUM}")
+            dpg.add_text("/", color=(160, 160, 160, 255))
+            dpg.add_text(str(proto.MAX_CALL_NUM), tag="auto_total_text",
+                         color=(160, 160, 160, 255))
         dpg.add_progress_bar(tag="auto_progress_bar",
                              default_value=0.0, width=-1, overlay="")
 
@@ -157,6 +164,7 @@ def update_auto_progress(current: int, total: int) -> None:
         dpg.set_value("auto_progress_bar", ratio)
         dpg.configure_item("auto_progress_bar", overlay=f"{c}/{t}")
         dpg.set_value("auto_progress_text", str(c))
+        dpg.set_value("auto_total_text", str(t))
     ui_queue.post(_apply)
 
 
@@ -174,7 +182,9 @@ def reset_auto_ui() -> None:
 def _on_auto_toggle() -> None:
     if _toggle_auto is None:
         return
-    running = _toggle_auto()
+    max_calls = dpg.get_value("auto_max_calls")
+    dpg.set_value("auto_total_text", str(max_calls))
+    running = _toggle_auto(max_calls)
     label = "[] Stop" if running else ">> AutoCaller"
     dpg.configure_item("btn_auto", label=label)
 

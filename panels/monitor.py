@@ -21,7 +21,7 @@ _NAMES = [
 ]
 
 _DEFAULTS = {
-    "vehicle_info_receiver":            ("127.0.0.1", 9097),
+    "vehicle_info_receiver":            ("127.0.0.1", 9091),
     "vehicle_info_with_wheel_receiver": ("127.0.0.1", 9091),
     "collision_event_receiver":         ("127.0.0.1", 9094),
 }

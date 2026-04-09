@@ -100,14 +100,14 @@ class AppState:
         pending_add(self.pending, self.lock, rid, msg_type)
         send_fn(rid)
 
-    def toggle_auto(self) -> bool:
+    def toggle_auto(self, max_calls: int = MAX_CALL_NUM) -> bool:
         if self.auto_caller is None or not self.auto_caller.is_alive():
             self.auto_caller = ac.AutoCaller(
                 tcp_sock=self.tcp_sock,
                 pending=self.pending,
                 lock=self.lock,
                 request_id_ref=self.rid,
-                max_calls=MAX_CALL_NUM,
+                max_calls=max_calls,
                 pending_add_fn=pending_add,
                 pending_pop_fn=pending_pop,
                 step_count=1,
