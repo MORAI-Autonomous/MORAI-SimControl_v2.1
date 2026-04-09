@@ -2,6 +2,7 @@
 import math
 import socket
 import threading
+from collections import deque
 
 import dearpygui.dearpygui as dpg
 
@@ -43,7 +44,12 @@ _recv_state = {
     for name in _NAMES
 }
 
-_current: str = _NAMES[0]
+_current: str = "vehicle_info_with_wheel_receiver"   # 기본 선택
+
+# ─── 롤링 버퍼 ───────────────────────────────────────────────────
+_BUF_SIZE = 200
+_yaw_buf: deque = deque(maxlen=_BUF_SIZE)
+_acc_buf: deque = deque(maxlen=_BUF_SIZE)
 
 # ─── UI tag map ─────────────────────────────────────────────────
 _T = {
@@ -69,6 +75,16 @@ _T = {
     "vi_speed_bar": "mon_vi_speed_bar",
     "vi_wheel_grp": "mon_vi_wheel_grp",   # shown only for vi_wheel receiver
     "vi_wheel_items": "mon_vi_wheel_items",
+    # Yaw Rate plot
+    "yaw_plot":     "mon_yaw_plot",
+    "yaw_x_axis":   "mon_yaw_x_axis",
+    "yaw_y_axis":   "mon_yaw_y_axis",
+    "yaw_series":   "mon_yaw_series",
+    # Acceleration X plot
+    "acc_plot":     "mon_acc_plot",
+    "acc_x_axis":   "mon_acc_x_axis",
+    "acc_y_axis":   "mon_acc_y_axis",
+    "acc_series":   "mon_acc_series",
     # Collision display group
     "col_group":    "mon_col_group",
     "col_entity":   "mon_col_entity",
@@ -106,7 +122,7 @@ class _UDPThread(threading.Thread):
 # ─── Build ──────────────────────────────────────────────────────
 def build(parent: int | str) -> None:
     global _current
-    _current = _NAMES[0]
+    _current = "vehicle_info_with_wheel_receiver"
 
     # ── 수신기 선택 콤보 ──────────────────────────────────────
     dpg.add_text("UDP Receiver", color=(200, 200, 100, 255), parent=parent)
@@ -169,6 +185,30 @@ def build(parent: int | str) -> None:
         _vi_section(_T["vi_group"], "Velocity (m/s)", "vi_vel")
         _vi_section(_T["vi_group"], "Acceleration",   "vi_acc")
         _vi_section(_T["vi_group"], "Angular Vel",    "vi_ang")
+
+        # ── Yaw Rate 실시간 플롯 ──────────────────────────────
+        dpg.add_spacer(height=6)
+        dpg.add_text("Yaw Rate  (angular_vel.Z)", color=(180, 180, 180, 255))
+        with dpg.plot(tag=_T["yaw_plot"], height=120, width=-1, no_title=True):
+            dpg.add_plot_legend()
+            dpg.add_plot_axis(dpg.mvXAxis, tag=_T["yaw_x_axis"],
+                              no_tick_labels=True)
+            with dpg.plot_axis(dpg.mvYAxis, tag=_T["yaw_y_axis"], label="deg/s"):
+                dpg.add_line_series([], [], tag=_T["yaw_series"],
+                                    label="Yaw Rate")
+            dpg.set_axis_limits(_T["yaw_y_axis"], -200.0, 200.0)
+
+        # ── Acceleration X 실시간 플롯 ────────────────────────
+        dpg.add_spacer(height=6)
+        dpg.add_text("Acceleration X  (local_acc.X)", color=(180, 180, 180, 255))
+        with dpg.plot(tag=_T["acc_plot"], height=120, width=-1, no_title=True):
+            dpg.add_plot_legend()
+            dpg.add_plot_axis(dpg.mvXAxis, tag=_T["acc_x_axis"],
+                              no_tick_labels=True)
+            with dpg.plot_axis(dpg.mvYAxis, tag=_T["acc_y_axis"], label="g"):
+                dpg.add_line_series([], [], tag=_T["acc_series"],
+                                    label="Acc X")
+            dpg.set_axis_limits(_T["acc_y_axis"], -20.0, 20.0)
 
         dpg.add_spacer(height=6)
         dpg.add_text("Control", color=(200, 200, 100, 255))
@@ -282,6 +322,8 @@ def _on_start(*_) -> None:
     st["sock"]    = sock
     st["thread"]  = thread
     st["running"] = True
+    _yaw_buf.clear()
+    _acc_buf.clear()
     thread.start()
 
     _refresh_buttons()
@@ -363,6 +405,23 @@ def _apply_vi(p: dict, has_wheel: bool) -> None:
     speed = math.sqrt(vel["x"]**2 + vel["y"]**2 + vel["z"]**2)
     dpg.set_value(_T["vi_speed_bar"], min(speed / _MAX_SPEED, 1.0))
     dpg.configure_item(_T["vi_speed_bar"], overlay=f"{speed:.2f} m/s")
+
+    # ── Yaw Rate 플롯 업데이트 ────────────────────────────────
+    yaw_deg = math.degrees(p["angular_velocity"]["z"])
+    _yaw_buf.append(yaw_deg)
+    if dpg.does_item_exist(_T["yaw_series"]):
+        xs = list(range(len(_yaw_buf)))
+        dpg.set_value(_T["yaw_series"], [xs, list(_yaw_buf)])
+        dpg.fit_axis_data(_T["yaw_x_axis"])
+
+    # ── Acceleration X 플롯 업데이트 (m/s² → g) ──────────────
+    _G = 9.81
+    acc_g = p["local_acceleration"]["x"] / _G
+    _acc_buf.append(acc_g)
+    if dpg.does_item_exist(_T["acc_series"]):
+        xs = list(range(len(_acc_buf)))
+        dpg.set_value(_T["acc_series"], [xs, list(_acc_buf)])
+        dpg.fit_axis_data(_T["acc_x_axis"])
 
     if has_wheel:
         _rebuild_wheels(p.get("wheels", []), p.get("wheel_count", 0))
