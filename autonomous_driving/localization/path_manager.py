@@ -12,6 +12,7 @@ class PathManager:
         self.is_closed_path = is_closed_path
         self.local_path_size = local_path_size
         self.velocity_profile = []
+        self._last_wp = 0   # 마지막으로 찾은 웨이포인트 인덱스 캐시
 
     def set_velocity_profile(self, max_velocity, road_friction, window_size):
         # TODO: moving window를 설정하는 방식 개선.
@@ -65,24 +66,35 @@ class PathManager:
         for i in range(len(self.path)-window_size, len(self.path) - 10):
             velocity_profile.append(max_velocity)
 
-        for i in range(len(self.path) - 10,len(self.path)):
-            velocity_profile.append(0.)
+        for i in range(len(self.path) - 10, len(self.path)):
+            # 순환 경로(closed path)는 끝 지점에서도 속도를 유지해야 함.
+            # 열린 경로(open path)만 마지막 10개 웨이포인트를 0으로 감속.
+            velocity_profile.append(0. if not self.is_closed_path else max_velocity)
 
         self.velocity_profile = velocity_profile
 
-        print('velocity_profile',velocity_profile)
-
     def get_local_path(self, vehicle_state):
-        # TODO: 최소값 구하는 로직 개선 필요.
-        min_distance=float('inf')
-        current_waypoint=0
-        for i, point in enumerate(self.path):
-            dx = point.x - vehicle_state.position.x
-            dy = point.y - vehicle_state.position.y
-            distance = dx*dx + dy*dy
-            if distance < min_distance:
-                min_distance = distance
+        n = len(self.path)
+        # 이전 인덱스 ±window 범위만 탐색 (closed path는 모듈로 처리)
+        BACK, FRONT = 5, 100
+        min_distance = float('inf')
+        current_waypoint = self._last_wp
+
+        for offset in range(-BACK, FRONT + 1):
+            if self.is_closed_path:
+                i = (self._last_wp + offset) % n
+            else:
+                i = self._last_wp + offset
+                if i < 0 or i >= n:
+                    continue
+            dx = self.path[i].x - vehicle_state.position.x
+            dy = self.path[i].y - vehicle_state.position.y
+            d  = dx * dx + dy * dy
+            if d < min_distance:
+                min_distance = d
                 current_waypoint = i
+
+        self._last_wp = current_waypoint
 
         if current_waypoint + self.local_path_size < len(self.path):
             local_path = self.path[current_waypoint:current_waypoint + self.local_path_size]

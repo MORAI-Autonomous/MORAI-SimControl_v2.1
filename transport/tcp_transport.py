@@ -212,8 +212,7 @@ def send_manual_control_by_id(
     steer_angle: float,
 ):
     payload = build_manual_control_by_id_payload(entity_id, throttle, brake, steer_angle)
-    _send_packet(sock, request_id, proto.MSG_TYPE_MANUAL_CONTROL_BY_ID_COMMAND, payload,
-                 f"ManualControlById(0x1302) id={entity_id} throttle={throttle} brake={brake} steer={steer_angle}")
+    _send_packet(sock, request_id, proto.MSG_TYPE_MANUAL_CONTROL_BY_ID_COMMAND, payload)
 
 
 def send_transform_control_by_id(
@@ -227,10 +226,7 @@ def send_transform_control_by_id(
     payload = build_transform_control_by_id_payload(
         entity_id, pos_x, pos_y, pos_z, rot_x, rot_y, rot_z, steer_angle,
     )
-    _send_packet(sock, request_id, proto.MSG_TYPE_TRANSFORM_CONTROL_BY_ID_COMMAND, payload,
-                 f"TransformControlById(0x1303) id={entity_id} "
-                 f"pos=({pos_x:.2f},{pos_y:.2f},{pos_z:.2f}) "
-                 f"rot=({rot_x:.2f},{rot_y:.2f},{rot_z:.2f}) steer={steer_angle:.2f}")
+    _send_packet(sock, request_id, proto.MSG_TYPE_TRANSFORM_CONTROL_BY_ID_COMMAND, payload)
 
 
 def send_set_trajectory(

@@ -3,18 +3,17 @@ import time
 import dearpygui.dearpygui as dpg
 import utils.ui_queue as ui_queue
 
-_MAX_LINES  = 500
-_TAG_CHILD  = "log_child"
-_TAG_SEARCH = "log_search"
-_TAG_FOUND  = "log_found"
+_MAX_LINES   = 500
+_TAG_TEXT    = "log_text"
+_TAG_SEARCH  = "log_search"
+_TAG_FOUND   = "log_found"
 _auto_scroll = True
-_lines: list[tuple] = []   # (text, color)
-_search_kw  = ""
+_lines: list[str] = []   # 표시용 plain text
+_search_kw   = ""
 
 
 def build(parent) -> None:
     with dpg.group(parent=parent):
-        # toolbar
         with dpg.group(horizontal=True):
             dpg.add_checkbox(
                 label="Auto Scroll",
@@ -36,45 +35,42 @@ def build(parent) -> None:
                            callback=lambda: _on_search(dpg.get_value(_TAG_SEARCH)))
             dpg.add_text("", tag=_TAG_FOUND, color=(180, 180, 100, 255))
 
-        # 로그 텍스트를 담는 child_window — 스크롤은 여기서 처리
-        dpg.add_child_window(tag=_TAG_CHILD, width=-1, height=-1, border=False)
+        dpg.add_input_text(
+            tag=_TAG_TEXT,
+            multiline=True,
+            readonly=True,
+            width=-1,
+            height=-1,
+        )
 
 
 def append(msg: str, level: str = "INFO") -> None:
-    ts    = time.strftime("%H:%M:%S")
-    text  = f"[{ts}][{level}] {msg}"
-    color = _level_color(level)
-    ui_queue.post(lambda t=text, c=color: _add_line(t, c))
+    ts   = time.strftime("%H:%M:%S")
+    text = f"[{ts}][{level}] {msg}"
+    ui_queue.post(lambda t=text: _add_line(t))
 
 
-def _add_line(text: str, color: tuple) -> None:
-    if not dpg.does_item_exist(_TAG_CHILD):
+def _add_line(text: str) -> None:
+    if not dpg.does_item_exist(_TAG_TEXT):
         return
 
-    _lines.append((text, color))
+    _lines.append(text)
     if len(_lines) > _MAX_LINES:
         _lines.pop(0)
+        _rebuild_view()
+        return
 
-    if _search_kw:
-        # 검색 중: 키워드 포함 라인만 표시
-        if _search_kw.lower() not in text.lower():
-            return
-    else:
-        # 오래된 아이템 정리
-        children = dpg.get_item_children(_TAG_CHILD, slot=1) or []
-        if len(children) >= _MAX_LINES:
-            for old in children[:len(children) - _MAX_LINES + 1]:
-                dpg.delete_item(old)
+    if _search_kw and _search_kw.lower() not in text.lower():
+        return
 
-    dpg.add_text(text, color=color, parent=_TAG_CHILD)
+    current = dpg.get_value(_TAG_TEXT)
+    dpg.set_value(_TAG_TEXT, (current + "\n" + text) if current else text)
 
-    if _auto_scroll:
-        dpg.set_y_scroll(_TAG_CHILD, dpg.get_y_scroll_max(_TAG_CHILD))
+    # mvInputText은 set_y_scroll을 지원하지 않음 — 자동 스크롤 미지원
 
 
 def _go_to_end() -> None:
-    if dpg.does_item_exist(_TAG_CHILD):
-        dpg.set_y_scroll(_TAG_CHILD, dpg.get_y_scroll_max(_TAG_CHILD))
+    pass  # mvInputText은 set_y_scroll 미지원
 
 
 def _on_search(keyword: str) -> None:
@@ -84,18 +80,15 @@ def _on_search(keyword: str) -> None:
 
 
 def _rebuild_view() -> None:
-    if not dpg.does_item_exist(_TAG_CHILD):
+    if not dpg.does_item_exist(_TAG_TEXT):
         return
-    dpg.delete_item(_TAG_CHILD, children_only=True)
 
     if _search_kw:
-        matched = [(t, c) for t, c in _lines if _search_kw.lower() in t.lower()]
-        for t, c in matched:
-            dpg.add_text(t, color=c, parent=_TAG_CHILD)
+        matched = [t for t in _lines if _search_kw.lower() in t.lower()]
+        dpg.set_value(_TAG_TEXT, "\n".join(matched))
         dpg.set_value(_TAG_FOUND, f"{len(matched)} match(es)")
     else:
-        for t, c in _lines:
-            dpg.add_text(t, color=c, parent=_TAG_CHILD)
+        dpg.set_value(_TAG_TEXT, "\n".join(_lines))
         dpg.set_value(_TAG_FOUND, "")
 
     _go_to_end()
@@ -103,8 +96,8 @@ def _rebuild_view() -> None:
 
 def _clear() -> None:
     _lines.clear()
-    if dpg.does_item_exist(_TAG_CHILD):
-        dpg.delete_item(_TAG_CHILD, children_only=True)
+    if dpg.does_item_exist(_TAG_TEXT):
+        dpg.set_value(_TAG_TEXT, "")
     if dpg.does_item_exist(_TAG_FOUND):
         dpg.set_value(_TAG_FOUND, "")
 

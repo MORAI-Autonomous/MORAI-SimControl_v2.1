@@ -14,6 +14,7 @@ class PurePursuit(object):
 
         self._path = []
         self._vehicle_state = VehicleState()
+        self._last_lfd_idx = 0
 
     @property
     def path(self):
@@ -26,6 +27,7 @@ class PurePursuit(object):
     @path.setter
     def path(self, path):
         self._path = path
+        self._last_lfd_idx = 0
 
     @vehicle_state.setter
     def vehicle_state(self, vehicle_state):
@@ -36,25 +38,18 @@ class PurePursuit(object):
         lfd = np.clip(lfd, self.min_lfd, self.max_lfd)
 
         steering_angle = 0.
-        lookahead_found = False
-        for i, point in enumerate(self._path):
-            diff = point - self._vehicle_state.position
-            rotated_diff = diff.rotate(-self._vehicle_state.yaw)
-            
-            #print(f"  Path Point {i}: x={point.x:.2f}, y={point.y:.2f}")
-            #print(f"  Rotated Diff: x={rotated_diff.x:.2f}, y={rotated_diff.y:.2f}")
-
-            if rotated_diff.x > 0: # 차량 전방의 경로점만 고려
-                dis = rotated_diff.distance()
-                if dis >= lfd: # lookahead distance 이상 떨어진 경로점
-                    theta = rotated_diff.angle
-                    steering_angle = np.arctan2(2*self.wheelbase*np.sin(theta), lfd)
-                    lookahead_found = True
-                    #print(f"  Lookahead Point Found (Idx {i}): Dis={dis:.2f}, Theta={np.rad2deg(theta):.2f} deg, Calculated Steering={np.rad2deg(steering_angle):.2f} deg")
-                    break
-        
-        if not lookahead_found:
-            print("  No suitable lookahead point found. Steering angle remains 0.")
-
-        print(f"Final Steering Angle (rad): {steering_angle:.4f}, (deg): {np.rad2deg(steering_angle):.4f}")
+        n = len(self._path)
+        # 마지막 lookahead 인덱스부터 탐색, 없으면 처음부터 재탐색
+        for attempt in range(2):
+            start = self._last_lfd_idx if attempt == 0 else 0
+            for i in range(start, n):
+                diff = self._path[i] - self._vehicle_state.position
+                rotated_diff = diff.rotate(-self._vehicle_state.yaw)
+                if rotated_diff.x > 0:
+                    dis = rotated_diff.distance()
+                    if dis >= lfd:
+                        theta = rotated_diff.angle
+                        steering_angle = np.arctan2(2 * self.wheelbase * np.sin(theta), lfd)
+                        self._last_lfd_idx = i
+                        return steering_angle
         return steering_angle

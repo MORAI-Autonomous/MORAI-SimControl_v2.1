@@ -33,7 +33,7 @@ def init(start_fn, stop_fn):
     _start_fn = start_fn
     _stop_fn  = stop_fn
 
-# app.py
+# app.py (connect() 내부)
 some_panel.init(start_fn=state.start_something, stop_fn=state.stop_something)
 ```
 
@@ -41,25 +41,88 @@ some_panel.init(start_fn=state.start_something, stop_fn=state.stop_something)
 
 ## Runner 패턴
 
-`LaneRunner`, `AdRunner` 는 각각 독립 스레드로 동작한다.
-`app.py` 의 `AppState` 가 인스턴스를 소유하고 생명주기를 관리한다.
+Runner는 독립 스레드로 동작하며, `app.py`의 `AppState`가 인스턴스를 소유하고 생명주기를 관리한다.
 
-| Runner | 소유 필드 | 비고 |
-|--------|-----------|------|
-| `LaneRunner` | `self.lc_runner` | 단일 인스턴스 |
-| `AdRunner` | `self.ad_runners: list` | 다중 차량, 차량별 1개 |
+| Runner | 소유 필드 | 모드 | 비고 |
+|--------|-----------|------|------|
+| `LaneRunner` | `self.lc_runner` | Fixed | 단일 인스턴스 |
+| `AdRunner` | `self.ad_runners: list` | Fixed | 차량당 1개, 다중 인스턴스 |
+| `StepAdRunner` | `self.step_ad_runners: list` | Fixed Step | 단일 인스턴스로 전체 차량 관리 |
 
 ```python
-# 시작
-runner = AdRunner(tcp_sock=..., entity_id=..., vi_port=..., ...)
-runner.start()
-self.ad_runners.append(runner)
+# Fixed 모드 — 차량별 AdRunner
+for v in vehicles:
+    runner = AdRunner(tcp_sock=..., entity_id=v["entity_id"], vi_port=v["vi_port"], ...)
+    runner.start()
+    self.ad_runners.append(runner)
 
-# 종료
-for r in self.ad_runners:
-    r.stop()
-self.ad_runners.clear()
+# Fixed Step 모드 — StepAdRunner 하나가 전체 차량 순환 제어
+runner = StepAdRunner(tcp_sock=..., vehicles=vehicles, ...)
+runner.start()
+self.step_ad_runners.append(runner)
 ```
+
+---
+
+## status_cb 패턴 — 실시간 상태 UI 표시
+
+매 tick마다 로그를 append하면 UI 텍스트 누적 + DPG 재빌드 오버헤드가 크다.
+Runner에서 UI 상태를 갱신할 때는 `status_cb`를 주입받아 `dpg.set_value`로 직접 업데이트한다.
+
+```python
+# Runner 생성 시 콜백 주입
+runner = AdRunner(
+    ...,
+    status_cb=au_panel.update_status,   # (entity_id, x, y, vel_kmh, accel, brake, steer) → None
+)
+
+# Runner 내부 — 매 tick
+if self._status_cb:
+    self._status_cb(entity_id, x, y, vel * 3.6, accel, brake, steer_n)
+
+# panels/autonomous_panel.py — ui_queue 경유, 5개 set_value 한 번에
+def update_status(entity_id, x, y, vel_kmh, accel, brake, steer):
+    slot = _entity_slot.get(entity_id)
+    if slot is None:
+        return
+    def _apply(...):
+        pfx = f"au_sv{slot}_"
+        if not dpg.does_item_exist(pfx + "pos"):
+            return
+        dpg.set_value(pfx + "pos",   f"({x:.1f}, {y:.1f})")
+        dpg.set_value(pfx + "vel",   f"{vel_kmh:.1f} km/h")
+        ...
+    ui_queue.post(_apply)
+```
+
+**핵심:** `log.append` (텍스트 증가 + DPG 재빌드) 대신 `set_value` (값 교체) 를 사용해
+tick당 UI 오버헤드를 대폭 줄인다.
+
+---
+
+## 동적 차량 목록 — `_build_vehicles`
+
+`autonomous_panel.py`에서 차량 수를 런타임에 추가/삭제할 때 DPG 아이템을 동적으로 재생성한다.
+
+```python
+# 컨테이너 그룹을 미리 만들어 두고
+dpg.add_group(tag="au_vehicles_area")
+_build_vehicles(2)   # 기본 2대
+
+# 수 변경 시 자식만 삭제하고 재생성
+def _build_vehicles(count: int) -> None:
+    dpg.delete_item("au_vehicles_area", children_only=True)
+    for i in range(1, count + 1):
+        with dpg.group(tag=f"au_vehicle_group_{i}", parent="au_vehicles_area"):
+            dpg.add_input_text(tag=f"au_path_{i}", ...)
+            dpg.add_input_text(tag=f"au_entity_id_{i}", ...)
+            dpg.add_input_int(tag=f"au_vi_port_{i}", ...)
+            dpg.add_text("-", tag=f"au_sv{i}_pos", ...)
+            ...
+```
+
+**주의:** `delete_item(children_only=True)` 후 재생성 시 반드시 `with dpg.group(parent=...)` 컨텍스트 안에서
+아이템을 추가해야 DPG 부모 컨텍스트 스택이 올바르게 유지된다.
 
 ---
 
@@ -87,3 +150,39 @@ lane_controller.py     LaneController (메인 제어 루프, update_params)
 `LaneController.update_params(**kwargs)` 로 실행 중 파라미터 실시간 변경 가능:
 `kp`, `kd`, `ema_alpha`, `steer_rate`, `offset_clip`, `invert_steer`, `target_kmh`,
 `bev_top_crop`, `min_blob_area`, `search_ratio`, `min_pixels`
+
+---
+
+## autonomous_driving/ 성능 최적화
+
+### PathManager — 윈도우 탐색 캐시
+
+이전 구현은 매 tick 전체 경로를 O(n) 순회했다.
+`_last_wp` 캐시를 도입해 ±5 뒤 / +100 앞 범위만 탐색한다.
+
+```python
+# localization/path_manager.py
+BACK, FRONT = 5, 100
+for offset in range(-BACK, FRONT + 1):
+    i = (self._last_wp + offset) % n   # closed path
+    ...
+self._last_wp = current_waypoint
+```
+
+경로 길이에 무관하게 매 tick O(106) 으로 고정된다.
+
+### PurePursuit — lookahead 인덱스 캐시
+
+`_last_lfd_idx` 에서 전방 탐색을 시작하고, 실패 시 인덱스 0부터 재탐색(fallback)한다.
+
+```python
+# control/pure_pursuit.py
+for attempt in range(2):
+    start = self._last_lfd_idx if attempt == 0 else 0
+    for i in range(start, n):
+        if dis >= lfd:
+            self._last_lfd_idx = i
+            return steering_angle
+```
+
+경로 setter 에서 `_last_lfd_idx = 0` 으로 리셋한다.

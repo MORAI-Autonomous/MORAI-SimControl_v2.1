@@ -1,15 +1,7 @@
 # panels/commands.py
 from __future__ import annotations
 from typing import Callable, Optional
-import csv
-import json
-import os
 import threading
-
-_STATE_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "config", "fp_state.json"
-)
 
 import dearpygui.dearpygui as dpg
 import utils.ui_queue as ui_queue
@@ -17,27 +9,15 @@ import transport.protocol_defs as proto
 import transport.tcp_transport as tcp
 import panels.log as log
 
-_tcp_sock                      = None
-_dispatch:    Optional[Callable] = None
-_toggle_auto: Optional[Callable] = None
-_start_fp_fn: Optional[Callable] = None
-_stop_fp_fn:  Optional[Callable] = None
-_start_ad_fn: Optional[Callable] = None
-_stop_ad_fn:  Optional[Callable] = None
+_tcp_sock                           = None
+_dispatch:         Optional[Callable] = None
+_toggle_auto:      Optional[Callable] = None
 
-
-def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable,
-         start_fp_fn: Callable = None, stop_fp_fn: Callable = None,
-         start_ad_fn: Callable = None, stop_ad_fn: Callable = None) -> None:
-    global _tcp_sock, _dispatch, _toggle_auto, _start_fp_fn, _stop_fp_fn
-    global _start_ad_fn, _stop_ad_fn
+def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
+    global _tcp_sock, _dispatch, _toggle_auto
     _tcp_sock    = tcp_sock
     _dispatch    = dispatch_fn
     _toggle_auto = toggle_auto_fn
-    _start_fp_fn = start_fp_fn
-    _stop_fp_fn  = stop_fp_fn
-    _start_ad_fn = start_ad_fn
-    _stop_ad_fn  = stop_ad_fn
 
 
 def build(parent: int | str) -> None:
@@ -138,10 +118,20 @@ def build(parent: int | str) -> None:
             dpg.add_input_text(tag="obj_entity_id",
                                default_value="Car_1", width=140)
 
-        # Manual Control : [Send]
-        # throttle [  ] brake [  ] Steer Angle [  ]
-        with dpg.group(horizontal=True):
-            dpg.add_text("Manual Control :", color=(180, 180, 180, 255))
+        # ── Manual Control (collapsing) ────────────────────
+        with dpg.collapsing_header(label="Manual Control", default_open=True):
+            dpg.add_spacer(height=2)
+            with dpg.group(horizontal=True):
+                for tag, label, default in [
+                    ("mc_thr",   "Throttle",    0.4),
+                    ("mc_brk",   "Brake",       0.0),
+                    ("mc_steer", "Steer Angle", 0.0),
+                ]:
+                    dpg.add_text(label, color=(160, 160, 160, 255))
+                    dpg.add_input_float(tag=tag, default_value=default,
+                                        min_value=-1.0, max_value=1.0,
+                                        step=0, width=60, format="%.2f")
+            dpg.add_spacer(height=2)
             dpg.add_button(label="Send",
                 callback=lambda: _dispatch(
                     proto.MSG_TYPE_MANUAL_CONTROL_BY_ID_COMMAND,
@@ -151,23 +141,22 @@ def build(parent: int | str) -> None:
                         throttle=dpg.get_value("mc_thr"),
                         brake=dpg.get_value("mc_brk"),
                         steer_angle=dpg.get_value("mc_steer"))))
-        with dpg.group(horizontal=True):
-            for tag, label, default in [
-                ("mc_thr",   "Throttle",    0.4),
-                ("mc_brk",   "Brake",       0.0),
-                ("mc_steer", "Steer Angle", 0.0),
-            ]:
-                dpg.add_text(label, color=(160, 160, 160, 255))
-                dpg.add_input_float(tag=tag, default_value=default,
-                                    min_value=-1.0, max_value=1.0,
-                                    step=0, width=60, format="%.2f")
 
-        dpg.add_spacer(height=4)
-
-        # Transform Control : [Send]
-        # px py pz / rx ry rz / steer
-        with dpg.group(horizontal=True):
-            dpg.add_text("Transform Control :", color=(180, 180, 180, 255))
+        # ── Transform Control (collapsing) ─────────────────
+        with dpg.collapsing_header(label="Transform Control", default_open=True):
+            dpg.add_spacer(height=2)
+            with dpg.group(horizontal=True):
+                for tag, lbl in [("tc_px","px"),("tc_py","py"),("tc_pz","pz")]:
+                    dpg.add_text(lbl, color=(160, 160, 160, 255))
+                    dpg.add_input_float(tag=tag, default_value=0.0, step=0, width=80)
+            with dpg.group(horizontal=True):
+                for tag, lbl in [("tc_rx","rx"),("tc_ry","ry"),("tc_rz","rz")]:
+                    dpg.add_text(lbl, color=(160, 160, 160, 255))
+                    dpg.add_input_float(tag=tag, default_value=0.0, step=0, width=80)
+            with dpg.group(horizontal=True):
+                dpg.add_text("steer", color=(160, 160, 160, 255))
+                dpg.add_input_float(tag="tc_steer", default_value=0.0, step=0, width=80)
+            dpg.add_spacer(height=2)
             dpg.add_button(label="Send",
                 callback=lambda: _dispatch(
                     proto.MSG_TYPE_TRANSFORM_CONTROL_BY_ID_COMMAND,
@@ -178,17 +167,6 @@ def build(parent: int | str) -> None:
                         pos_z=dpg.get_value("tc_pz"), rot_x=dpg.get_value("tc_rx"),
                         rot_y=dpg.get_value("tc_ry"), rot_z=dpg.get_value("tc_rz"),
                         steer_angle=dpg.get_value("tc_steer"))))
-        with dpg.group(horizontal=True):
-            for tag, lbl in [("tc_px","px"),("tc_py","py"),("tc_pz","pz")]:
-                dpg.add_text(lbl, color=(160, 160, 160, 255))
-                dpg.add_input_float(tag=tag, default_value=0.0, step=0, width=80)
-        with dpg.group(horizontal=True):
-            for tag, lbl in [("tc_rx","rx"),("tc_ry","ry"),("tc_rz","rz")]:
-                dpg.add_text(lbl, color=(160, 160, 160, 255))
-                dpg.add_input_float(tag=tag, default_value=0.0, step=0, width=80)
-        with dpg.group(horizontal=True):
-            dpg.add_text("steer", color=(160, 160, 160, 255))
-            dpg.add_input_float(tag="tc_steer", default_value=0.0, step=0, width=80)
 
         # ── Fixed Step ─────────────────────────────────────
         _section("FIXED STEP")
@@ -233,81 +211,6 @@ def build(parent: int | str) -> None:
                          color=(160, 160, 160, 255))
         dpg.add_progress_bar(tag="auto_progress_bar",
                              default_value=0.0, width=-1, overlay="")
-
-        # ── File Playback ──────────────────────────────────
-        _section("FILE PLAYBACK (Fixed Step Mode)")
-
-        # Browse : [파일 선택...]
-        with dpg.group(horizontal=True):
-            dpg.add_text("Browse    :", color=(180, 180, 180, 255))
-            _folder_btn(callback=_browse_cmd_file)
-
-        # Path : [입력창]
-        with dpg.group(horizontal=True):
-            dpg.add_text("Path      :", color=(180, 180, 180, 255))
-            dpg.add_input_text(tag="fp_path", width=-1, hint="CSV file path")
-
-        # ID : [entity_id]
-        with dpg.group(horizontal=True):
-            dpg.add_text("ID        :", color=(180, 180, 180, 255))
-            dpg.add_input_text(tag="fp_entity_id", default_value="Car_1", width=80)
-
-        # Control : [▶ Play] [■ Stop]  status
-        with dpg.group(horizontal=True):
-            dpg.add_text("Control   :", color=(180, 180, 180, 255))
-            dpg.add_button(label="▶ Play", tag="fp_btn_play", callback=_on_fp_play)
-            dpg.add_button(label="■ Stop", tag="fp_btn_stop", callback=_on_fp_stop)
-            dpg.add_text(" ", tag="fp_status", color=(160, 160, 160, 255))
-
-        dpg.add_progress_bar(tag="fp_progress_bar",
-                             default_value=0.0, width=-1, overlay="")
-
-        # 마지막 사용 경로 복원
-        _load_fp_state()
-
-        # ── Autonomous Driving ─────────────────────────────
-        _section("AUTONOMOUS DRIVING")
-
-        # 2-Vehicle 테이블 (Car_1 / Car_2)
-        with dpg.table(header_row=True, borders_innerV=True,
-                       policy=dpg.mvTable_SizingFixedFit):
-            dpg.add_table_column(label="",          width_fixed=True,  init_width_or_weight=68)
-            dpg.add_table_column(label="Vehicle 1", width_stretch=True)
-            dpg.add_table_column(label="Vehicle 2", width_stretch=True)
-
-            # Path 행
-            with dpg.table_row():
-                dpg.add_text("Path :", color=(180, 180, 180, 255))
-                with dpg.group(horizontal=True):
-                    _folder_btn(callback=lambda: _browse_ad_path(1))
-                    dpg.add_input_text(tag="ad_path_1", width=-1,
-                                       hint="CSV", default_value="path_link.csv")
-                with dpg.group(horizontal=True):
-                    _folder_btn(callback=lambda: _browse_ad_path(2))
-                    dpg.add_input_text(tag="ad_path_2", width=-1,
-                                       hint="CSV", default_value="path_link.csv")
-
-            # ID 행
-            with dpg.table_row():
-                dpg.add_text("ID :", color=(180, 180, 180, 255))
-                dpg.add_input_text(tag="ad_entity_id_1", default_value="Car_1", width=-1)
-                dpg.add_input_text(tag="ad_entity_id_2", default_value="Car_2", width=-1)
-
-            # VI Port 행
-            with dpg.table_row():
-                dpg.add_text("VI Port :", color=(180, 180, 180, 255))
-                dpg.add_input_int(tag="ad_vi_port_1", default_value=9091,
-                                  min_value=1, max_value=65535, step=0, width=-1)
-                dpg.add_input_int(tag="ad_vi_port_2", default_value=9092,
-                                  min_value=1, max_value=65535, step=0, width=-1)
-
-        # Control : [▶ Start] [■ Stop]  status
-        dpg.add_spacer(height=4)
-        with dpg.group(horizontal=True):
-            dpg.add_text("Control   :", color=(180, 180, 180, 255))
-            dpg.add_button(label="▶ Start", tag="ad_btn_start", callback=_on_ad_start)
-            dpg.add_button(label="■ Stop",  tag="ad_btn_stop",  callback=_on_ad_stop)
-            dpg.add_text(" ", tag="ad_status", color=(160, 160, 160, 255))
 
 
 
@@ -420,181 +323,4 @@ def _section(label: str) -> None:
     dpg.add_spacer(height=2)
 
 
-# ── File Playback ────────────────────────────────────────────
 
-def _browse_cmd_file() -> None:
-    def _open():
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        path = filedialog.askopenfilename(
-            title="Select CMD CSV File",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        )
-        root.destroy()
-        if path:
-            ui_queue.post(lambda p=path: (
-                dpg.set_value("fp_path", p),
-                _save_fp_state(),
-            ))
-    threading.Thread(target=_open, daemon=True).start()
-
-
-def _load_cmd_csv(path: str) -> list:
-    rows = []
-    try:
-        with open(path, newline='', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                rows.append({
-                    'time':     float(row['Time [sec]']),
-                    'throttle': float(row['Acc [0~1]']),
-                    'brake':    float(row['Brk [0~1]']),
-                    'swa':      float(row['SWA [deg]']),
-                })
-    except Exception as e:
-        log.append(f"[FilePlay] CSV 파싱 오류: {e}", level="ERROR")
-        return []
-    log.append(f"[FilePlay] {len(rows)}행 로드 완료: {path}")
-    return rows
-
-
-def _on_fp_play() -> None:
-    if _start_fp_fn is None:
-        log.append("[FilePlay] start_fp_fn이 초기화되지 않았습니다.", level="ERROR")
-        return
-    path = dpg.get_value("fp_path").strip()
-    if not path:
-        log.append("[FilePlay] CSV 파일 경로가 없습니다.", level="WARN")
-        return
-
-    rows = _load_cmd_csv(path)
-    if not rows:
-        return
-
-    entity_id = dpg.get_value("fp_entity_id").strip() or "Car_1"
-
-    _save_fp_state()   # path + entity_id 영구 저장
-    dpg.configure_item("fp_btn_play", enabled=False)
-    dpg.set_value("fp_status", f"0 / {len(rows)}")
-
-    _start_fp_fn(rows, entity_id)
-
-
-def _on_fp_stop() -> None:
-    if _stop_fp_fn:
-        _stop_fp_fn()
-
-
-def update_fp_progress(current: int, total: int) -> None:
-    """app.py의 FileCaller 스레드에서 호출 — UI 큐로 안전하게 업데이트."""
-    def _apply(c=current, t=total):
-        if not dpg.does_item_exist("fp_progress_bar"):
-            return
-        ratio = c / t if t > 0 else 0.0
-        dpg.set_value("fp_progress_bar", ratio)
-        dpg.configure_item("fp_progress_bar", overlay=f"{c}/{t}")
-        dpg.set_value("fp_status", f"{c} / {t}")
-    ui_queue.post(_apply)
-
-
-def reset_fp_ui(stopped: bool = False) -> None:
-    """app.py의 FileCaller 스레드에서 완료/중단 후 호출."""
-    def _apply(s=stopped):
-        if not dpg.does_item_exist("fp_btn_play"):
-            return
-        dpg.configure_item("fp_btn_play", enabled=True)
-        dpg.set_value("fp_progress_bar", 0.0)
-        dpg.configure_item("fp_progress_bar", overlay="")
-        dpg.set_value("fp_status", "Stopped" if s else "Done")
-        log.append(f"[FilePlay] {'중단됨' if s else '재생 완료'}")
-    ui_queue.post(_apply)
-
-
-# ── Autonomous Driving ───────────────────────────────────────
-
-def _browse_ad_path(vehicle: int = 1) -> None:
-    tag = f"ad_path_{vehicle}"
-    def _open():
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        path = filedialog.askopenfilename(
-            title=f"Select Path CSV File (Vehicle {vehicle})",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-        )
-        root.destroy()
-        if path:
-            ui_queue.post(lambda p=path, t=tag: dpg.set_value(t, p))
-    threading.Thread(target=_open, daemon=True).start()
-
-
-def _on_ad_start() -> None:
-    if _start_ad_fn is None:
-        log.append("[AD] start_ad_fn이 초기화되지 않았습니다.", level="ERROR")
-        return
-    vehicles = [
-        {
-            "path":      dpg.get_value("ad_path_1").strip() or "path_link.csv",
-            "entity_id": dpg.get_value("ad_entity_id_1").strip() or "Car_1",
-            "vi_port":   dpg.get_value("ad_vi_port_1"),
-        },
-        {
-            "path":      dpg.get_value("ad_path_2").strip() or "path_link.csv",
-            "entity_id": dpg.get_value("ad_entity_id_2").strip() or "Car_2",
-            "vi_port":   dpg.get_value("ad_vi_port_2"),
-        },
-    ]
-    dpg.configure_item("ad_btn_start", enabled=False)
-    dpg.set_value("ad_status", "● Running")
-    dpg.configure_item("ad_status", color=(100, 220, 100, 255))
-    _start_ad_fn(vehicles)
-
-
-def _on_ad_stop() -> None:
-    if _stop_ad_fn:
-        _stop_ad_fn()
-
-
-def reset_ad_ui() -> None:
-    """app.py에서 AD 종료 후 호출."""
-    def _apply():
-        if not dpg.does_item_exist("ad_btn_start"):
-            return
-        dpg.configure_item("ad_btn_start", enabled=True)
-        dpg.set_value("ad_status", "● Stopped")
-        dpg.configure_item("ad_status", color=(180, 80, 80, 255))
-    ui_queue.post(_apply)
-
-
-# ── File Playback 상태 저장/복원 ──────────────────────────────
-
-def _save_fp_state() -> None:
-    try:
-        os.makedirs(os.path.dirname(_STATE_FILE), exist_ok=True)
-        data = {
-            "fp_path":      dpg.get_value("fp_path"),
-            "fp_entity_id": dpg.get_value("fp_entity_id"),
-        }
-        with open(_STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"[Commands] save state error: {e}")
-
-
-def _load_fp_state() -> None:
-    if not os.path.isfile(_STATE_FILE):
-        return
-    try:
-        with open(_STATE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if data.get("fp_path") and dpg.does_item_exist("fp_path"):
-            dpg.set_value("fp_path", data["fp_path"])
-        if data.get("fp_entity_id") and dpg.does_item_exist("fp_entity_id"):
-            dpg.set_value("fp_entity_id", data["fp_entity_id"])
-    except Exception as e:
-        print(f"[Commands] load state error: {e}")

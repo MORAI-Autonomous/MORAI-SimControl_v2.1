@@ -11,12 +11,15 @@ import transport.tcp_transport as tcp
 import transport.tcp_thread as tcp_thread_mod
 import automation.automation as ac
 from ad_runner import AdRunner
+from step_ad_runner import StepAdRunner
 from lane_runner import LaneRunner
 import utils.ui_queue as ui_queue
 import panels.log               as log_panel
 import panels.monitor            as monitor_panel
 import panels.commands           as cmd_panel
-import panels.lane_control_panel as lc_panel
+import panels.lane_control_panel  as lc_panel
+import panels.autonomous_panel    as au_panel
+import panels.file_playback_panel as fp_panel
 
 _logo_tag = None   # 로고 텍스처 태그 (main()에서 로드 후 설정)
 
@@ -70,6 +73,7 @@ def pending_pop(pending, lock, request_id, msg_type):
 def _make_tcp_socket():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    s.settimeout(5.0)   # 전송 블로킹 5s 상한 → UI 먹통 방지
     return s
 
 def _close_socket(sock):
@@ -98,15 +102,22 @@ class AppState:
         self.receiver    = None
         self.auto_caller = None
         self.fp_caller   = None
-        self.ad_runners: list = []
+        self.ad_runners:      list = []
+        self.step_ad_runners: list = []
         self.lc_runner   = None
         self._connecting = False
         self._conn_lock  = threading.Lock()
 
     def dispatch(self, msg_type: int, send_fn):
-        rid = self.rid.next()
-        pending_add(self.pending, self.lock, rid, msg_type)
-        send_fn(rid)
+        if self.tcp_sock is None:
+            log_panel.append("Not connected.", "WARN")
+            return
+        try:
+            rid = self.rid.next()
+            pending_add(self.pending, self.lock, rid, msg_type)
+            send_fn(rid)
+        except OSError as e:
+            log_panel.append(f"Send error: {e}", "ERROR")
 
     def toggle_auto(self, max_calls: int = MAX_CALL_NUM) -> bool:
         if self.auto_caller is None or not self.auto_caller.is_alive():
@@ -175,6 +186,7 @@ class AppState:
                     path_file = v["path"],
                     log_fn    = lambda msg, level="INFO", eid=v["entity_id"]:
                                     log_panel.append(f"[AD:{eid}] {msg}", level),
+                    status_cb = au_panel.update_status,
                 )
                 runner.start()
                 self.ad_runners.append(runner)
@@ -182,13 +194,49 @@ class AppState:
             except Exception as e:
                 log_panel.append(f"[AD:{v['entity_id']}] 시작 실패: {e}", "ERROR")
         if not self.ad_runners:
-            cmd_panel.reset_ad_ui()
+            au_panel.reset_ui()
 
     def stop_ad(self) -> None:
         for runner in self.ad_runners:
             runner.stop()
         self.ad_runners.clear()
-        cmd_panel.reset_ad_ui()
+        au_panel.reset_ui()
+
+    def start_step_ad(self, vehicles: list, save_data: bool = False) -> None:
+        if self.step_ad_runners:
+            log_panel.append("[StepAD] 이미 실행 중입니다.", "WARN")
+            return
+        try:
+            def _on_done(s=self):
+                s.step_ad_runners.clear()
+                au_panel.reset_ui()
+            runner = StepAdRunner(
+                tcp_sock       = self.tcp_sock,
+                vehicles       = vehicles,
+                pending        = self.pending,
+                lock           = self.lock,
+                request_id_ref = self.rid,
+                pending_add_fn = pending_add,
+                pending_pop_fn = pending_pop,
+                timeout_sec    = AUTO_TIMEOUT_SEC,
+                save_data      = save_data,
+                log_fn         = lambda msg, level="INFO": log_panel.append(f"[StepAD] {msg}", level),
+                status_cb      = au_panel.update_status,
+                on_done        = _on_done,
+            )
+            runner.start()
+            self.step_ad_runners.append(runner)
+            ids = ", ".join(v["entity_id"] for v in vehicles)
+            log_panel.append(f"[StepAD] 시작 (vehicles: {ids})")
+        except Exception as e:
+            log_panel.append(f"[StepAD] 시작 실패: {e}", "ERROR")
+            au_panel.reset_ui()
+
+    def stop_step_ad(self) -> None:
+        for runner in self.step_ad_runners:
+            runner.stop()
+        self.step_ad_runners.clear()
+        au_panel.reset_ui()
 
     def start_lc(
         self,
@@ -265,14 +313,20 @@ class AppState:
                         tcp_sock=self.tcp_sock,
                         dispatch_fn=self.dispatch,
                         toggle_auto_fn=self.toggle_auto,
-                        start_fp_fn=self.start_fp,
-                        stop_fp_fn=self.stop_fp,
-                        start_ad_fn=self.start_ad,
-                        stop_ad_fn=self.stop_ad,
                     )
                     lc_panel.init(
                         start_lc_fn=self.start_lc,
                         stop_lc_fn=self.stop_lc,
+                    )
+                    fp_panel.init(
+                        start_fp_fn=self.start_fp,
+                        stop_fp_fn=self.stop_fp,
+                    )
+                    au_panel.init(
+                        start_ad_fn=self.start_ad,
+                        stop_ad_fn=self.stop_ad,
+                        start_step_ad_fn=self.start_step_ad,
+                        stop_step_ad_fn=self.stop_step_ad,
                     )
                     break
                 except Exception as e:
@@ -288,6 +342,14 @@ class AppState:
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_disconnect(self):
+        self.tcp_sock = None                                    # 즉시 null → dispatch null guard 히트
+        if self.auto_caller and self.auto_caller.is_alive():
+            self.auto_caller.stop()
+        if self.fp_caller and self.fp_caller.is_alive():
+            self.fp_caller.stop()
+        for runner in list(self.step_ad_runners):
+            runner.stop()
+        self.step_ad_runners.clear()
         _set_conn_status(False)
         log_panel.append("Connection lost. Click Reconnect to retry.", "ERROR")
 
@@ -396,10 +458,10 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
                 time.sleep(caller.delay_sec)
 
             # ── Progress ───────────────────────────────────────
-            cmd_panel.update_fp_progress(i + 1, total)
+            fp_panel.update_progress(i + 1, total)
 
         stopped = caller._stop.is_set()
-        cmd_panel.reset_fp_ui(stopped=stopped)
+        fp_panel.reset_ui(stopped=stopped)
         log_panel.append(f"[FP] {'중단됨' if stopped else '재생 완료'} ({total}행)", "INFO")
         if on_done:
             on_done()
@@ -449,13 +511,13 @@ def build_ui(state: AppState):
             dpg.add_theme_color(dpg.mvThemeCol_Text,          (180, 180, 185, 255))
 
     def _select_tab(name: str) -> None:
-        """UDP Monitor / Lane Control 탭 전환."""
         dpg.configure_item("mon_scroll", show=(name == "udp"))
         dpg.configure_item("lc_scroll",  show=(name == "lc"))
-        dpg.bind_item_theme("tab_btn_udp",
-                            "theme_tab_active" if name == "udp" else "theme_tab_inactive")
-        dpg.bind_item_theme("tab_btn_lc",
-                            "theme_tab_active" if name == "lc"  else "theme_tab_inactive")
+        dpg.configure_item("au_scroll",  show=(name == "au"))
+        dpg.configure_item("fp_scroll",  show=(name == "fp"))
+        for tag, key in [("tab_btn_udp", "udp"), ("tab_btn_lc", "lc"),
+                         ("tab_btn_au", "au"), ("tab_btn_fp", "fp")]:
+            dpg.bind_item_theme(tag, "theme_tab_active" if name == key else "theme_tab_inactive")
 
     with dpg.window(tag="main_window", no_title_bar=True,
                     no_resize=True, no_move=True,
@@ -515,6 +577,10 @@ def build_ui(state: AppState):
                                    callback=lambda: _select_tab("udp"))
                     dpg.add_button(label=" Lane Control ", tag="tab_btn_lc",
                                    callback=lambda: _select_tab("lc"))
+                    dpg.add_button(label=" Autonomous ", tag="tab_btn_au",
+                                   callback=lambda: _select_tab("au"))
+                    dpg.add_button(label=" File Playback ", tag="tab_btn_fp",
+                                   callback=lambda: _select_tab("fp"))
                 dpg.add_separator()
 
                 # ── 탭 콘텐츠 (한 번에 하나만 표시) ───────────
@@ -528,9 +594,21 @@ def build_ui(state: AppState):
                                       border=False, show=False):
                     lc_panel.build(parent="lc_scroll")
 
+                with dpg.child_window(tag="au_scroll",
+                                      width=-1, height=-1,
+                                      border=False, show=False):
+                    au_panel.build(parent="au_scroll")
+
+                with dpg.child_window(tag="fp_scroll",
+                                      width=-1, height=-1,
+                                      border=False, show=False):
+                    fp_panel.build(parent="fp_scroll")
+
                 # 초기 버튼 테마 적용
                 dpg.bind_item_theme("tab_btn_udp", "theme_tab_active")
                 dpg.bind_item_theme("tab_btn_lc",  "theme_tab_inactive")
+                dpg.bind_item_theme("tab_btn_au",  "theme_tab_inactive")
+                dpg.bind_item_theme("tab_btn_fp",  "theme_tab_inactive")
 
         # ── 하단: 로그 ────────────────────────────────────
         # no_scrollbar=True: log_child 가 자체 스크롤 담당
@@ -629,6 +707,8 @@ def main():
     if state.fp_caller and state.fp_caller.is_alive():
         state.fp_caller.stop()
     for _runner in state.ad_runners:
+        _runner.stop()
+    for _runner in state.step_ad_runners:
         _runner.stop()
     if state.lc_runner:
         state.lc_runner.stop()

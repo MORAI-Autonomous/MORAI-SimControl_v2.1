@@ -46,6 +46,44 @@
 | 패널 → app.py 접근 | `import app` | `init(callback)` 주입 |
 | DearPyGUI 아이템 접근 | 태그 직접 사용 | `does_item_exist()` 체크 |
 | 큰 파일 전체 읽기 | `Read(file)` 한 번에 | `Grep` → `Read(offset, limit)` |
+| 로그 빈도 | 매 tick `log.append()` | `status_cb`로 `set_value` 직접 업데이트 |
+| 동적 DPG 위젯 재생성 | 부모 없이 아이템 추가 | `with dpg.group(parent=...)` 컨텍스트 안에서 추가 |
+| mvInputText 스크롤 | `set_y_scroll` / `get_y_scroll_max` | 미지원 — ChildWindow에만 사용 가능 |
+
+---
+
+## RTF 최적화 — 병목 분석 이력
+
+RTF(Real-Time Factor) = sim_time / wall_clock_time. 1.0 = 실시간 동기화.
+
+### 개선 전후 수치
+
+| 단계 | RTF (Fixed Step) | 변경 내용 |
+|------|-----------------|-----------|
+| 초기 | ~0.2 | 기준선 |
+| 클라이언트 로그 제거 | ~0.3–0.4 | TCP 수신 로그, ManualControl 매 tick 로그 삭제 |
+| 시뮬레이터 로그 제거 | ~0.4–0.5 | 시뮬레이터 측 로그 제거 |
+| 이후 상한 | ~0.5 | 시뮬레이터 물리 연산이 남은 병목 |
+
+### 클라이언트 측 최적화 내용
+
+**① 로그 오버헤드 제거**
+- `transport/tcp_thread.py`: 모든 TCP 패킷 수신 로그 → result_code != 0 일 때만 출력
+- `transport/tcp_transport.py`: ManualControl / TransformControl 매 tick 로그 파라미터 제거
+- Runner: 매 tick `log.append(f"pos=...")` → `status_cb(...)` 로 교체 (`set_value` 직접)
+
+**② O(n) 경로 탐색 → 윈도우 탐색**
+- `PathManager.get_local_path()`: 전체 경로 순회 → `_last_wp` ±5/+100 윈도우
+- `PurePursuit.calculate_steering_angle()`: 전체 local_path 순회 → `_last_lfd_idx` 캐시
+
+**③ log.append vs set_value 비용 차이**
+- `log.append`: ui_queue 큐잉 + 텍스트 누적 + InputText DPG 재빌드
+- `set_value`: ui_queue 큐잉 + 값 교체만 → 약 10배 이상 저렴
+
+### 시뮬레이터 측 병목
+
+클라이언트 최적화 후 남은 RTF 한계는 시뮬레이터 내부 물리 엔진 연산 시간이다.
+클라이언트에서 더 최적화해도 RTF는 크게 개선되지 않는다.
 
 ---
 
@@ -57,4 +95,4 @@
 | 500~1,000줄 | Grep으로 위치 → 부분 Read |
 | 1,000줄 이상 | 클래스/책임 단위로 파일 분리 검토 |
 
-현재 대형 파일: `lane_controller.py` (분리 완료), `app.py`, `panels/monitor.py`
+현재 대형 파일: `app.py`, `panels/monitor.py`, `panels/lane_control_panel.py`

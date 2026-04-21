@@ -18,7 +18,7 @@ import numpy as np
 
 import transport.tcp_transport as tcp
 import transport.protocol_defs as proto
-from receivers.vehicle_info_with_wheel_receiver import parse_vehicle_info_payload
+from receivers.vehicle_info_receiver import parse_vehicle_info_payload
 from autonomous_driving.autonomous_driving import AutonomousDriving
 from autonomous_driving.vehicle_state import VehicleState
 
@@ -41,8 +41,9 @@ class AdRunner:
         entity_id: str,
         vi_ip:     str,
         vi_port:   int,
-        path_file: str = 'path_link.csv',
+        path_file:  str = 'path_link.csv',
         log_fn=None,
+        status_cb=None,
     ):
         # UDP 수신 소켓 (Vehicle Info)
         self._recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -57,10 +58,11 @@ class AdRunner:
         # 자율주행 모듈
         self._ad = AutonomousDriving(path_file)
 
-        self._running = False
-        self._lock    = threading.Lock()
-        self._latest  = None
-        self._log     = log_fn or (lambda msg, level="INFO": print(f"[AD] {msg}"))
+        self._running    = False
+        self._lock       = threading.Lock()
+        self._latest     = None
+        self._log        = log_fn or (lambda msg, level="INFO": print(f"[AD] {msg}"))
+        self._status_cb  = status_cb or (lambda *a: None)
 
         self._log(f"Vehicle Info 수신 : {vi_ip}:{vi_port}")
         self._log(f"TCP 제어          : entity_id={entity_id}")
@@ -125,12 +127,14 @@ class AdRunner:
                         brake       = control_input.brake,
                         steer_angle = steer_norm,
                     )
-
-                    self._log(
-                        f"pos=({vehicle_state.position.x:.1f}, {vehicle_state.position.y:.1f})  "
-                        f"vel={vehicle_state.velocity*3.6:.1f}km/h  "
-                        f"accel={control_input.accel:.3f}  brake={control_input.brake:.3f}  "
-                        f"steer={steer_norm:.3f}"
+                    self._status_cb(
+                        self._entity_id,
+                        vehicle_state.position.x,
+                        vehicle_state.position.y,
+                        vehicle_state.velocity * 3.6,
+                        control_input.accel,
+                        control_input.brake,
+                        steer_norm,
                     )
                 except Exception as e:
                     self._log(f"ERROR: {e}", "ERROR")
