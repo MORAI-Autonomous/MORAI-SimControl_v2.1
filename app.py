@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # app.py
 import os
 import socket
@@ -646,14 +648,42 @@ def build_ui(state: AppState):
                               no_scrollbar=True, no_scroll_with_mouse=True):
             log_panel.build(parent="log_window")
 
-    # ── 리사이즈 콜백 ─────────────────────────────────────
-    def _on_resize():
-        top_h = _top_h()
-        dpg.configure_item("cmd_window", height=top_h)
-        dpg.configure_item("mon_window", width=_mon_w(), height=top_h)
-        dpg.configure_item("log_window", width=_vp_w() - PAD)
+    # viewport resize callback 에서 직접 DPG 레이아웃을 건드리지 않고
+    # 메인 루프에서만 반영해 hit-test / layout 꼬임 가능성을 줄인다.
+    _layout_state = {
+        "dirty": True,
+        "last_size": (-1, -1),
+    }
 
-    dpg.set_viewport_resize_callback(_on_resize)
+    def _mark_layout_dirty():
+        _layout_state["dirty"] = True
+
+    def _apply_layout(force: bool = False) -> bool:
+        vp_w = _vp_w()
+        vp_h = _vp_h()
+        size = (vp_w, vp_h)
+        if not force and not _layout_state["dirty"] and size == _layout_state["last_size"]:
+            return False
+
+        _layout_state["dirty"] = False
+        _layout_state["last_size"] = size
+
+        if dpg.does_item_exist("main_window"):
+            dpg.configure_item("main_window", pos=(0, 0), width=vp_w, height=vp_h)
+
+        top_h = max(vp_h - TITLEBAR_H - LOG_H - PAD, 100)
+        mon_w = max(vp_w - CMD_W - PAD * 3, 200)
+
+        if dpg.does_item_exist("cmd_window"):
+            dpg.configure_item("cmd_window", height=top_h)
+        if dpg.does_item_exist("mon_window"):
+            dpg.configure_item("mon_window", width=mon_w, height=top_h)
+        if dpg.does_item_exist("log_window"):
+            dpg.configure_item("log_window", width=vp_w - PAD)
+        return True
+
+    dpg.set_viewport_resize_callback(_mark_layout_dirty)
+    return _apply_layout
 
 
 # ============================================================
@@ -714,7 +744,7 @@ def main():
     dpg.setup_dearpygui()
 
     try:
-        build_ui(state)
+        apply_layout = build_ui(state)
     except Exception:
         import traceback
         traceback.print_exc()
@@ -723,6 +753,7 @@ def main():
 
     dpg.set_primary_window("main_window", True)
     dpg.show_viewport()
+    apply_layout(force=True)
 
     state.connect()
 
@@ -754,6 +785,9 @@ def main():
     while dpg.is_dearpygui_running():
         frame_start = time.perf_counter()
         _frame_ts[0] = time.monotonic()
+
+        # ── viewport/layout 동기화 ──────────────────────────
+        apply_layout()
 
         # ── log flush: pending 라인 → set_value 최대 1회 ─────
         log_panel.flush()

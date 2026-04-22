@@ -45,6 +45,27 @@ def _speed_ctrl(current_kph: float, target_kph: float):
         return 0.0, float(np.clip(-err * _SPEED_GAIN, 0.0, 0.5))
 
 
+_CHASE_LFD_MIN = 3.0
+_CHASE_LFD_MAX = 15.0
+_CHASE_STEER_GAIN = 1.35
+
+def _calc_chase_steer_norm(parsed: dict, target_x: float, target_y: float, wheelbase: float) -> float:
+    """타겟 현재 위치를 직접 look-ahead point 로 두고 공격적으로 조향한다."""
+    dx = target_x - parsed["location"]["x"]
+    dy = target_y - parsed["location"]["y"]
+    distance = float(np.hypot(dx, dy))
+    if distance < 1e-3:
+        return 0.0
+
+    yaw = np.deg2rad(parsed["rotation"]["z"])
+    local_x = np.cos(-yaw) * dx - np.sin(-yaw) * dy
+    local_y = np.sin(-yaw) * dx + np.cos(-yaw) * dy
+    theta = float(np.arctan2(local_y, local_x))
+    lfd = float(np.clip(distance, _CHASE_LFD_MIN, _CHASE_LFD_MAX))
+    steer_rad = np.arctan2(2.0 * wheelbase * np.sin(theta), lfd) * _CHASE_STEER_GAIN
+    return float(np.clip(steer_rad / MAX_STEER_RAD, -1.0, 1.0))
+
+
 # ─── 공유 위치 레지스트리 (충돌 모드: runner 간 위치 공유) ─────────
 _shared_positions: dict = {}   # entity_id → {"x": float, "y": float, "speed_kph": float}
 _shared_pos_lock  = threading.Lock()
@@ -205,7 +226,7 @@ class AdRunner:
 
     # ── 충돌 추적 ────────────────────────────────────────────────
     def _run_chaser(self, parsed: dict) -> None:
-        """Trigger 조건 확인 후 Path Follow 로 주행 (Pure Pursuit 조향 + speed × 1.2)."""
+        """Trigger 이후 target 현재 위치를 직접 추적해 추돌을 유도한다."""
         target = _get_shared_pos(self._target_entity_id)
         if not target:
             return   # target 위치 아직 미수신
@@ -219,8 +240,25 @@ class AdRunner:
             )
             return
 
-        # target 출발 확인 → Pure Pursuit 경로 추종으로 추돌
-        self._run_path_follow(parsed)
+        current_kph = abs(parsed["local_velocity"]["x"]) * 3.6
+        throttle, brake = _speed_ctrl(current_kph, self._target_speed_kph)
+        steer_norm = _calc_chase_steer_norm(
+            parsed,
+            target_x=target["x"],
+            target_y=target["y"],
+            wheelbase=float(self._ad.pure_pursuit.wheelbase),
+        )
+        tcp.send_manual_control_by_id(
+            self._tcp_sock, _next_rid(),
+            entity_id=self._entity_id,
+            throttle=throttle, brake=brake, steer_angle=steer_norm,
+        )
+        self._status_cb(
+            self._entity_id,
+            parsed["location"]["x"], parsed["location"]["y"],
+            abs(parsed["local_velocity"]["x"]) * 3.6,
+            throttle, brake, steer_norm,
+        )
 
 
 # ─── 진입점 ─────────────────────────────────────────────────────

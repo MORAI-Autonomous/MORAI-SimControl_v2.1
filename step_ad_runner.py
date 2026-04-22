@@ -48,6 +48,27 @@ def _speed_ctrl(current_kph: float, target_kph: float):
         return 0.0, float(np.clip(-err * _SPEED_GAIN, 0.0, 0.5))
 
 
+_CHASE_LFD_MIN = 3.0
+_CHASE_LFD_MAX = 15.0
+_CHASE_STEER_GAIN = 1.35
+
+def _calc_chase_steer_norm(parsed: dict, target_x: float, target_y: float, wheelbase: float) -> float:
+    """타겟 현재 위치를 직접 look-ahead point 로 두고 공격적으로 조향한다."""
+    dx = target_x - parsed["location"]["x"]
+    dy = target_y - parsed["location"]["y"]
+    distance = float(np.hypot(dx, dy))
+    if distance < 1e-3:
+        return 0.0
+
+    yaw = np.deg2rad(parsed["rotation"]["z"])
+    local_x = np.cos(-yaw) * dx - np.sin(-yaw) * dy
+    local_y = np.sin(-yaw) * dx + np.cos(-yaw) * dy
+    theta = float(np.arctan2(local_y, local_x))
+    lfd = float(np.clip(distance, _CHASE_LFD_MIN, _CHASE_LFD_MAX))
+    steer_rad = np.arctan2(2.0 * wheelbase * np.sin(theta), lfd) * _CHASE_STEER_GAIN
+    return float(np.clip(steer_rad / MAX_STEER_RAD, -1.0, 1.0))
+
+
 # ── 차량 컨텍스트 ─────────────────────────────────────────────
 
 class _VehicleCtx:
@@ -91,7 +112,8 @@ class StepAdRunner:
         status_cb=None,
         on_done=None,
         collision_cfg: dict = None,    # 충돌 모드 설정 (없으면 일반 path follow)
-        **kwargs,                      # save_data 등 미사용 파라미터
+        save_data:     bool = False,
+        **kwargs,
     ):
         self._tcp_sock      = tcp_sock
         self._pending       = pending
@@ -105,6 +127,7 @@ class StepAdRunner:
         self._on_done       = on_done
         self._running       = False
         self._collision_cfg = collision_cfg
+        self._save_data     = save_data
         self._ctxs: list[_VehicleCtx] = []
 
         chaser_id = (collision_cfg or {}).get("chaser_entity_id")
@@ -205,7 +228,7 @@ class StepAdRunner:
             self._log(f"[{ctx.entity_id}] 제어 오류: {e}", "ERROR")
 
     def _send_chaser(self, ctx: _VehicleCtx, parsed: dict) -> None:
-        """Trigger 조건 확인 후 Path Follow 로 주행 (Pure Pursuit 조향 + speed × 1.2)."""
+        """Trigger 이후 target 현재 위치를 직접 추적해 추돌을 유도한다."""
         target_id = self._collision_cfg["target_entity_id"]
         target_ctx = next((c for c in self._ctxs if c.entity_id == target_id), None)
         if target_ctx is None:
@@ -226,8 +249,25 @@ class StepAdRunner:
             )
             return
 
-        # target 출발 확인 → Pure Pursuit 경로 추종으로 추돌
-        self._send_path_follow(ctx, parsed)
+        current_kph = abs(parsed["local_velocity"]["x"]) * 3.6
+        throttle, brake = _speed_ctrl(current_kph, ctx.target_speed_kph)
+        steer_n = _calc_chase_steer_norm(
+            parsed,
+            target_x=target_parsed["location"]["x"],
+            target_y=target_parsed["location"]["y"],
+            wheelbase=float(ctx.ad.pure_pursuit.wheelbase),
+        )
+        tcp.send_manual_control_by_id(
+            self._tcp_sock, _next_rid(),
+            entity_id=ctx.entity_id,
+            throttle=throttle, brake=brake, steer_angle=steer_n,
+        )
+        self._status_cb(
+            ctx.entity_id,
+            parsed["location"]["x"], parsed["location"]["y"],
+            abs(parsed["local_velocity"]["x"]) * 3.6,
+            throttle, brake, steer_n,
+        )
 
     # ── 제어 루프 ─────────────────────────────────────────────
 
@@ -273,11 +313,12 @@ class StepAdRunner:
                 return
             self._pending_pop(self._pending, self._lock, rid,
                                proto.MSG_TYPE_FIXED_STEP)
-            tcp.send_save_data(self._tcp_sock, _next_rid())
-            for ctx in self._ctxs:
-                if not ctx.vi_event.wait(self._timeout_sec):
-                    self._log(f"[{ctx.entity_id}] 초기 VI timeout — 중단", "ERROR")
-                    return
+            if self._save_data:
+                tcp.send_save_data(self._tcp_sock, _next_rid())
+                for ctx in self._ctxs:
+                    if not ctx.vi_event.wait(self._timeout_sec):
+                        self._log(f"[{ctx.entity_id}] 초기 VI timeout — 중단", "ERROR")
+                        return
 
             # 초기 커맨드 전송 후 첫 파이프라인 스텝 선제 전송
             _send_all_cmds()
@@ -315,11 +356,12 @@ class StepAdRunner:
                 t1 = time.perf_counter()
 
                 # ② SaveData 전송
-                try:
-                    tcp.send_save_data(self._tcp_sock, _next_rid())
-                except OSError as e:
-                    self._log(f"SaveData 전송 오류: {e}", "ERROR")
-                    break
+                if self._save_data:
+                    try:
+                        tcp.send_save_data(self._tcp_sock, _next_rid())
+                    except OSError as e:
+                        self._log(f"SaveData 전송 오류: {e}", "ERROR")
+                        break
 
                 # ③ 다음 FixedStep 선제 전송 (VI 대기 동안 RTT 진행)
                 for ctx in self._ctxs:
@@ -332,13 +374,14 @@ class StepAdRunner:
 
                 t2 = time.perf_counter()
 
-                # ④ VI 도착 대기
-                for ctx in self._ctxs:
-                    if not ctx.vi_event.wait(self._timeout_sec):
-                        self._log(
-                            f"[{ctx.entity_id}] VI timeout ({self._timeout_sec}s) — 이전 상태로 계속",
-                            "WARN"
-                        )
+                # ④ VI 도착 대기 (save_data=False 이면 서버가 VI를 보내지 않으므로 생략)
+                if self._save_data:
+                    for ctx in self._ctxs:
+                        if not ctx.vi_event.wait(self._timeout_sec):
+                            self._log(
+                                f"[{ctx.entity_id}] VI timeout ({self._timeout_sec}s) — 이전 상태로 계속",
+                                "WARN"
+                            )
 
                 t3 = time.perf_counter()
 
