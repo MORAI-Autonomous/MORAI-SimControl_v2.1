@@ -23,8 +23,8 @@ Every TCP packet uses this 16-byte header before the payload described below.
 
 | Msg Type | Name | Request Payload | Response Payload |
 |----------|------|-----------------|------------------|
-| `0x1101` | `GetSimulationTimeStatus` | `0 bytes` | `44 bytes (mode = 1) / 48 bytes (mode = 2)` |
-| `0x1102` | `SetSimulationTimeModeCommand` | `16 bytes (mode = 1) / 20 bytes (mode = 2)` | `20 bytes` |
+| `0x1101` | `GetSimulationTimeStatus` | `0 bytes` | `40 bytes` |
+| `0x1102` | `SetSimulationTimeModeCommand` | `20 bytes` | `20 bytes` |
 | `0x1201` | `FixedStep` | `4 bytes` | `8 bytes` |
 | `0x1202` | `SaveData` | `0 bytes` | `8 bytes` |
 | `0x1301` | `CreateObject` | `36 bytes` | `>= 12 bytes` |
@@ -56,41 +56,20 @@ Notes:
 ## `0x1102` SetSimulationTimeModeCommand
 
 - Direction: `request`
-- Payload: `16 bytes (mode = 1) / 20 bytes (mode = 2)`
+- Payload: `20 bytes`
 - Builder: `tcp.send_simulation_time_mode_command()`
 
-Set simulation time mode using mode-specific payload layouts.
-
-Wire layout: variant-specific
-
-Variants:
-
-### Variable Mode
-
-- Selector: `mode = 1`
-
-Wire layout: `i i i f`
-
-| Field | Type | Description |
-|------|------|-------------|
-| `mode` | `int32` | 1 = TIME_MODE_VARIABLE |
-| `target_fps` | `int32` | Target FPS (10~200) |
-| `physics_delta_time` | `int32` | Physics substep delta time in ms |
-| `simulation_speed` | `float32` | Simulation speed multiplier |
-
-### Fixed Mode
-
-- Selector: `mode = 2`
+Set simulation time mode using a fixed 20-byte payload.
 
 Wire layout: `i i i i i`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `mode` | `int32` | 2 = TIME_MODE_FIXED |
-| `simulation_delta_time` | `int32` | Simulation tick delta time in ms |
-| `physics_delta_time` | `int32` | Physics substep delta time in ms |
-| `rtf` | `int32` | Real-Time Factor (1~20) |
-| `user_control` | `int32` | 0 = auto, 1 = step-by-step |
+| `mode` | `int32` | 1 = TIME_MODE_VARIABLE, 2 = TIME_MODE_FIXED |
+| `target_fps` | `int32` | Target FPS (10~200) |
+| `physics_delta_time` | `int32` | Physics delta time in ms (5~100) |
+| `rtf` | `int32` | Fixed only. Variable mode must send 0 |
+| `user_control` | `int32` | Fixed only. Variable mode must send 0 |
 
 ## `0x1201` FixedStep
 
@@ -275,48 +254,20 @@ Wire layout: `I [uint32 len][bytes]`
 ## `0x1101` GetSimulationTimeStatus
 
 - Direction: `response`
-- Payload: `44 bytes (mode = 1) / 48 bytes (mode = 2)`
+- Payload: `40 bytes`
 - Parser: `tcp.parse_get_status_payload()`
 
-Return current simulation time mode and current simulation clock state using mode-specific layouts.
+Return current simulation time mode and current simulation clock state using a fixed 40-byte payload.
 
-Wire layout: variant-specific
-
-Variants:
-
-### Variable Mode
-
-- Selector: `mode = 1`
-
-Wire layout: `I I I i i f Q q i`
+Wire layout: `I i i i i Q q i`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
-| `mode` | `uint32` | 1 = TIME_MODE_VARIABLE |
+| `mode` | `uint32` | 1 = TIME_MODE_VARIABLE, 2 = TIME_MODE_FIXED |
 | `target_fps` | `int32` | Target FPS |
-| `physics_delta_time` | `int32` | Physics substep delta time in ms |
-| `simulation_speed` | `float32` | Simulation speed multiplier |
-| `step_index` | `uint64` | Accumulated step count |
-| `seconds` | `int64` | Simulation time seconds |
-| `nanos` | `int32` | Simulation time nanoseconds remainder |
-
-### Fixed Mode
-
-- Selector: `mode = 2`
-
-Wire layout: `I I I i i i i Q q i`
-
-| Field | Type | Description |
-|------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
-| `mode` | `uint32` | 2 = TIME_MODE_FIXED |
-| `simulation_delta_time` | `int32` | Simulation tick delta time in ms |
-| `physics_delta_time` | `int32` | Physics substep delta time in ms |
-| `rtf` | `int32` | Real-Time Factor (1~20) |
-| `user_control` | `int32` | 0 = auto, 1 = step-by-step |
+| `physics_delta_time` | `int32` | Physics delta time in ms |
+| `rtf` | `int32` | Fixed only. Variable mode returns 0 |
+| `user_control` | `int32` | Fixed only. Variable mode returns 0 |
 | `step_index` | `uint64` | Accumulated step count |
 | `seconds` | `int64` | Simulation time seconds |
 | `nanos` | `int32` | Simulation time nanoseconds remainder |

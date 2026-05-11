@@ -7,7 +7,6 @@ from transport.message_schema import (
     fixed_fields,
     get_message,
     get_response_message,
-    get_variant_for_values,
 )
 
 # ============================================================
@@ -101,11 +100,7 @@ RESULT_CODE_MAP = {
 # ============================================================
 
 _MSG_1102 = get_message(0x1102)
-_MSG_1102_VARIABLE = get_variant_for_values(_MSG_1102, {"mode": TIME_MODE_VARIABLE})
-_MSG_1102_FIXED = get_variant_for_values(_MSG_1102, {"mode": TIME_MODE_FIXED})
 _RESP_1101 = get_response_message(0x1101)
-_RESP_1101_VARIABLE = get_variant_for_values(_RESP_1101, {"mode": TIME_MODE_VARIABLE})
-_RESP_1101_FIXED = get_variant_for_values(_RESP_1101, {"mode": TIME_MODE_FIXED})
 _MSG_1302 = get_message(0x1302)
 _MSG_1303 = get_message(0x1303)
 _MSG_1304 = get_message(0x1304)
@@ -119,18 +114,12 @@ RESULT_FMT  = "<II"                         # uint32 result_code, uint32 detail_
 RESULT_SIZE = struct.calcsize(RESULT_FMT)   # 8
 
 # --- Simulation Status ---
-GET_STATUS_VARIABLE_FMT  = build_struct_format(_RESP_1101_VARIABLE.fields, LITTLE_ENDIAN)
-GET_STATUS_VARIABLE_SIZE = struct.calcsize(GET_STATUS_VARIABLE_FMT)   # 36
-
-GET_STATUS_FIXED_FMT  = build_struct_format(_RESP_1101_FIXED.fields, LITTLE_ENDIAN)
-GET_STATUS_FIXED_SIZE = struct.calcsize(GET_STATUS_FIXED_FMT)         # 40
+GET_STATUS_FMT  = build_struct_format(_RESP_1101.fields, LITTLE_ENDIAN)
+GET_STATUS_SIZE = struct.calcsize(GET_STATUS_FMT)   # 40
 
 # --- Set Simulation Time Mode ---
-SET_SIM_TIME_MODE_VARIABLE_REQ_FMT  = build_struct_format(_MSG_1102_VARIABLE.fields, LITTLE_ENDIAN)
-SET_SIM_TIME_MODE_VARIABLE_REQ_SIZE = struct.calcsize(SET_SIM_TIME_MODE_VARIABLE_REQ_FMT)  # 16
-
-SET_SIM_TIME_MODE_FIXED_REQ_FMT  = build_struct_format(_MSG_1102_FIXED.fields, LITTLE_ENDIAN)
-SET_SIM_TIME_MODE_FIXED_REQ_SIZE = struct.calcsize(SET_SIM_TIME_MODE_FIXED_REQ_FMT)  # 20
+SET_SIM_TIME_MODE_REQ_FMT  = build_struct_format(_MSG_1102.fields, LITTLE_ENDIAN)
+SET_SIM_TIME_MODE_REQ_SIZE = struct.calcsize(SET_SIM_TIME_MODE_REQ_FMT)  # 20
 
 SET_SIM_TIME_MODE_RESP_FMT  = LITTLE_ENDIAN + "IIIff"
 SET_SIM_TIME_MODE_RESP_SIZE = struct.calcsize(SET_SIM_TIME_MODE_RESP_FMT)  # 20

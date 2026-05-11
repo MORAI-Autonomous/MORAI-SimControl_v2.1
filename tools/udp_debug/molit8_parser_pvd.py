@@ -10,6 +10,13 @@ import time
 from dataclasses import asdict, dataclass
 from typing import List, Optional
 
+from defaults import (
+    DEFAULT_BYPASS_BUFSIZE,
+    DEFAULT_PARSE_BUFSIZE,
+    PVD_DEFAULT_PORT,
+    UDP_DEBUG_LISTEN_IP,
+)
+
 
 HDR_FMT = "<HBH"
 HDR_SIZE = struct.calcsize(HDR_FMT)
@@ -261,15 +268,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     parse_cmd = sub.add_parser("parse", help="Parse and print PVD UDP packets")
-    parse_cmd.add_argument("--listen-ip", default="0.0.0.0")
-    parse_cmd.add_argument("--port", type=int, default=50001)
-    parse_cmd.add_argument("--bufsize", type=int, default=65000)
+    parse_cmd.add_argument("--listen-ip", default=UDP_DEBUG_LISTEN_IP)
+    parse_cmd.add_argument("--port", type=int, default=PVD_DEFAULT_PORT)
+    parse_cmd.add_argument("--bufsize", type=int, default=DEFAULT_PARSE_BUFSIZE)
     parse_cmd.set_defaults(func=run_parse)
 
     bypass_cmd = sub.add_parser("bypass", help="Forward PVD UDP packets to one or more targets")
-    bypass_cmd.add_argument("--listen-ip", default="0.0.0.0")
-    bypass_cmd.add_argument("--port", type=int, default=50001)
-    bypass_cmd.add_argument("--bufsize", type=int, default=65535)
+    bypass_cmd.add_argument("--listen-ip", default=UDP_DEBUG_LISTEN_IP)
+    bypass_cmd.add_argument("--port", type=int, default=PVD_DEFAULT_PORT)
+    bypass_cmd.add_argument("--bufsize", type=int, default=DEFAULT_BYPASS_BUFSIZE)
     bypass_cmd.add_argument("--stats-interval", type=float, default=1.0)
     bypass_cmd.add_argument("--target", action="append", required=True, help="host:port, repeatable")
     bypass_cmd.set_defaults(func=run_bypass)

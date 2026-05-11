@@ -11,12 +11,10 @@ if str(ROOT) not in sys.path:
 
 import transport.protocol_defs as proto
 from transport.message_schema import (
-    MessageSpec,
     describe_payload_size,
     get_message,
     get_response_message,
     get_min_payload_size,
-    get_variant_for_values,
     iter_messages,
     iter_response_messages,
     render_struct_format,
@@ -32,27 +30,9 @@ def _expect(condition: bool, message: str) -> None:
 
 def validate_schema_against_protocol_defs() -> None:
     msg_1102 = get_message(0x1102)
-    variable_variant = get_variant_for_values(msg_1102, {"mode": proto.TIME_MODE_VARIABLE})
-    fixed_variant = get_variant_for_values(msg_1102, {"mode": proto.TIME_MODE_FIXED})
     _expect(
-        proto.SET_SIM_TIME_MODE_VARIABLE_REQ_SIZE == get_min_payload_size(MessageSpec(
-            msg_type=msg_1102.msg_type,
-            name=msg_1102.name,
-            direction=msg_1102.direction,
-            summary=msg_1102.summary,
-            fields=variable_variant.fields,
-        )),
-        "0x1102 variable request size mismatch",
-    )
-    _expect(
-        proto.SET_SIM_TIME_MODE_FIXED_REQ_SIZE == get_min_payload_size(MessageSpec(
-            msg_type=msg_1102.msg_type,
-            name=msg_1102.name,
-            direction=msg_1102.direction,
-            summary=msg_1102.summary,
-            fields=fixed_variant.fields,
-        )),
-        "0x1102 fixed request size mismatch",
+        proto.SET_SIM_TIME_MODE_REQ_SIZE == get_min_payload_size(msg_1102),
+        "0x1102 request size mismatch",
     )
 
     msg_1201 = get_message(0x1201)
@@ -77,29 +57,7 @@ def validate_schema_against_protocol_defs() -> None:
     _expect(get_min_payload_size(msg_1505) == 8, "0x1505 min size mismatch")
 
     resp_1101 = get_response_message(0x1101)
-    _expect(get_min_payload_size(resp_1101) == proto.GET_STATUS_VARIABLE_SIZE, "0x1101 response min size mismatch")
-    variable_resp_variant = get_variant_for_values(resp_1101, {"mode": proto.TIME_MODE_VARIABLE})
-    fixed_resp_variant = get_variant_for_values(resp_1101, {"mode": proto.TIME_MODE_FIXED})
-    _expect(
-        get_min_payload_size(MessageSpec(
-            msg_type=resp_1101.msg_type,
-            name=resp_1101.name,
-            direction=resp_1101.direction,
-            summary=resp_1101.summary,
-            fields=variable_resp_variant.fields,
-        )) == proto.GET_STATUS_VARIABLE_SIZE,
-        "0x1101 variable response size mismatch",
-    )
-    _expect(
-        get_min_payload_size(MessageSpec(
-            msg_type=resp_1101.msg_type,
-            name=resp_1101.name,
-            direction=resp_1101.direction,
-            summary=resp_1101.summary,
-            fields=fixed_resp_variant.fields,
-        )) == proto.GET_STATUS_FIXED_SIZE,
-        "0x1101 fixed response size mismatch",
-    )
+    _expect(get_min_payload_size(resp_1101) == proto.GET_STATUS_SIZE, "0x1101 response size mismatch")
 
     resp_1102 = get_response_message(0x1102)
     _expect(proto.SET_SIM_TIME_MODE_RESP_SIZE == get_min_payload_size(resp_1102), "0x1102 response size mismatch")

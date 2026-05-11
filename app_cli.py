@@ -184,7 +184,7 @@ def main():
                              lambda rid: tcp.send_simulation_time_mode_command(
                                  tcp_sock, rid,
                                  mode=TIME_MODE_FIXED,
-                                 simulation_delta_time=20,
+                                 target_fps=60,
                                  physics_delta_time=10,
                                  rtf=1,
                                  user_control=0))

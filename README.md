@@ -66,6 +66,7 @@ utils/
 - `autonomous_driving/`: Path Follow, trajectory, multi-vehicle 제어
 - `config/`: 런타임 상태 저장 파일
 - `docs/`: 구조, 워크플로, TCP 인터페이스 문서
+- `tools/udp_debug/`: standalone UDP 분석/우회 스크립트 모음
 
 ## GUI Tabs
 

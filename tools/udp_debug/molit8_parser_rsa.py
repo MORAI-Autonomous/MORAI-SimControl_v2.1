@@ -15,6 +15,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional
 
+from defaults import (
+    DEFAULT_BYPASS_BUFSIZE,
+    DEFAULT_PARSE_BUFSIZE,
+    RSA_DEFAULT_PORT,
+    RSA_OUTPUT_MODE,
+    RSA_WATCH_VEHICLE_IDS,
+    UDP_DEBUG_LISTEN_IP,
+)
+
 
 HDR_FMT = "<HBH"
 PL_FMT = "<QHIfHfffBH"
@@ -291,6 +300,33 @@ def print_packet(packet: Packet) -> None:
         )
 
 
+def _print_watched_vehicle(packet: Packet, watch_vehicle_ids: list[int]) -> None:
+    watch_set = set(watch_vehicle_ids)
+    for payload in packet.payloads:
+        vehicle_id = payload.vehicle_id
+        if vehicle_id not in watch_set:
+            continue
+        print(
+            f"[WATCH][vehicle_id={vehicle_id}] "
+            f"speed={payload.speed:.6f} heading={payload.heading:.6f} "
+            f"lat={payload.lat:.6f} lon={payload.lon:.6f} alt={payload.alt:.6f} "
+            f"region={payload.region_id} key_type={payload.key_type} class={payload.vehicle_class}"
+        )
+
+
+def _collect_vehicle_ids(packet: Packet, unique_vehicle_ids: set[int]) -> None:
+    for payload in packet.payloads:
+        unique_vehicle_ids.add(payload.vehicle_id)
+
+
+def _should_print_all_packets() -> bool:
+    if RSA_OUTPUT_MODE == "all":
+        return True
+    if RSA_OUTPUT_MODE == "watch_only":
+        return False
+    return True
+
+
 def stats_printer(stop_event: threading.Event, counter: ThroughputCounter, interval: float, label: str = "RSA", kbps_bias: float = 0.0) -> None:
     while not stop_event.is_set():
         time.sleep(interval)
@@ -309,6 +345,8 @@ def stats_printer(stop_event: threading.Event, counter: ThroughputCounter, inter
 
 def run_parse(args: argparse.Namespace) -> int:
     stop_event = threading.Event()
+    unique_vehicle_ids: set[int] = set()
+    started_at = time.monotonic()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((args.listen_ip, args.port))
@@ -326,23 +364,32 @@ def run_parse(args: argparse.Namespace) -> int:
                 continue
             except OSError:
                 break
-            print(f"\nReceived {len(data)} bytes from {addr[0]}:{addr[1]}")
+            #print(f"\nReceived {len(data)} bytes from {addr[0]}:{addr[1]}")
             try:
                 packet = parse_packet(data)
             except Exception as exc:
                 print(f"Parse error: {exc}")
                 continue
-            print_packet(packet)
+            _collect_vehicle_ids(packet, unique_vehicle_ids)
+            if _should_print_all_packets():
+                print_packet(packet)
+            elif RSA_WATCH_VEHICLE_IDS:
+                _print_watched_vehicle(packet, RSA_WATCH_VEHICLE_IDS)
     except KeyboardInterrupt:
         stop_event.set()
     finally:
         sock.close()
+        elapsed_sec = time.monotonic() - started_at
+        print(f"Collection time: {elapsed_sec:.1f}s")
+        print(f"Unique vehicles observed: {len(unique_vehicle_ids)}")
         print("UDP socket closed.")
     return 0
 
 
 def run_record(args: argparse.Namespace) -> int:
     stop_event = threading.Event()
+    unique_vehicle_ids: set[int] = set()
+    started_at = time.monotonic()
     counter = ThroughputCounter(window=args.stats_window)
     logger = FileLogger(mode=args.log_mode, directory=args.log_dir)
     print(f"Logging to: {logger.path}")
@@ -375,13 +422,20 @@ def run_record(args: argparse.Namespace) -> int:
                 print(f"Parse error: {exc}")
                 continue
             counter.record(1, packet.count, len(data))
-            print_packet(packet)
+            _collect_vehicle_ids(packet, unique_vehicle_ids)
+            if _should_print_all_packets():
+                print_packet(packet)
+            elif RSA_WATCH_VEHICLE_IDS:
+                _print_watched_vehicle(packet, RSA_WATCH_VEHICLE_IDS)
             logger.write_packet(packet, addr)
     except KeyboardInterrupt:
         stop_event.set()
     finally:
         sock.close()
         logger.close()
+        elapsed_sec = time.monotonic() - started_at
+        print(f"Collection time: {elapsed_sec:.1f}s")
+        print(f"Unique vehicles observed: {len(unique_vehicle_ids)}")
         print("UDP socket closed.")
     return 0
 
@@ -473,15 +527,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     parse_cmd = sub.add_parser("parse", help="Parse and print RSA UDP packets")
-    parse_cmd.add_argument("--listen-ip", default="0.0.0.0")
-    parse_cmd.add_argument("--port", type=int, default=50002)
-    parse_cmd.add_argument("--bufsize", type=int, default=65000)
+    parse_cmd.add_argument("--listen-ip", default=UDP_DEBUG_LISTEN_IP)
+    parse_cmd.add_argument("--port", type=int, default=RSA_DEFAULT_PORT)
+    parse_cmd.add_argument("--bufsize", type=int, default=DEFAULT_PARSE_BUFSIZE)
     parse_cmd.set_defaults(func=run_parse)
 
     record_cmd = sub.add_parser("record", help="Parse, print, and record RSA UDP packets")
-    record_cmd.add_argument("--listen-ip", default="0.0.0.0")
-    record_cmd.add_argument("--port", type=int, default=50002)
-    record_cmd.add_argument("--bufsize", type=int, default=65000)
+    record_cmd.add_argument("--listen-ip", default=UDP_DEBUG_LISTEN_IP)
+    record_cmd.add_argument("--port", type=int, default=RSA_DEFAULT_PORT)
+    record_cmd.add_argument("--bufsize", type=int, default=DEFAULT_PARSE_BUFSIZE)
     record_cmd.add_argument("--log-mode", choices=("csv", "jsonl"), default="csv")
     record_cmd.add_argument("--log-dir", default=".")
     record_cmd.add_argument("--stats-interval", type=float, default=1.0)
@@ -489,9 +543,9 @@ def build_parser() -> argparse.ArgumentParser:
     record_cmd.set_defaults(func=run_record)
 
     bypass_cmd = sub.add_parser("bypass", help="Forward RSA UDP packets to one or more targets")
-    bypass_cmd.add_argument("--listen-ip", default="0.0.0.0")
-    bypass_cmd.add_argument("--port", type=int, default=50002)
-    bypass_cmd.add_argument("--bufsize", type=int, default=65535)
+    bypass_cmd.add_argument("--listen-ip", default=UDP_DEBUG_LISTEN_IP)
+    bypass_cmd.add_argument("--port", type=int, default=RSA_DEFAULT_PORT)
+    bypass_cmd.add_argument("--bufsize", type=int, default=DEFAULT_BYPASS_BUFSIZE)
     bypass_cmd.add_argument("--stats-interval", type=float, default=1.0)
     bypass_cmd.add_argument("--kbps-bias", type=float, default=0.0)
     bypass_cmd.add_argument("--label", default="RSA")
