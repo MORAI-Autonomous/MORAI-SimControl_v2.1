@@ -219,6 +219,17 @@ for i in range(total_rows):
         row = vehicle["rows"][i]
         tcp.send_transform_control_by_id(..., speed=row["speed"])
 
+---
+
+## UDP Template Split
+
+`templates/*.tmpl` 은 UDP monitor template 과 UDP control template 을 같이 포함할 수 있다.
+
+- `isControl == false`: `UDP Monitor` 에서 수신/파싱용으로 사용
+- `isControl == true`: `UDP Control` 에서 입력 폼 생성 + UDP send 용으로 사용
+
+현재 분리 기준은 [C:\Dev\MORAI-SimControl_v2.1\panels\monitor_utils.py](C:/Dev/MORAI-SimControl_v2.1/panels/monitor_utils.py:1) 이고, `UDP Control` 상태는 `config/udp_control_state.json` 에 저장된다.
+
     sleep(next_time_sec - current_time_sec)
 ```
 

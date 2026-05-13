@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # receivers/template_parser.py
 """
 Generic binary parser driven by MORAI .tmpl JSON files.
@@ -79,6 +81,7 @@ class TemplateParser:
 
         mt = raw["messageTemplate"]
         self._name: str = mt.get("name", "Unknown")
+        self._is_control: bool = bool(mt.get("isControl", False))
 
         self._fields_seg: Optional[SegmentDef] = None
         self._repeat_seg: Optional[SegmentDef] = None
@@ -105,6 +108,10 @@ class TemplateParser:
     @property
     def template_name(self) -> str:
         return self._name
+
+    @property
+    def is_control(self) -> bool:
+        return self._is_control
 
     @property
     def has_repeat(self) -> bool:

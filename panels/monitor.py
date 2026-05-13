@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # panels/monitor.py
 # Template-driven UDP monitor panel.
 import json
@@ -10,8 +12,9 @@ import dearpygui.dearpygui as dpg
 
 import utils.ui_queue as ui_queue
 from receivers.template_parser import TemplateParser
-from panels.monitor_utils import (get_templates, tab_label, make_groups,
-                                  fmt, format_repeat_rows)
+from panels.monitor_utils import (get_receive_templates, is_control_template,
+                                  tab_label, make_groups, fmt,
+                                  format_repeat_rows)
 from panels.monitor_receiver import UDPThread
 
 _BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,7 +44,7 @@ _DEFAULT_PORT = 9091
 # ═══════════════════════════════════════════════════════════════════════
 
 def build(parent) -> None:
-    tmpls = get_templates()
+    tmpls = get_receive_templates()
 
     # ── 상단: child_window 없이 parent에 직접 추가 ───────────────
     # (child_window 래퍼를 쓰면 내부 스크롤바가 생길 수 있음)
@@ -88,7 +91,7 @@ def _on_open(sender=None, app_data=None, user_data=None) -> None:
 
 
 def _on_refresh(sender=None, app_data=None, user_data=None) -> None:
-    tmpls = get_templates()
+    tmpls = get_receive_templates()
     dpg.configure_item(_T["listbox"], items=tmpls)
 
 
@@ -100,6 +103,10 @@ def _open_monitor(filename: str,
                   ip: str = "127.0.0.1",
                   port: int = _DEFAULT_PORT) -> None:
     global _win_counter
+
+    if is_control_template(filename):
+        print(f"[Monitor] skip control template in monitor: {filename}")
+        return
 
     path = os.path.join(_TMPL_DIR, filename)
     if not os.path.isfile(path):
@@ -464,5 +471,5 @@ def _load_state() -> None:
         filename = entry.get("filename", "")
         ip       = entry.get("ip", "127.0.0.1")
         port     = int(entry.get("port", _DEFAULT_PORT))
-        if filename:
+        if filename and not is_control_template(filename):
             _open_monitor(filename, ip=ip, port=port)

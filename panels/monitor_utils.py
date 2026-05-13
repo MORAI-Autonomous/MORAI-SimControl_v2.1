@@ -2,16 +2,63 @@ from __future__ import annotations
 # panels/monitor_utils.py
 # UDP Monitor 공통 유틸리티 함수 (monitor.py 에서 분리)
 
+import json
 import os
-from typing import Any, Dict, List
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 _TMPL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
 
 
-def get_templates() -> List[str]:
+@dataclass(frozen=True)
+class TemplateInfo:
+    filename: str
+    name: str
+    is_control: bool
+
+
+def _load_template_info(filename: str) -> Optional[TemplateInfo]:
+    path = os.path.join(_TMPL_DIR, filename)
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            raw = json.load(fp)
+    except Exception:
+        return None
+
+    mt = raw.get("messageTemplate", {})
+    return TemplateInfo(
+        filename=filename,
+        name=str(mt.get("name", filename.replace(".tmpl", ""))),
+        is_control=bool(mt.get("isControl", False)),
+    )
+
+
+def get_template_infos() -> List[TemplateInfo]:
     if not os.path.isdir(_TMPL_DIR):
         return []
-    return sorted(f for f in os.listdir(_TMPL_DIR) if f.lower().endswith(".tmpl"))
+    infos: List[TemplateInfo] = []
+    for filename in sorted(f for f in os.listdir(_TMPL_DIR) if f.lower().endswith(".tmpl")):
+        info = _load_template_info(filename)
+        if info is not None:
+            infos.append(info)
+    return infos
+
+
+def get_templates() -> List[str]:
+    return [info.filename for info in get_template_infos()]
+
+
+def get_receive_templates() -> List[str]:
+    return [info.filename for info in get_template_infos() if not info.is_control]
+
+
+def get_control_templates() -> List[str]:
+    return [info.filename for info in get_template_infos() if info.is_control]
+
+
+def is_control_template(filename: str) -> bool:
+    info = _load_template_info(filename)
+    return bool(info and info.is_control)
 
 
 def short_label(variable_name: str, n: int = 2) -> str:

@@ -21,9 +21,12 @@ import panels.log               as log_panel
 import panels.monitor            as monitor_panel
 import panels.commands           as cmd_panel
 import panels.lane_control_panel  as lc_panel
+import panels.camera_sensor_panel as cam_sensor_panel
 import panels.autonomous_panel    as au_panel
 import panels.file_playback_panel as fp_panel
 import panels.transform_playback_panel as tfp_panel
+import panels.udp_control_panel as udp_ctrl_panel
+import transport.commands as udp_cmd
 
 APP_TITLE = "Sim Control Example"
 _logo_tag = None   # 로고 텍스처 태그 (main()에서 로드 후 설정)
@@ -113,6 +116,18 @@ class AppState:
         self.lc_runner   = None
         self._connecting = False
         self._conn_lock  = threading.Lock()
+
+    def send_udp_control(self, template_name: str, parser, ip: str, port: int, values: dict) -> None:
+        if parser.fields_segment is None:
+            raise RuntimeError("control template has no fields segment")
+
+        payload = udp_cmd.build_udp_payload(parser.fields_segment.fields, values)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_sock:
+            udp_cmd.send_udp_payload(udp_sock, payload, ip, port, template_name.replace(".tmpl", ""))
+        log_panel.append(
+            f"[UDP CTRL] {template_name} -> {ip}:{port} ({len(payload)}B)",
+            "INFO",
+        )
 
     def dispatch(self, msg_type: int, send_fn):
         if self.tcp_sock is None:
@@ -658,11 +673,15 @@ def build_ui(state: AppState):
 
     def _select_tab(name: str) -> None:
         dpg.configure_item("mon_scroll", show=(name == "udp"))
+        dpg.configure_item("udp_ctrl_scroll", show=(name == "udp_ctrl"))
+        dpg.configure_item("cam_sensor_scroll", show=(name == "cam_sensor"))
         dpg.configure_item("lc_scroll",  show=(name == "lc"))
         dpg.configure_item("au_scroll",  show=(name == "au"))
         dpg.configure_item("fp_scroll",  show=(name == "fp"))
         dpg.configure_item("tfp_scroll", show=(name == "tfp"))
-        for tag, key in [("tab_btn_udp", "udp"), ("tab_btn_lc", "lc"),
+        for tag, key in [("tab_btn_udp", "udp"), ("tab_btn_udp_ctrl", "udp_ctrl"),
+                         ("tab_btn_cam_sensor", "cam_sensor"),
+                         ("tab_btn_lc", "lc"),
                          ("tab_btn_au", "au"), ("tab_btn_fp", "fp"),
                          ("tab_btn_tfp", "tfp")]:
             dpg.bind_item_theme(tag, "theme_tab_active" if name == key else "theme_tab_inactive")
@@ -745,6 +764,10 @@ def build_ui(state: AppState):
                 with dpg.group(horizontal=True):
                     dpg.add_button(label=" UDP Monitor ", tag="tab_btn_udp",
                                    callback=lambda: _select_tab("udp"))
+                    dpg.add_button(label=" UDP Control ", tag="tab_btn_udp_ctrl",
+                                   callback=lambda: _select_tab("udp_ctrl"))
+                    dpg.add_button(label=" Camera Sensor ", tag="tab_btn_cam_sensor",
+                                   callback=lambda: _select_tab("cam_sensor"))
                     dpg.add_button(label=" Lane Control ", tag="tab_btn_lc",
                                    callback=lambda: _select_tab("lc"))
                     dpg.add_button(label=" Path Follow ", tag="tab_btn_au",
@@ -760,6 +783,16 @@ def build_ui(state: AppState):
                                       width=-1, height=-1,
                                       border=False, show=True):
                     monitor_panel.build(parent="mon_scroll")
+
+                with dpg.child_window(tag="udp_ctrl_scroll",
+                                      width=-1, height=-1,
+                                      border=False, show=False):
+                    udp_ctrl_panel.build(parent="udp_ctrl_scroll")
+
+                with dpg.child_window(tag="cam_sensor_scroll",
+                                      width=-1, height=-1,
+                                      border=False, show=False):
+                    cam_sensor_panel.build(parent="cam_sensor_scroll")
 
                 with dpg.child_window(tag="lc_scroll",
                                       width=-1, height=-1,
@@ -783,6 +816,8 @@ def build_ui(state: AppState):
 
                 # 초기 버튼 테마 적용
                 dpg.bind_item_theme("tab_btn_udp", "theme_tab_active")
+                dpg.bind_item_theme("tab_btn_udp_ctrl", "theme_tab_inactive")
+                dpg.bind_item_theme("tab_btn_cam_sensor", "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_lc",  "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_au",  "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_fp",  "theme_tab_inactive")
@@ -839,6 +874,9 @@ def build_ui(state: AppState):
 # ============================================================
 def main():
     state = AppState()
+    udp_ctrl_panel.init(
+        send_udp_control_fn=state.send_udp_control,
+    )
 
     dpg.create_context()
 

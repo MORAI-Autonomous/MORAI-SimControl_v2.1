@@ -71,6 +71,7 @@ utils/
 ## GUI Tabs
 
 - `UDP Monitor`: `.tmpl` 기반 UDP 데이터 모니터링
+- `UDP Control`: `isControl == true` 템플릿 기반 UDP control payload 전송
 - `Path Follow`: 경로 기반 자율주행 예제
 - `File Playback`: CSV 기반 Manual Control 재생
 - `Transform Playback`: CSV 기반 Transform Control 재생
@@ -164,3 +165,4 @@ Suite / Scenario:
 - DearPyGUI UI 변경은 메인 스레드에서만 처리합니다. 백그라운드 스레드에서는 `utils.ui_queue.post()`를 사용합니다.
 - viewport resize callback에서는 직접 레이아웃을 바꾸지 않고, 메인 루프에서 dirty flag 기반으로 반영합니다.
 - `config/` 아래 상태 파일은 실행 중 자동 생성될 수 있습니다.
+- UDP `.tmpl`은 수신용과 control용이 섞여 있을 수 있습니다. `isControl == false`는 `UDP Monitor`, `isControl == true`는 `UDP Control`에서 사용합니다.
