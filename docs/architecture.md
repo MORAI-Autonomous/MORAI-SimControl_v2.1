@@ -1,205 +1,200 @@
-# Architecture Patterns
+﻿# Architecture Patterns
 
-## ui_queue — 스레드 안전 UI 업데이트
+## ui_queue
 
-DearPyGUI는 메인 스레드에서만 API를 호출할 수 있다.
-백그라운드 스레드(Runner, 수신 스레드 등)에서 UI를 변경할 때는 반드시 `ui_queue.post()` 를 사용한다.
+DearPyGUI API 호출은 메인 스레드에서만 안전합니다.  
+백그라운드 스레드에서 UI를 변경해야 하면 반드시 `utils.ui_queue.post()`를 사용합니다.
 
 ```python
-# ❌ 백그라운드 스레드에서 직접 호출 — 크래시 또는 undefined behavior
+# 잘못된 예시
 dpg.set_value("tag", value)
 
-# ✅ 올바른 방법
+# 올바른 예시
 import utils.ui_queue as ui_queue
 ui_queue.post(lambda: dpg.set_value("tag", value))
 ```
 
-`ui_queue.drain()` 은 app.py 메인 루프(`while dpg.is_dearpygui_running()`)에서 매 프레임 호출된다.
+`ui_queue.drain()`은 `app.py`의 메인 루프에서만 호출합니다.
 
 ---
 
-## 콜백 주입 패턴 — 패널 초기화
+## Panel Init Pattern
 
-패널 모듈은 `app.py` 를 직접 import하지 않는다.
-순환 참조 방지 및 테스트 용이성을 위해 `init()` 으로 콜백을 주입받는다.
+패널 모듈은 `app.py`를 직접 import하지 않습니다.  
+대신 `init()`으로 필요한 callback을 주입받습니다.
 
 ```python
 # panels/some_panel.py
 _start_fn = None
-_stop_fn  = None
+_stop_fn = None
 
 def init(start_fn, stop_fn):
     global _start_fn, _stop_fn
     _start_fn = start_fn
-    _stop_fn  = stop_fn
+    _stop_fn = stop_fn
+```
 
-# app.py (connect() 내부)
-some_panel.init(start_fn=state.start_something, stop_fn=state.stop_something)
+```python
+# app.py
+some_panel.init(
+    start_fn=state.start_something,
+    stop_fn=state.stop_something,
+)
 ```
 
 ---
 
-## Runner 패턴
+## Runner Ownership
 
-Runner는 독립 스레드로 동작하며, `app.py`의 `AppState`가 인스턴스를 소유하고 생명주기를 관리한다.
+장시간 동작하는 기능은 보통 runner가 담당하고, `AppState`가 그 생명주기를 소유합니다.
 
-| Runner | 소유 필드 | 모드 | 비고 |
-|--------|-----------|------|------|
+| Runner | 보관 필드 | 모드 | 비고 |
+|---|---|---|---|
 | `LaneRunner` | `self.lc_runner` | Fixed | 단일 인스턴스 |
-| `AdRunner` | `self.ad_runners: list` | Fixed | 차량당 1개, 다중 인스턴스 |
-| `StepAdRunner` | `self.step_ad_runners: list` | Fixed Step | 단일 인스턴스로 전체 차량 관리 |
+| `AdRunner` | `self.ad_runners` | Fixed | 차량별 개별 인스턴스 |
+| `StepAdRunner` | `self.step_ad_runners` | Fixed Step | 전체 차량을 한 runner가 관리 |
 
 ```python
-# Fixed 모드 — 차량별 AdRunner
 for v in vehicles:
-    runner = AdRunner(tcp_sock=..., entity_id=v["entity_id"], vi_port=v["vi_port"], ...)
+    runner = AdRunner(...)
     runner.start()
     self.ad_runners.append(runner)
+```
 
-# Fixed Step 모드 — StepAdRunner 하나가 전체 차량 순환 제어
-runner = StepAdRunner(tcp_sock=..., vehicles=vehicles, ...)
+```python
+runner = StepAdRunner(...)
 runner.start()
 self.step_ad_runners.append(runner)
 ```
 
 ---
 
-## status_cb 패턴 — 실시간 상태 UI 표시
+## status_cb Pattern
 
-매 tick마다 로그를 append하면 UI 텍스트 누적 + DPG 재빌드 오버헤드가 크다.
-Runner에서 UI 상태를 갱신할 때는 `status_cb`를 주입받아 `dpg.set_value`로 직접 업데이트한다.
+주기적으로 변하는 상태는 매 tick마다 로그를 쌓지 말고, status callback으로 UI 값만 교체합니다.
 
 ```python
-# Runner 생성 시 콜백 주입
 runner = AdRunner(
     ...,
-    status_cb=au_panel.update_status,   # (entity_id, x, y, vel_kmh, accel, brake, steer) → None
+    status_cb=au_panel.update_status,
 )
+```
 
-# Runner 내부 — 매 tick
-if self._status_cb:
-    self._status_cb(entity_id, x, y, vel * 3.6, accel, brake, steer_n)
-
-# panels/autonomous_panel.py — ui_queue 경유, 5개 set_value 한 번에
+```python
 def update_status(entity_id, x, y, vel_kmh, accel, brake, steer):
-    slot = _entity_slot.get(entity_id)
-    if slot is None:
-        return
-    def _apply(...):
-        pfx = f"au_sv{slot}_"
-        if not dpg.does_item_exist(pfx + "pos"):
-            return
-        dpg.set_value(pfx + "pos",   f"({x:.1f}, {y:.1f})")
-        dpg.set_value(pfx + "vel",   f"{vel_kmh:.1f} km/h")
-        ...
+    def _apply():
+        dpg.set_value("some_tag", f"{vel_kmh:.1f} km/h")
     ui_queue.post(_apply)
 ```
 
-**핵심:** `log.append` (텍스트 증가 + DPG 재빌드) 대신 `set_value` (값 교체) 를 사용해
-tick당 UI 오버헤드를 대폭 줄인다.
+이 방식이 `log.append()`보다 UI 부하가 훨씬 적습니다.
 
 ---
 
-## 동적 차량 목록 — `_build_vehicles`
+## Dynamic Vehicle UI
 
-`autonomous_panel.py`에서 차량 수를 런타임에 추가/삭제할 때 DPG 아이템을 동적으로 재생성한다.
+차량 수에 따라 입력 UI를 다시 만들 때는, 컨테이너 그룹을 미리 만들고 `children_only=True`로 비운 뒤 다시 생성합니다.
 
 ```python
-# 컨테이너 그룹을 미리 만들어 두고
 dpg.add_group(tag="au_vehicles_area")
-_build_vehicles(2)   # 기본 2대
+```
 
-# 수 변경 시 자식만 삭제하고 재생성
+```python
 def _build_vehicles(count: int) -> None:
     dpg.delete_item("au_vehicles_area", children_only=True)
     for i in range(1, count + 1):
-        with dpg.group(tag=f"au_vehicle_group_{i}", parent="au_vehicles_area"):
-            dpg.add_input_text(tag=f"au_path_{i}", ...)
-            dpg.add_input_text(tag=f"au_entity_id_{i}", ...)
-            dpg.add_input_int(tag=f"au_vi_port_{i}", ...)
-            dpg.add_text("-", tag=f"au_sv{i}_pos", ...)
-            ...
+        with dpg.group(parent="au_vehicles_area"):
+            dpg.add_input_text(tag=f"au_entity_id_{i}")
 ```
 
-**주의:** `delete_item(children_only=True)` 후 재생성 시 반드시 `with dpg.group(parent=...)` 컨텍스트 안에서
-아이템을 추가해야 DPG 부모 컨텍스트 스택이 올바르게 유지된다.
+주의:
+
+- `delete_item(children_only=True)` 후에는 부모를 다시 명시해야 합니다.
+- 동적 태그를 참조하는 update 함수는 항상 `does_item_exist()`로 방어합니다.
 
 ---
 
-## config/ 상태 저장
+## config State Files
 
-`config/fp_state.json`, `config/monitor_state.json` 은 앱이 자동 생성한다.
+런타임 상태는 `config/*.json`에 저장합니다.
 
-- 파일 없음 → 조용히 기본값으로 시작
-- 저장 실패 → `print` 후 앱 계속 동작 (예외 전파 없음)
-- 폴더 없음 → `os.makedirs(..., exist_ok=True)` 로 자동 생성
+- 파일이 없어도 정상 시작해야 함
+- 저장 실패는 치명 오류로 취급하지 않음
+- `os.makedirs(..., exist_ok=True)`로 디렉터리를 자동 생성
 
----
+예:
 
-## lane_control/ 모듈 구조
-
-```
-lane_preprocessor.py   BEV 변환, 이진화, 노이즈 필터 (BEVParams 참조)
-lane_detector.py       Sliding Window 검출 (search_ratio, min_pixels 참조)
-controllers.py         EMAFilter, PDController, SpeedPIController
-vehicle_info.py        VehicleInfoThread (UDP 수신, 파싱)
-tune_panel.py          TunePanel (OpenCV 키보드 튜닝 창, --tuning 플래그)
-lane_controller.py     LaneController (메인 제어 루프, update_params)
-```
-
-`LaneController.update_params(**kwargs)` 로 실행 중 파라미터 실시간 변경 가능:
-`kp`, `kd`, `ema_alpha`, `steer_rate`, `offset_clip`, `invert_steer`, `target_kmh`,
-`bev_top_crop`, `min_blob_area`, `search_ratio`, `min_pixels`
+- `config/fp_state.json`
+- `config/tfp_state.json`
+- `config/monitor_state.json`
+- `config/udp_control_state.json`
 
 ---
 
-## autonomous_driving/ 성능 최적화
+## lane_control Structure
 
-### PathManager — 윈도우 탐색 캐시
+`lane_control/`은 대략 다음 역할로 나뉩니다.
 
-이전 구현은 매 tick 전체 경로를 O(n) 순회했다.
-`_last_wp` 캐시를 도입해 ±5 뒤 / +100 앞 범위만 탐색한다.
+```text
+lane_preprocessor.py   BEV 변환, 이진화, 필터
+lane_detector.py       Sliding Window 기반 차선 검출
+controllers.py         EMA, PD, Speed PI
+vehicle_info.py        Vehicle Info UDP 수신
+tune_panel.py          OpenCV 기반 튜닝 창
+lane_controller.py     메인 제어 루프
+```
+
+`LaneController.update_params(**kwargs)`로 실행 중 파라미터를 갱신할 수 있습니다.
+
+대표 파라미터:
+
+- `kp`, `kd`
+- `ema_alpha`
+- `steer_rate`
+- `offset_clip`
+- `invert_steer`
+- `target_kmh`
+- `bev_top_crop`
+- `min_blob_area`
+- `search_ratio`
+- `min_pixels`
+
+---
+
+## autonomous_driving Optimization
+
+### PathManager Waypoint Cache
+
+매 tick 전체 경로를 처음부터 훑지 않고, 이전 waypoint 근처만 탐색합니다.
 
 ```python
-# localization/path_manager.py
 BACK, FRONT = 5, 100
 for offset in range(-BACK, FRONT + 1):
-    i = (self._last_wp + offset) % n   # closed path
-    ...
-self._last_wp = current_waypoint
+    i = (self._last_wp + offset) % n
 ```
 
-경로 길이에 무관하게 매 tick O(106) 으로 고정된다.
+### PurePursuit Lookahead Cache
 
-### PurePursuit — lookahead 인덱스 캐시
-
-`_last_lfd_idx` 에서 전방 탐색을 시작하고, 실패 시 인덱스 0부터 재탐색(fallback)한다.
+`_last_lfd_idx`부터 먼저 탐색하고, 실패하면 0부터 fallback 탐색합니다.
 
 ```python
-# control/pure_pursuit.py
 for attempt in range(2):
     start = self._last_lfd_idx if attempt == 0 else 0
-    for i in range(start, n):
-        if dis >= lfd:
-            self._last_lfd_idx = i
-            return steering_angle
 ```
 
-경로 setter 에서 `_last_lfd_idx = 0` 으로 리셋한다.
 ---
 
-## Transform Playback Notes
+## Transform Playback
 
-`Transform Playback` panel??CSV 湲곕컲 `TransformControlById` ?ъ깮 ?꾩슜 panel?대떎.
+`Transform Playback`은 CSV를 읽어 `TransformControlById`를 순차 전송하는 패널입니다.
 
-- panel init pattern: `panels.transform_playback_panel.init(start_tfp_fn, stop_tfp_fn)`
-- state file: `config/tfp_state.json`
-- default vehicle count: `2`
-- per-vehicle settings: `path`, `entity_id`
+기본 규칙:
 
-### CSV parse
+- 기본 차량 수: `2`
+- 상태 파일: `config/tfp_state.json`
+- 차량별 설정: `path`, `entity_id`
 
-`panels/transform_playback_panel.py::_load_csv()`? ?꾩쓬 媛믪쓣 row dict濡??뚯떛?쒕떎.
+CSV에서 읽는 주요 값:
 
 - `time_sec`
 - `pos_x`, `pos_y`, `pos_z`
@@ -207,34 +202,71 @@ for attempt in range(2):
 - `steer_angle`
 - `speed`
 
-`speed`? `local_velocity.x`, `local_velocity.y`瑜??ъ슜??`sqrt(x^2 + y^2)` 濡?怨꾩궛?쒕떎. `Vehicle Info` CSV??velocity??`m/s`濡???ν븯誘濡?`speed`??`m/s`濡??꾨쭏?섎룄濡??묎렐?쒕떎.
+속도 계산:
 
-### Runtime flow
+```text
+speed = sqrt(local_velocity.x^2 + local_velocity.y^2)
+```
 
-`AppState.start_tfp()`?먯꽌 `AutoCaller`瑜??ъ슜?섎굹, `Transform Playback`? `FixedStep` / `SaveData` 瑜??ъ슜?섏? ?딅뒗??`TransformControlById`瑜??쒖감 ?꾩넚?쒕떎.
+현재 `Vehicle Info` 계열 CSV의 velocity 단위는 `m/s` 기준으로 사용합니다.
 
-```python
-for i in range(total_rows):
-    for vehicle in vehicles:
-        row = vehicle["rows"][i]
-        tcp.send_transform_control_by_id(..., speed=row["speed"])
+재생 흐름은 `FixedStep` 없이 timestamp 차이 기반으로 순차 전송하는 방식입니다.
 
 ---
 
 ## UDP Template Split
 
-`templates/*.tmpl` 은 UDP monitor template 과 UDP control template 을 같이 포함할 수 있다.
+`templates/*.tmpl`에는 수신용 템플릿과 control용 템플릿이 섞여 있을 수 있습니다.
 
-- `isControl == false`: `UDP Monitor` 에서 수신/파싱용으로 사용
-- `isControl == true`: `UDP Control` 에서 입력 폼 생성 + UDP send 용으로 사용
+- `isControl == false`
+  - `UDP Monitor`에서 수신/파싱용으로 사용
+- `isControl == true`
+  - `UDP Control`에서 입력 폼 생성과 UDP 전송용으로 사용
 
-현재 분리 기준은 [C:\Dev\MORAI-SimControl_v2.1\panels\monitor_utils.py](C:/Dev/MORAI-SimControl_v2.1/panels/monitor_utils.py:1) 이고, `UDP Control` 상태는 `config/udp_control_state.json` 에 저장된다.
+분리 기준은 [C:\Dev\MORAI-SimControl_v2.1\panels\monitor_utils.py](C:/Dev/MORAI-SimControl_v2.1/panels/monitor_utils.py:1)에 있습니다.
 
-    sleep(next_time_sec - current_time_sec)
+관련 상태 파일:
+
+- `config/monitor_state.json`
+- `config/udp_control_state.json`
+
+---
+
+## Camera Sensor Panel
+
+`Camera Sensor` 패널은 `Lane Control`과 별개로 raw camera stream만 확인하는 독립 패널입니다.
+
+- 수신기: [C:\Dev\MORAI-SimControl_v2.1\receivers\camera_receiver.py](C:/Dev/MORAI-SimControl_v2.1/receivers/camera_receiver.py:1)
+- 패널: [C:\Dev\MORAI-SimControl_v2.1\panels\camera_sensor_panel.py](C:/Dev/MORAI-SimControl_v2.1/panels/camera_sensor_panel.py:1)
+
+원칙:
+
+- raw frame만 렌더링
+- `LaneController`의 debug composite 생성 책임과 분리
+- background receiver thread에서 받은 frame은 `ui_queue.post()`로 texture에 반영
+
+---
+
+## Viewport Resize Rule
+
+viewport resize callback 안에서 직접 레이아웃을 바꾸지 않습니다.  
+callback에서는 dirty flag만 세우고, 실제 `dpg.configure_item()` 호출은 메인 루프에서 처리합니다.
+
+```python
+_layout_dirty = True
+
+def _mark_layout_dirty():
+    global _layout_dirty
+    _layout_dirty = True
+
+dpg.set_viewport_resize_callback(_mark_layout_dirty)
 ```
 
-CSV ?쒓컙 而щ읆?대? ?덉쑝硫?timestamp 媛꾧꺽?쇰줈 ?ъ깮?섍퀬, ?놁쑝硫?fallback delay瑜??ъ슜?쒕떎.
+```python
+while dpg.is_dearpygui_running():
+    if _layout_dirty:
+        _apply_layout()
+    dpg.render_dearpygui_frame()
+```
 
-### Transport coupling
-
-`TransformControlById` payload??`position`, `rotation`, `steer_angle`, `speed`瑜??ы븿?쒕떎. protocol?대? 諛붾뀌硫?`transport/protocol_defs.py`, `transport/tcp_transport.py`, `templates/TransformControl.tmpl`, panel CSV parser瑜?媛숈씠 ?묎렐?섏뼱?쇳븳??
+이 규칙은 창 이동/리사이즈 시 hit-test, scroll, layout 꼬임을 줄이기 위한 것입니다.

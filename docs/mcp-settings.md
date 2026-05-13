@@ -1,28 +1,37 @@
-# MCP 설정 가이드
+﻿# MCP 설정 가이드
 
-Claude Code에서 MCP(Model Context Protocol) 서버를 활성화하면 추가 기능을 사용할 수 있지만,
-불필요한 MCP는 컨텍스트 낭비와 응답 지연을 유발한다.
+이 프로젝트는 기본적으로 로컬 파일, TCP/UDP 소켓, DearPyGUI 중심으로 동작합니다.  
+따라서 불필요한 MCP를 많이 켜 둘 필요는 없습니다.
 
-## 이 프로젝트에서 필요한 MCP
+## 권장 방향
 
-| MCP | 용도 | 비고 |
-|-----|------|------|
-| 없음 (기본 도구만 사용) | Read/Edit/Bash/Grep 등 내장 도구로 충분 | - |
+- 기본 로컬 도구만으로 충분하면 MCP를 최소화합니다.
+- 프로젝트와 직접 관계없는 브라우저, 메신저, 노트북 계열 MCP는 비활성화해도 됩니다.
 
-## 비활성화 권장 MCP
+## 비활성화 후보
 
-| MCP | 이유 |
-|-----|------|
-| Slack | 이 프로젝트에서 사용 안 함 |
-| Chrome / Browser | UI는 DearPyGUI, 웹 브라우저 불필요 |
-| Jupyter / Notebook | .ipynb 파일 없음 |
-| 기타 외부 서비스 | 프로젝트와 무관 |
+- Slack
+- Browser / Chrome
+- Jupyter / Notebook
+- 프로젝트와 무관한 외부 서비스 연동
 
-## MCP 비활성화 방법
+## 설정 위치 예시
 
-### 방법 1: claude_desktop_config.json 편집
-`%APPDATA%\Claude\claude_desktop_config.json` (Windows) 또는
-`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+### 전역 설정
+
+Windows:
+
+```text
+%APPDATA%\Claude\claude_desktop_config.json
+```
+
+macOS:
+
+```text
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
+
+예시:
 
 ```json
 {
@@ -32,27 +41,18 @@ Claude Code에서 MCP(Model Context Protocol) 서버를 활성화하면 추가 �
 }
 ```
 
-### 방법 2: CLAUDE.md에 사용 안 함 명시
-```markdown
-## MCP
-이 프로젝트는 MCP 서버를 사용하지 않는다.
-외부 API 연동 없이 로컬 파일과 TCP/UDP 소켓만 사용한다.
-```
+### 프로젝트별 설정
 
-### 방법 3: 프로젝트별 .claude/settings.json
 ```json
 {
   "enabledMcpServers": []
 }
 ```
 
-## 토큰 절약 효과
+## 효과
 
-MCP 서버를 비활성화하면:
-- 시스템 프롬프트에 MCP 도구 스키마가 포함되지 않음 → 입력 토큰 절감
-- 불필요한 tool_use 시도 없음 → 처리 속도 향상
+MCP를 최소화하면:
 
-## 참고
-
-MCP 설정은 전역(claude_desktop_config.json)과 프로젝트별(.claude/settings.json)로 구분된다.
-프로젝트별 설정이 전역 설정을 오버라이드한다.
+- 불필요한 tool 탐색이 줄고
+- 입력 컨텍스트가 가벼워지고
+- 응답 속도가 조금 더 안정적일 수 있습니다.
