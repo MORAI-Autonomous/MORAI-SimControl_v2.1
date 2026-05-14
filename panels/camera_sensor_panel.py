@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import time
 from typing import Optional
 
@@ -15,6 +17,10 @@ _CAM_W = 640
 _CAM_H = 360
 _CAM_BLANK: list = [0.0] * (_CAM_W * _CAM_H * 4)
 _FRAME_INTERVAL = 1.0 / 30.0
+_STATE_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "config", "camera_sensor_state.json"
+)
 
 _receiver: Optional[CameraReceiver] = None
 _last_frame_t = 0.0
@@ -39,6 +45,7 @@ def build(parent) -> None:
                 tag="cam_sensor_ip",
                 default_value="0.0.0.0",
                 width=120,
+                callback=_on_state_change,
             )
             dpg.add_text("Port      :", color=(180, 180, 180, 255))
             dpg.add_input_int(
@@ -48,6 +55,7 @@ def build(parent) -> None:
                 min_value=1,
                 max_value=65535,
                 step=0,
+                callback=_on_state_change,
             )
             dpg.add_button(label="Start", tag="cam_sensor_btn_start", width=90, callback=_on_start)
             dpg.add_button(label="Stop", tag="cam_sensor_btn_stop", width=90, callback=_on_stop)
@@ -64,6 +72,8 @@ def build(parent) -> None:
         _section("LIVE VIEW")
         dpg.add_image("cam_sensor_texture", width=_CAM_W, height=_CAM_H)
 
+    _load_state()
+
 
 def _on_start() -> None:
     global _receiver, _last_rx_t
@@ -74,6 +84,7 @@ def _on_start() -> None:
     ip = dpg.get_value("cam_sensor_ip").strip() or "0.0.0.0"
     port = int(dpg.get_value("cam_sensor_port"))
     _last_rx_t = 0.0
+    _save_state()
 
     _receiver = CameraReceiver(
         ip=ip,
@@ -149,3 +160,42 @@ def _kv(label: str, tag: str) -> None:
     with dpg.group(horizontal=True):
         dpg.add_text(f"{label}:", color=(160, 160, 160, 255))
         dpg.add_text("-", tag=tag, color=(210, 210, 215, 255))
+
+
+def _on_state_change(sender=None, app_data=None, user_data=None) -> None:
+    _save_state()
+
+
+def _save_state() -> None:
+    if not dpg.does_item_exist("cam_sensor_ip") or not dpg.does_item_exist("cam_sensor_port"):
+        return
+
+    data = {
+        "ip": dpg.get_value("cam_sensor_ip").strip() or "0.0.0.0",
+        "port": int(dpg.get_value("cam_sensor_port")),
+    }
+    try:
+        os.makedirs(os.path.dirname(_STATE_FILE), exist_ok=True)
+        with open(_STATE_FILE, "w", encoding="utf-8") as fp:
+            json.dump(data, fp, indent=2, ensure_ascii=False)
+    except Exception as e:
+        log.append(f"[CameraSensor] save state error: {e}", "ERROR")
+
+
+def _load_state() -> None:
+    if not os.path.isfile(_STATE_FILE):
+        return
+    try:
+        with open(_STATE_FILE, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+    except Exception as e:
+        log.append(f"[CameraSensor] load state error: {e}", "ERROR")
+        return
+
+    try:
+        if dpg.does_item_exist("cam_sensor_ip"):
+            dpg.set_value("cam_sensor_ip", str(data.get("ip", "0.0.0.0")))
+        if dpg.does_item_exist("cam_sensor_port"):
+            dpg.set_value("cam_sensor_port", int(data.get("port", 9090)))
+    except Exception as e:
+        log.append(f"[CameraSensor] apply state error: {e}", "ERROR")
