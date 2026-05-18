@@ -11,7 +11,6 @@ from .config.config import Config
 from .mgeo.calc_mgeo_path import mgeo_dijkstra_path
 
 
-
 class AutonomousDriving:
     def __init__(self, path_file_name=None, map_name=None, max_speed_kph=None):
         config = Config()
@@ -34,8 +33,6 @@ class AutonomousDriving:
             )
         self.set_max_speed_kph(max_speed_kph)
 
-
-
         self.adaptive_cruise_control = AdaptiveCruiseControl(
             vehicle_length=config['common']['vehicle_length'], **config['planning']['adaptive_cruise_control']
         )
@@ -55,18 +52,12 @@ class AutonomousDriving:
             self.pid.reset()
 
     def execute(self, vehicle_state):
-        # 현재 위치 기반으로 local path과 planned velocity 추출
         local_path, planned_velocity = self.path_manager.get_local_path(vehicle_state)
 
-
-
-        # adaptive cruise control를 활용한 속도 계획
         target_velocity = self.adaptive_cruise_control.get_target_velocity(vehicle_state.velocity, planned_velocity)
         if self._max_speed_kph is not None:
             target_velocity = min(target_velocity, self._max_speed_kph / 3.6)
-        # 속도 제어를 위한 PID control
         acc_cmd = self.pid.get_output(target_velocity, vehicle_state.velocity)
-        # 경로 추종을 위한 pure pursuit control
         self.pure_pursuit.path = local_path
         self.pure_pursuit.vehicle_state = vehicle_state
         steering_cmd = self.pure_pursuit.calculate_steering_angle()

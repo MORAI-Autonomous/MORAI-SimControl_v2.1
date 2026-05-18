@@ -1,0 +1,93 @@
+{
+	"version": "1.0.0-alpha",
+	"messageTemplate":
+	{
+		"name": "CameraSensorMessageTemplate",
+		"messageCategory": "Sensor",
+		"isControl": false,
+		"isSensor": true,
+		"description": "",
+		"segmentList": [
+			{
+				"type": "FIELDS",
+				"relationName": "CameraEntity",
+				"fieldList": [
+					{
+						"name": "image size",
+						"relationName": "CameraEntity",
+						"variableName": "camera_attributes.camera_sensor_data.size",
+						"variableType": "INT32"
+					},
+					{
+						"name": "image datas",
+						"relationName": "CameraEntity",
+						"variableName": "camera_attributes.camera_sensor_data.image_data",
+						"variableType": "BYTES",
+						"fieldOutputFormat": "JPG"
+					}
+				]
+			},
+			{
+				"type": "REPEAT",
+				"relationName": "CameraEntity",
+				"groupOutputFormat": "JSON",
+				"repeatFieldName": "camera_attributes.bound_box_data",
+				"fieldList": [
+					{ "name": "bounding_box_2d.min.x", "relationName": "CameraEntity", "variableName": "bounding_box_2d.min.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_2d.min.y", "relationName": "CameraEntity", "variableName": "bounding_box_2d.min.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_2d.max.x", "relationName": "CameraEntity", "variableName": "bounding_box_2d.max.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_2d.max.y", "relationName": "CameraEntity", "variableName": "bounding_box_2d.max.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3d.center_point.x", "relationName": "CameraEntity", "variableName": "bounding_box_3d.center_point.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3d.center_point.y", "relationName": "CameraEntity", "variableName": "bounding_box_3d.center_point.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3d.center_point.z", "relationName": "CameraEntity", "variableName": "bounding_box_3d.center_point.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3d.orientation.x", "relationName": "CameraEntity", "variableName": "bounding_box_3d.orientation.x", "variableType": "DOUBLE" },
+					{ "name": "bounding_box_3d.orientation.y", "relationName": "CameraEntity", "variableName": "bounding_box_3d.orientation.y", "variableType": "DOUBLE" },
+					{ "name": "bounding_box_3d.orientation.z", "relationName": "CameraEntity", "variableName": "bounding_box_3d.orientation.z", "variableType": "DOUBLE" },
+					{ "name": "bounding_box_3d.dimension.x", "relationName": "CameraEntity", "variableName": "bounding_box_3d.dimension.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3d.dimension.y", "relationName": "CameraEntity", "variableName": "bounding_box_3d.dimension.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3d.dimension.z", "relationName": "CameraEntity", "variableName": "bounding_box_3d.dimension.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_1.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_1.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_1.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_1.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_1.z", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_1.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_2.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_2.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_2.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_2.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_2.z", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_2.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_3.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_3.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_3.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_3.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_3.z", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_3.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_4.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_4.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_4.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_4.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_4.z", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_4.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_5.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_5.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_5.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_5.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_5.z", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_5.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_6.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_6.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_6.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_6.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_6.z", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_6.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_7.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_7.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_7.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_7.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_7.z", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_7.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_8.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_8.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_8.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_8.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.corner_points_8.z", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.corner_points_8.z", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_1.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_1.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_1.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_1.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_2.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_2.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_2.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_2.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_3.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_3.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_3.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_3.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_4.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_4.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_4.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_4.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_5.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_5.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_5.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_5.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_6.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_6.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_6.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_6.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_7.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_7.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_7.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_7.y", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_8.x", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_8.x", "variableType": "FLOAT" },
+					{ "name": "bounding_box_3D8_points.projected_corner_points_8.y", "relationName": "CameraEntity", "variableName": "bounding_box_3D8_points.projected_corner_points_8.y", "variableType": "FLOAT" }
+				]
+			}
+		]
+	}
+}

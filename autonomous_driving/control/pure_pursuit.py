@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 from ..vehicle_state import VehicleState
 import numpy as np
 
@@ -39,7 +41,6 @@ class PurePursuit(object):
 
         steering_angle = 0.
         n = len(self._path)
-        # 마지막 lookahead 인덱스부터 탐색, 없으면 처음부터 재탐색
         for attempt in range(2):
             start = self._last_lfd_idx if attempt == 0 else 0
             for i in range(start, n):
