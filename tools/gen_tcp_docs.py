@@ -178,6 +178,84 @@ def render_message_section(message: MessageSpec) -> str:
     return "\n".join(lines)
 
 
+def render_endpoint_section(title: str, message) -> list[str]:
+    binding_label = "Builder" if message.direction == "request" else "Parser"
+    binding_value = message.handler if message.direction == "request" else message.parser
+    lines = [
+        f"### {title}",
+        "",
+        f"- Payload: `{describe_payload_size(message)}`",
+        f"- {binding_label}: `{binding_value}`" if binding_value else f"- {binding_label}: n/a",
+        "",
+        message.summary,
+        "",
+        f"Wire layout: `{render_struct_format(message.fields)}`" if message.fields else "Wire layout: variant-specific",
+        "",
+    ]
+
+    if message.fields:
+        lines.extend(
+            [
+                "| Field | Type | Description |",
+                "|------|------|-------------|",
+            ]
+        )
+        for field in message.fields:
+            desc = field.description or "-"
+            lines.append(f"| `{field.name}` | `{render_wire_type(field.field_type)}` | {desc} |")
+        lines.append("")
+    elif not message.variants:
+        lines.append("This message has no payload.\n")
+
+    if message.variants:
+        lines.append("Variants:")
+        lines.append("")
+        for variant in message.variants:
+            lines.append(f"#### {variant.name}")
+            lines.append("")
+            if variant.summary:
+                lines.append(f"- Selector: `{variant.summary}`")
+                lines.append("")
+            lines.append(f"Wire layout: `{render_struct_format(variant.fields)}`")
+            lines.append("")
+            lines.extend(
+                [
+                    "| Field | Type | Description |",
+                    "|------|------|-------------|",
+                ]
+            )
+            for field in variant.fields:
+                desc = field.description or "-"
+                lines.append(f"| `{field.name}` | `{render_wire_type(field.field_type)}` | {desc} |")
+            lines.append("")
+
+    if message.repeat_fields:
+        lines.extend(
+            [
+                "Repeat layout:",
+                "",
+                "| Field | Type | Description |",
+                "|------|------|-------------|",
+            ]
+        )
+        for field in message.repeat_fields:
+            desc = field.description or "-"
+            lines.append(f"| `{field.name}` | `{render_wire_type(field.field_type)}` | {desc} |")
+        lines.append("")
+
+    if message.notes:
+        lines.append("Notes:")
+        for note in message.notes:
+            lines.append(f"- {note}")
+        lines.append("")
+
+    return lines
+
+
+def render_api_anchor(msg_type: int) -> str:
+    return f"api-0x{msg_type:04x}"
+
+
 def render_summary_rows(request_messages: list[MessageSpec], response_messages: list[MessageSpec]) -> list[str]:
     response_by_type = {message.msg_type: message for message in response_messages}
     seen_msg_types = set()
@@ -185,8 +263,9 @@ def render_summary_rows(request_messages: list[MessageSpec], response_messages: 
 
     for request in request_messages:
         response = response_by_type.get(request.msg_type)
+        anchor = render_api_anchor(request.msg_type)
         rows.append(
-            f"| `0x{request.msg_type:04X}` | `{request.name}` | "
+            f"| [`0x{request.msg_type:04X}`](#{anchor}) | [`{request.name}`](#{anchor}) | "
             f"`{describe_payload_size(request)}` | "
             f"`{describe_payload_size(response) if response else '-'}` |"
         )
@@ -195,8 +274,9 @@ def render_summary_rows(request_messages: list[MessageSpec], response_messages: 
     for response in response_messages:
         if response.msg_type in seen_msg_types:
             continue
+        anchor = render_api_anchor(response.msg_type)
         rows.append(
-            f"| `0x{response.msg_type:04X}` | `{response.name}` | "
+            f"| [`0x{response.msg_type:04X}`](#{anchor}) | [`{response.name}`](#{anchor}) | "
             f"`-` | `{describe_payload_size(response)}` |"
         )
 
@@ -207,6 +287,13 @@ def render_document() -> str:
     request_messages = list(iter_messages())
     response_messages = list(iter_response_messages())
     notification_messages = list(iter_notification_messages())
+    request_by_type = {message.msg_type: message for message in request_messages}
+    response_by_type = {message.msg_type: message for message in response_messages}
+    notification_by_type = {message.msg_type: message for message in notification_messages}
+    ordered_msg_types = []
+    for message in request_messages + response_messages + notification_messages:
+        if message.msg_type not in ordered_msg_types:
+            ordered_msg_types.append(message.msg_type)
     lines = [
         "# TCP API Reference",
         "",
@@ -238,21 +325,19 @@ def render_document() -> str:
         lines.append(row)
     lines.append("")
 
-    lines.append("## Requests")
+    lines.append("## APIs")
     lines.append("")
-    for message in request_messages:
-        lines.append(render_message_section(message))
-
-    lines.append("## Responses")
-    lines.append("")
-    for message in response_messages:
-        lines.append(render_message_section(message))
-
-    if notification_messages:
-        lines.append("## Notifications")
+    for msg_type in ordered_msg_types:
+        base = request_by_type.get(msg_type) or response_by_type.get(msg_type) or notification_by_type.get(msg_type)
+        lines.append(f'<a id="{render_api_anchor(msg_type)}"></a>')
+        lines.append(f"## `0x{msg_type:04X}` {base.name}")
         lines.append("")
-        for message in notification_messages:
-            lines.append(render_message_section(message))
+        if msg_type in request_by_type:
+            lines.extend(render_endpoint_section("Req", request_by_type[msg_type]))
+        if msg_type in response_by_type:
+            lines.extend(render_endpoint_section("Resp", response_by_type[msg_type]))
+        if msg_type in notification_by_type:
+            lines.extend(render_endpoint_section("Noti", notification_by_type[msg_type]))
 
     return "\n".join(lines).rstrip() + "\n"
 
