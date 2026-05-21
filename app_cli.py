@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import socket
 import threading
 import time
@@ -88,6 +90,7 @@ def connect_and_start_receiver(pending: dict, lock: threading.Lock):
 
 def print_key_bindings():
     print("---- Simulation Time Mode ----")
+    print("  [0] GetSimulatorStatus          (TCP 0x1001)")
     print("  [1] GetSimulationTimeStatus      (TCP 0x1101)")
     print("  [2] SetSimulationTimeModeCommand (TCP 0x1102)")
     print("---- Fixed Step Control ------")
@@ -175,7 +178,11 @@ def main():
                 break
 
             try:
-                if key == "1":
+                if key == "0":
+                    dispatch(MSG_TYPE_GET_SIMULATOR_STATUS,
+                             lambda rid: tcp.send_get_simulator_status(tcp_sock, rid))
+
+                elif key == "1":
                     dispatch(MSG_TYPE_GET_SIMULATION_TIME_STATUS,
                              lambda rid: tcp.send_get_status(tcp_sock, rid))
 

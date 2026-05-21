@@ -9,7 +9,7 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | Offset | Type | Field | Description |
 |--------|------|-------|-------------|
 | `+0` | `uint8` | `magic` | Fixed magic byte `0x4D` (`'M'`) |
-| `+1` | `uint8` | `msg_class` | `0x01` = request, `0x02` = response |
+| `+1` | `uint8` | `msg_class` | `0x01` = request, `0x02` = response, `0x03` = notification |
 | `+2` | `uint32` | `msg_type` | Command / response type such as `0x1102` |
 | `+6` | `uint32` | `payload_size` | Payload size in bytes, excluding the 16-byte header |
 | `+10` | `uint32` | `request_id` | Request / response correlation id |
@@ -23,6 +23,7 @@ Every TCP packet uses this 16-byte header before the payload described below.
 
 | Msg Type | Name | Request Payload | Response Payload |
 |----------|------|-----------------|------------------|
+| `0x1001` | `GetSimulatorStatus` | `0 bytes` | `12 bytes` |
 | `0x1101` | `GetSimulationTimeStatus` | `0 bytes` | `40 bytes` |
 | `0x1102` | `SetSimulationTimeModeCommand` | `20 bytes` | `20 bytes` |
 | `0x1201` | `FixedStep` | `4 bytes` | `8 bytes` |
@@ -33,10 +34,25 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | `0x1304` | `SetTrajectory` | `>= 16 bytes + 32 bytes * item_count` | `8 bytes` |
 | `0x1401` | `ActiveSuiteStatus` | `0 bytes` | `>= 20 bytes + variable bytes * item_count` |
 | `0x1402` | `LoadSuite` | `>= 4 bytes` | `8 bytes` |
-| `0x1504` | `ScenarioStatus` | `0 bytes` | `12 bytes` |
+| `0x1504` | `ScenarioStatus` | `0 bytes` | `>= 16 bytes` |
 | `0x1505` | `ScenarioControl` | `>= 8 bytes` | `8 bytes` |
 
 ## Requests
+
+## `0x1001` GetSimulatorStatus
+
+- Direction: `request`
+- Payload: `0 bytes`
+- Builder: `tcp.send_get_simulator_status()`
+
+Query the current simulator frontend lifecycle state.
+
+Wire layout: variant-specific
+
+This message has no payload.
+
+Notes:
+- No payload.
 
 ## `0x1101` GetSimulationTimeStatus
 
@@ -251,6 +267,22 @@ Wire layout: `I [uint32 len][bytes]`
 
 ## Responses
 
+## `0x1001` GetSimulatorStatus
+
+- Direction: `response`
+- Payload: `12 bytes`
+- Parser: `tcp.parse_get_simulator_status_payload()`
+
+Return the current simulator frontend lifecycle state.
+
+Wire layout: `I I I`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+| `state` | `uint32` | 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY |
+
 ## `0x1101` GetSimulationTimeStatus
 
 - Direction: `response`
@@ -423,18 +455,23 @@ Wire layout: `I I`
 ## `0x1504` ScenarioStatus
 
 - Direction: `response`
-- Payload: `12 bytes`
+- Payload: `>= 16 bytes`
 - Parser: `tcp.parse_scenario_status_payload()`
 
-Return result code and current scenario execution state.
+Return result code, current scenario execution state, and scenario name.
 
-Wire layout: `I I I`
+Wire layout: `I I I [uint32 len][bytes]`
 
 | Field | Type | Description |
 |------|------|-------------|
 | `result_code` | `uint32` | - |
 | `detail_code` | `uint32` | - |
-| `state` | `uint32` | 1=Play, 2=Pause, 3=Stop |
+| `state` | `uint32` | 1=Play, 2=Pause, 3=Stop, 4=Completed |
+| `name` | `uint32 length + utf-8 bytes` | Current scenario name |
+
+Notes:
+- Parser currently accepts both the new payload (result_code/detail_code/state/name) and the legacy 12-byte payload (result_code/detail_code/state).
+- When the legacy payload is received, `name` is returned as an empty string.
 
 ## `0x1505` ScenarioControl
 
@@ -450,3 +487,44 @@ Wire layout: `I I`
 |------|------|-------------|
 | `result_code` | `uint32` | - |
 | `detail_code` | `uint32` | - |
+
+## Notifications
+
+## `0x1504` ScenarioStatus
+
+- Direction: `notification`
+- Payload: `>= 8 bytes`
+- Parser: `tcp.parse_scenario_status_notification_payload()`
+
+Push the current scenario execution state and scenario name without a preceding request.
+
+Wire layout: `I [uint32 len][bytes]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `state` | `uint32` | Protobuf enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed |
+| `name` | `uint32 length + utf-8 bytes` | Current scenario name |
+
+Notes:
+- Header uses msg_class = 0x03 (NOTI).
+- Payload is assumed to be protobuf-encoded scenario status data, not the raw request/response layout.
+- Current parser expects field #1 = varint state, field #2 = length-delimited utf-8 scenario name.
+
+## `0x1001` GetSimulatorStatus
+
+- Direction: `notification`
+- Payload: `4 bytes`
+- Parser: `tcp.parse_get_simulator_status_notification_payload()`
+
+Push the current simulator frontend lifecycle state without a preceding request.
+
+Wire layout: `I`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `state` | `uint32` | Protobuf enum value. 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY |
+
+Notes:
+- Header uses msg_class = 0x03 (NOTI).
+- Payload is protobuf-encoded datamodel::SimulatorStatus, not the raw 12-byte response layout.
+- Current parser expects minimal wire format: 0x08 <varint(state)>.

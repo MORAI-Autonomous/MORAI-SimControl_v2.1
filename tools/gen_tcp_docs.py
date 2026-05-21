@@ -16,6 +16,7 @@ from transport.message_schema import (
     get_response_message,
     get_min_payload_size,
     iter_messages,
+    iter_notification_messages,
     iter_response_messages,
     render_struct_format,
     render_wire_type,
@@ -29,6 +30,9 @@ def _expect(condition: bool, message: str) -> None:
 
 
 def validate_schema_against_protocol_defs() -> None:
+    msg_1001 = get_message(0x1001)
+    _expect(get_min_payload_size(msg_1001) == 0, "0x1001 request size mismatch")
+
     msg_1102 = get_message(0x1102)
     _expect(
         proto.SET_SIM_TIME_MODE_REQ_SIZE == get_min_payload_size(msg_1102),
@@ -62,6 +66,9 @@ def validate_schema_against_protocol_defs() -> None:
     resp_1102 = get_response_message(0x1102)
     _expect(proto.SET_SIM_TIME_MODE_RESP_SIZE == get_min_payload_size(resp_1102), "0x1102 response size mismatch")
 
+    resp_1001 = get_response_message(0x1001)
+    _expect(proto.GET_SIMULATOR_STATUS_SIZE == get_min_payload_size(resp_1001), "0x1001 response size mismatch")
+
     resp_1201 = get_response_message(0x1201)
     _expect(proto.RESULT_SIZE == get_min_payload_size(resp_1201), "0x1201 response size mismatch")
 
@@ -90,7 +97,7 @@ def validate_schema_against_protocol_defs() -> None:
     _expect(proto.RESULT_SIZE == get_min_payload_size(resp_1402), "0x1402 response size mismatch")
 
     resp_1504 = get_response_message(0x1504)
-    _expect(get_min_payload_size(resp_1504) == 12, "0x1504 response size mismatch")
+    _expect(get_min_payload_size(resp_1504) == 16, "0x1504 response size mismatch")
 
     resp_1505 = get_response_message(0x1505)
     _expect(proto.RESULT_SIZE == get_min_payload_size(resp_1505), "0x1505 response size mismatch")
@@ -199,6 +206,7 @@ def render_summary_rows(request_messages: list[MessageSpec], response_messages: 
 def render_document() -> str:
     request_messages = list(iter_messages())
     response_messages = list(iter_response_messages())
+    notification_messages = list(iter_notification_messages())
     lines = [
         "# TCP API Reference",
         "",
@@ -211,7 +219,7 @@ def render_document() -> str:
         "| Offset | Type | Field | Description |",
         "|--------|------|-------|-------------|",
         "| `+0` | `uint8` | `magic` | Fixed magic byte `0x4D` (`'M'`) |",
-        "| `+1` | `uint8` | `msg_class` | `0x01` = request, `0x02` = response |",
+        "| `+1` | `uint8` | `msg_class` | `0x01` = request, `0x02` = response, `0x03` = notification |",
         "| `+2` | `uint32` | `msg_type` | Command / response type such as `0x1102` |",
         "| `+6` | `uint32` | `payload_size` | Payload size in bytes, excluding the 16-byte header |",
         "| `+10` | `uint32` | `request_id` | Request / response correlation id |",
@@ -239,6 +247,12 @@ def render_document() -> str:
     lines.append("")
     for message in response_messages:
         lines.append(render_message_section(message))
+
+    if notification_messages:
+        lines.append("## Notifications")
+        lines.append("")
+        for message in notification_messages:
+            lines.append(render_message_section(message))
 
     return "\n".join(lines).rstrip() + "\n"
 

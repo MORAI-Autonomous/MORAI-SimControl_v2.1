@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # tcp_thread.py
 import socket
 import threading
@@ -6,6 +8,7 @@ import transport.protocol_defs as proto
 import transport.tcp_transport as tcp
 import utils.input_helper as prompt
 import panels.log as log
+import panels.commands as cmd_panel
 
 
 def result_to_string(code: int):
@@ -17,15 +20,32 @@ def time_mode_to_string(mode: int):
     if mode == proto.TIME_MODE_FIXED_STEP:  return "FIXED_STEP_LEGACY"
     return f"UNKNOWN({mode})"
 
+def simulator_state_to_string(state: int):
+    return proto.SIMULATOR_STATE_MAP.get(state, f"UNKNOWN({state})")
+
+
+def _hex_dump(data: bytes):
+    return " ".join(f"{b:02X}" for b in data) if data else "(empty)"
+
+
+def scenario_state_to_string(state: int):
+    return {
+        1: "PLAY",
+        2: "PAUSE",
+        3: "STOP",
+        4: "COMPLETED",
+    }.get(state, f"UNKNOWN({state})")
+
 
 class Receiver(threading.Thread):
-    def __init__(self, sock, pending: dict, lock: threading.Lock, on_disconnect=None):
+    def __init__(self, sock, pending: dict, lock: threading.Lock, on_disconnect=None, on_response=None):
         super().__init__(daemon=True)
         self.sock          = sock
         self.pending       = pending
         self.lock          = lock
         self.running       = True
         self.on_disconnect = on_disconnect
+        self.on_response   = on_response
 
     def stop(self):
         self.running = False
@@ -55,7 +75,75 @@ class Receiver(threading.Thread):
                 return
 
             # SetSimulationTimeModeCommand (0x1102)
-            if msg_class == proto.MSG_CLASS_RESP \
+            if msg_class == proto.MSG_CLASS_NOTI \
+                    and msg_type == proto.MSG_TYPE_SCENARIO_STATUS:
+                header = tcp.build_header(msg_class, msg_type, payload_size, request_id, flag)
+                log.append(
+                    "[DBG][0x1504][NOTI] "
+                    f"header=[{_hex_dump(header)}] payload=[{_hex_dump(payload)}]",
+                    "INFO",
+                )
+                parsed = tcp.parse_scenario_status_notification_payload(payload)
+                if parsed:
+                    state = parsed["state"]
+                    name = parsed["name"]
+                    log.append(
+                        f"ScenarioStatusNoti "
+                        f"state={state}({scenario_state_to_string(state)}) "
+                        f"name={name!r}",
+                        "RECV"
+                    )
+                    cmd_panel.on_scenario_status(state, name)
+                else:
+                    log.append("ScenarioStatusNoti parse_failed", "WARN")
+
+            elif msg_class == proto.MSG_CLASS_NOTI \
+                    and msg_type == proto.MSG_TYPE_GET_SIMULATOR_STATUS:
+                header = tcp.build_header(msg_class, msg_type, payload_size, request_id, flag)
+                log.append(
+                    "[DBG][0x1001][NOTI] "
+                    f"header=[{_hex_dump(header)}] payload=[{_hex_dump(payload)}]",
+                    "INFO",
+                )
+                parsed = tcp.parse_get_simulator_status_notification_payload(payload)
+                if parsed:
+                    state = parsed["state"]
+                    log.append(
+                        f"SimulatorStatusNoti "
+                        f"state={state}({simulator_state_to_string(state)})",
+                        "RECV"
+                    )
+                    cmd_panel.on_simulator_status(state)
+                else:
+                    log.append("SimulatorStatusNoti parse_failed", "WARN")
+
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_GET_SIMULATOR_STATUS:
+                header = tcp.build_header(msg_class, msg_type, payload_size, request_id, flag)
+                log.append(
+                    "[DBG][0x1001][RESP] "
+                    f"header=[{_hex_dump(header)}] payload=[{_hex_dump(payload)}]",
+                    "INFO",
+                )
+                parsed = tcp.parse_get_simulator_status_payload(payload)
+                if parsed:
+                    state = parsed["state"]
+                    result_code = parsed["result_code"]
+                    detail_code = parsed["detail_code"]
+                    level = "RECV" if result_code == 0 else "WARN"
+                    log.append(
+                        f"GetSimulatorStatus rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code} "
+                        f"state={state}({simulator_state_to_string(state)})",
+                        level
+                    )
+                    if result_code == 0:
+                        cmd_panel.on_simulator_status(state)
+                else:
+                    log.append(f"GetSimulatorStatus parse_failed rid={request_id}", "WARN")
+
+            elif msg_class == proto.MSG_CLASS_RESP \
                     and msg_type == proto.MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND:
                 parsed = tcp.parse_set_simulation_time_mode_payload(payload)
                 if parsed:
@@ -121,19 +209,37 @@ class Receiver(threading.Thread):
                 else:
                     log.append(f"ActiveSuiteStatus parse_failed rid={request_id}", "WARN")
 
+            # LoadSuite (0x1402)
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_LOAD_SUITE:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "ERROR"
+                    log.append(
+                        f"LoadSuite rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level
+                    )
+                else:
+                    log.append(f"LoadSuite parse_failed rid={request_id}", "WARN")
+
             # ScenarioStatus (0x1504)
             elif msg_class == proto.MSG_CLASS_RESP \
                     and msg_type == proto.MSG_TYPE_SCENARIO_STATUS:
                 parsed = tcp.parse_scenario_status_payload(payload)
                 if parsed:
-                    state_str = {1:"PLAY", 2:"PAUSE", 3:"STOP"}.get(
-                        parsed["state"], f"UNKNOWN({parsed['state']})")
+                    state_str = scenario_state_to_string(parsed["state"])
                     log.append(
                         f"ScenarioStatus rid={request_id} "
                         f"result={parsed['result_code']}({result_to_string(parsed['result_code'])}) "
-                        f"state={state_str}",
+                        f"state={state_str} "
+                        f"name={parsed['name']!r}",
                         "RECV"
                     )
+                    if parsed["result_code"] == 0:
+                        cmd_panel.on_scenario_status(parsed["state"], parsed["name"])
                 else:
                     log.append(f"ScenarioStatus parse_failed rid={request_id}", "WARN")
 
@@ -158,6 +264,11 @@ class Receiver(threading.Thread):
 
             # pending event set + cleanup
             if msg_class == proto.MSG_CLASS_RESP:
+                if self.on_response:
+                    try:
+                        self.on_response(msg_type, request_id)
+                    except Exception as e:
+                        log.append(f"response callback error: {e}", "WARN")
                 with self.lock:
                     item = self.pending.pop((request_id, msg_type), None)
                     if item:

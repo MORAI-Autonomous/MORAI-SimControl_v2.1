@@ -71,6 +71,14 @@ STRUCT_FORMAT_CHARS: Dict[str, str] = {
 
 MESSAGES: tuple[MessageSpec, ...] = (
     MessageSpec(
+        msg_type=0x1001,
+        name="GetSimulatorStatus",
+        direction="request",
+        summary="Query the current simulator frontend lifecycle state.",
+        handler="tcp.send_get_simulator_status()",
+        notes=("No payload.",),
+    ),
+    MessageSpec(
         msg_type=0x1101,
         name="GetSimulationTimeStatus",
         direction="request",
@@ -217,6 +225,18 @@ MESSAGES: tuple[MessageSpec, ...] = (
 
 RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
     MessageSpec(
+        msg_type=0x1001,
+        name="GetSimulatorStatus",
+        direction="response",
+        summary="Return the current simulator frontend lifecycle state.",
+        parser="tcp.parse_get_simulator_status_payload()",
+        fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
+            FieldSpec("state", "uint32", "0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY"),
+        ),
+    ),
+    MessageSpec(
         msg_type=0x1101,
         name="GetSimulationTimeStatus",
         direction="response",
@@ -344,12 +364,17 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
         msg_type=0x1504,
         name="ScenarioStatus",
         direction="response",
-        summary="Return result code and current scenario execution state.",
+        summary="Return result code, current scenario execution state, and scenario name.",
         parser="tcp.parse_scenario_status_payload()",
         fields=(
             FieldSpec("result_code", "uint32"),
             FieldSpec("detail_code", "uint32"),
-            FieldSpec("state", "uint32", "1=Play, 2=Pause, 3=Stop"),
+            FieldSpec("state", "uint32", "1=Play, 2=Pause, 3=Stop, 4=Completed"),
+            FieldSpec("name", "string_u32", "Current scenario name"),
+        ),
+        notes=(
+            "Parser currently accepts both the new payload (result_code/detail_code/state/name) and the legacy 12-byte payload (result_code/detail_code/state).",
+            "When the legacy payload is received, `name` is returned as an empty string.",
         ),
     ),
     MessageSpec(
@@ -366,12 +391,51 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
 )
 
 
+NOTIFICATION_MESSAGES: tuple[MessageSpec, ...] = (
+    MessageSpec(
+        msg_type=0x1504,
+        name="ScenarioStatus",
+        direction="notification",
+        summary="Push the current scenario execution state and scenario name without a preceding request.",
+        parser="tcp.parse_scenario_status_notification_payload()",
+        fields=(
+            FieldSpec("state", "uint32", "Protobuf enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed"),
+            FieldSpec("name", "string_u32", "Current scenario name"),
+        ),
+        notes=(
+            "Header uses msg_class = 0x03 (NOTI).",
+            "Payload is assumed to be protobuf-encoded scenario status data, not the raw request/response layout.",
+            "Current parser expects field #1 = varint state, field #2 = length-delimited utf-8 scenario name.",
+        ),
+    ),
+    MessageSpec(
+        msg_type=0x1001,
+        name="GetSimulatorStatus",
+        direction="notification",
+        summary="Push the current simulator frontend lifecycle state without a preceding request.",
+        parser="tcp.parse_get_simulator_status_notification_payload()",
+        fields=(
+            FieldSpec("state", "uint32", "Protobuf enum value. 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY"),
+        ),
+        notes=(
+            "Header uses msg_class = 0x03 (NOTI).",
+            "Payload is protobuf-encoded datamodel::SimulatorStatus, not the raw 12-byte response layout.",
+            "Current parser expects minimal wire format: 0x08 <varint(state)>.",
+        ),
+    ),
+)
+
+
 def iter_messages() -> Iterable[MessageSpec]:
     return MESSAGES
 
 
 def iter_response_messages() -> Iterable[MessageSpec]:
     return RESPONSE_MESSAGES
+
+
+def iter_notification_messages() -> Iterable[MessageSpec]:
+    return NOTIFICATION_MESSAGES
 
 
 def get_message(msg_type: int) -> MessageSpec:

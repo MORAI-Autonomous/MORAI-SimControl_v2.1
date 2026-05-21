@@ -33,8 +33,9 @@ FLAG          = 0
 
 MSG_CLASS_REQ  = 0x01
 MSG_CLASS_RESP = 0x02
+MSG_CLASS_NOTI = 0x03
 
-VALID_MSG_CLASSES = {MSG_CLASS_REQ, MSG_CLASS_RESP}
+VALID_MSG_CLASSES = {MSG_CLASS_REQ, MSG_CLASS_RESP, MSG_CLASS_NOTI}
 
 
 # ============================================================
@@ -42,6 +43,7 @@ VALID_MSG_CLASSES = {MSG_CLASS_REQ, MSG_CLASS_RESP}
 # ============================================================
 
 # Simulation Time
+MSG_TYPE_GET_SIMULATOR_STATUS         = 0x1001
 MSG_TYPE_GET_SIMULATION_TIME_STATUS    = 0x1101
 MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND = 0x1102
 
@@ -62,6 +64,7 @@ MSG_TYPE_SCENARIO_STATUS               = 0x1504
 MSG_TYPE_SCENARIO_CONTROL              = 0x1505
 
 VALID_MSG_TYPES = {
+    MSG_TYPE_GET_SIMULATOR_STATUS,
     MSG_TYPE_GET_SIMULATION_TIME_STATUS,
     MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND,
     MSG_TYPE_FIXED_STEP,
@@ -95,10 +98,19 @@ RESULT_CODE_MAP = {
     202: "Not Supported",
 }
 
+SIMULATOR_STATE_MAP = {
+    0: "UNSPECIFIED",
+    1: "PRE_LOGIN",
+    2: "HOME",
+    3: "LOADING",
+    4: "READY",
+}
+
 # ============================================================
 # Packet Formats & Sizes
 # ============================================================
 
+_RESP_1001 = get_response_message(0x1001)
 _MSG_1102 = get_message(0x1102)
 _RESP_1101 = get_response_message(0x1101)
 _MSG_1302 = get_message(0x1302)
@@ -112,6 +124,10 @@ HEADER_SIZE = struct.calcsize(HEADER_FMT)   # 16
 # --- Common Result ---
 RESULT_FMT  = "<II"                         # uint32 result_code, uint32 detail_code
 RESULT_SIZE = struct.calcsize(RESULT_FMT)   # 8
+
+# --- Simulator Status ---
+GET_SIMULATOR_STATUS_FMT  = build_struct_format(_RESP_1001.fields, LITTLE_ENDIAN)
+GET_SIMULATOR_STATUS_SIZE = struct.calcsize(GET_SIMULATOR_STATUS_FMT)   # 12
 
 # --- Simulation Status ---
 GET_STATUS_FMT  = build_struct_format(_RESP_1101.fields, LITTLE_ENDIAN)

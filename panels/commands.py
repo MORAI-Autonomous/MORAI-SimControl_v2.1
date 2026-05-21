@@ -4,6 +4,7 @@ from typing import Callable, Optional
 import json
 import os
 import threading
+import time
 
 import dearpygui.dearpygui as dpg
 import utils.ui_queue as ui_queue
@@ -23,6 +24,18 @@ _timer_cancel:     threading.Event    = threading.Event()
 _timer_thread:     Optional[threading.Thread] = None
 _elapsed_cancel:   threading.Event    = threading.Event()
 _elapsed_thread:   Optional[threading.Thread] = None
+_load_suite_lock:  threading.Lock      = threading.Lock()
+_load_suite_pending_rid: Optional[int] = None
+_load_suite_started_at: float          = 0.0
+_load_suite_watchdog: Optional[threading.Thread] = None
+_LOAD_SUITE_SOFT_TIMEOUT_SEC           = 10.0
+_SIMULATOR_STATE_LABELS = {
+    0: "UNSPECIFIED",
+    1: "PRE_LOGIN",
+    2: "HOME",
+    3: "LOADING",
+    4: "READY",
+}
 
 def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
     global _tcp_sock, _dispatch, _toggle_auto
@@ -35,6 +48,15 @@ def build(parent: int | str) -> None:
     with dpg.child_window(parent=parent, width=-1, height=-1, border=False):
 
         # ── Suite ──────────────────────────────────────────
+        _section("SIMULATOR")
+        with dpg.group(horizontal=True):
+            dpg.add_text("Status    :", color=(180, 180, 180, 255))
+            dpg.add_button(label="Get",
+                callback=lambda: _dispatch(
+                    proto.MSG_TYPE_GET_SIMULATOR_STATUS,
+                    lambda rid: tcp.send_get_simulator_status(_tcp_sock, rid)))
+            dpg.add_text("-", tag="simulator_status_text", color=(140, 140, 140, 255))
+
         _section("SUITE")
 
         # Status : [Get]
@@ -57,6 +79,7 @@ def build(parent: int | str) -> None:
         with dpg.group(horizontal=True):
             dpg.add_text("Load      :", color=(180, 180, 180, 255))
             dpg.add_button(label="Load", callback=_load_suite)
+            dpg.add_text("-", tag="suite_load_status", color=(140, 140, 140, 255))
 
         # ── Simulation Time ────────────────────────────────
         _section("SIMULATION TIME")
@@ -159,6 +182,7 @@ def build(parent: int | str) -> None:
                 callback=lambda: _dispatch(
                     proto.MSG_TYPE_SCENARIO_STATUS,
                     lambda rid: tcp.send_scenario_status(_tcp_sock, rid)))
+            dpg.add_text("-", tag="sc_status_text", color=(140, 140, 140, 255))
 
         # ── Object Control ─────────────────────────────────
         _section("OBJECT CONTROL")
@@ -404,7 +428,136 @@ def _load_suite() -> None:
     _dispatch(
         proto.MSG_TYPE_LOAD_SUITE,
         lambda rid: tcp.send_load_suite(_tcp_sock, rid, suite_path=path),
+        on_sent=_on_load_suite_sent,
     )
+
+
+def _on_load_suite_sent(request_id: int) -> None:
+    global _load_suite_pending_rid, _load_suite_started_at, _load_suite_watchdog
+    with _load_suite_lock:
+        _load_suite_pending_rid = request_id
+        _load_suite_started_at = time.monotonic()
+        if _load_suite_watchdog is None or not _load_suite_watchdog.is_alive():
+            _load_suite_watchdog = threading.Thread(target=_load_suite_watchdog_run, daemon=True)
+            _load_suite_watchdog.start()
+
+    ui_queue.post(
+        lambda rid=request_id: _set_load_suite_status(
+            f"Loading... rid={rid}",
+            (220, 200, 100, 255),
+        )
+    )
+    log.append(f"[Suite] LoadSuite requested rid={request_id}", "INFO")
+
+
+def on_load_suite_response(request_id: int) -> None:
+    global _load_suite_pending_rid
+    with _load_suite_lock:
+        if _load_suite_pending_rid != request_id:
+            return
+        started_at = _load_suite_started_at
+        _load_suite_pending_rid = None
+
+    elapsed = max(0.0, time.monotonic() - started_at)
+    ui_queue.post(
+        lambda e=elapsed: _set_load_suite_status(
+            f"Complete ({e:.1f}s)",
+            (100, 220, 100, 255),
+        )
+    )
+    log.append(f"[Suite] LoadSuite complete in {elapsed:.1f}s", "INFO")
+
+
+def on_connection_lost() -> None:
+    global _load_suite_pending_rid
+    with _load_suite_lock:
+        _load_suite_pending_rid = None
+    ui_queue.post(
+        lambda: _set_load_suite_status(
+            "Disconnected",
+            (255, 120, 120, 255),
+        )
+    )
+
+
+def _load_suite_watchdog_run() -> None:
+    warned = False
+    while True:
+        time.sleep(0.5)
+        with _load_suite_lock:
+            rid = _load_suite_pending_rid
+            started_at = _load_suite_started_at
+        if rid is None:
+            return
+        elapsed = max(0.0, time.monotonic() - started_at)
+        if elapsed >= _LOAD_SUITE_SOFT_TIMEOUT_SEC and not warned:
+            warned = True
+            log.append(
+                f"[Suite] LoadSuite still loading... rid={rid} elapsed={elapsed:.1f}s",
+                "WARN",
+            )
+            ui_queue.post(
+                lambda r=rid, e=elapsed: _set_load_suite_status(
+                    f"Still loading... rid={r} ({e:.1f}s)",
+                    (255, 190, 90, 255),
+                )
+            )
+
+
+def _set_load_suite_status(text: str, color) -> None:
+    if dpg.does_item_exist("suite_load_status"):
+        dpg.set_value("suite_load_status", text)
+        dpg.configure_item("suite_load_status", color=color)
+
+
+def on_simulator_status(state: int) -> None:
+    def _apply(s=state) -> None:
+        if not dpg.does_item_exist("simulator_status_text"):
+            return
+        label = _SIMULATOR_STATE_LABELS.get(s, f"UNKNOWN({s})")
+        color = (140, 140, 140, 255)
+        if s == 3:
+            color = (255, 190, 90, 255)
+        elif s == 4:
+            color = (100, 220, 100, 255)
+        dpg.set_value("simulator_status_text", label)
+        dpg.configure_item("simulator_status_text", color=color)
+    ui_queue.post(_apply)
+
+
+def on_scenario_status(state: int, name: str = "") -> None:
+    def _apply(s=state, scenario_name=name) -> None:
+        if not dpg.does_item_exist("sc_status_text"):
+            return
+        label = {
+            1: "PLAY",
+            2: "PAUSE",
+            3: "STOP",
+            4: "COMPLETED",
+        }.get(s, f"UNKNOWN({s})")
+        color = (140, 140, 140, 255)
+        if s == 1:
+            color = (100, 220, 100, 255)
+        elif s == 2:
+            color = (255, 190, 90, 255)
+        elif s == 4:
+            color = (120, 210, 255, 255)
+
+        text = label if not scenario_name else f"{label} ({scenario_name})"
+        dpg.set_value("sc_status_text", text)
+        dpg.configure_item("sc_status_text", color=color)
+        if scenario_name and dpg.does_item_exist("sc_name"):
+            dpg.set_value("sc_name", scenario_name)
+
+    ui_queue.post(_apply)
+
+    if state in (3, 4):
+        _timer_cancel.set()
+        _elapsed_cancel.set()
+        ui_queue.post(
+            lambda: dpg.does_item_exist("sc_elapsed_text")
+            and dpg.set_value("sc_elapsed_text", "0:00")
+        )
 
 
 def _on_sim_mode_combo(sender, app_data) -> None:

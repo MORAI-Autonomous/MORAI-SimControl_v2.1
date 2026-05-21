@@ -9,6 +9,13 @@ import transport.tcp_transport as tcp
 
 
 class TcpPayloadGoldenTests(unittest.TestCase):
+    def test_get_simulator_status_request_has_no_payload(self) -> None:
+        actual = pack_message_payload(
+            proto.MSG_TYPE_GET_SIMULATOR_STATUS,
+            {},
+        )
+        self.assertEqual(actual, b"")
+
     def test_set_simulation_time_mode_variable_payload(self) -> None:
         expected = struct.pack("<iiiii", 1, 60, 10, 0, 0)
         actual = pack_message_payload(
@@ -134,6 +141,20 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         self.assertEqual(parsed["seconds"], 45)
         self.assertEqual(parsed["nanos"], 678)
 
+    def test_parse_get_simulator_status_payload(self) -> None:
+        payload = struct.pack(proto.GET_SIMULATOR_STATUS_FMT, 0, 0, 4)
+        parsed = tcp.parse_get_simulator_status_payload(payload)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["result_code"], 0)
+        self.assertEqual(parsed["detail_code"], 0)
+        self.assertEqual(parsed["state"], 4)
+
+    def test_parse_get_simulator_status_notification_payload(self) -> None:
+        payload = bytes([0x08, 0x04])
+        parsed = tcp.parse_get_simulator_status_notification_payload(payload)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["state"], 4)
+
     def test_parse_get_status_fixed_payload(self) -> None:
         payload = struct.pack(
             proto.GET_STATUS_FMT,
@@ -191,12 +212,35 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         self.assertEqual(parsed["scenario_list"], scenario_list)
 
     def test_parse_scenario_status_payload(self) -> None:
-        payload = struct.pack("<III", 0, 0, 1)
+        name = "Scenario_A"
+        payload = (
+            struct.pack("<III", 0, 0, 4)
+            + struct.pack("<I", len(name.encode("utf-8")))
+            + name.encode("utf-8")
+        )
         parsed = tcp.parse_scenario_status_payload(payload)
         self.assertIsNotNone(parsed)
         self.assertEqual(parsed["result_code"], 0)
         self.assertEqual(parsed["detail_code"], 0)
-        self.assertEqual(parsed["state"], 1)
+        self.assertEqual(parsed["state"], 4)
+        self.assertEqual(parsed["name"], name)
+
+    def test_parse_scenario_status_payload_legacy_without_name(self) -> None:
+        payload = struct.pack("<III", 0, 0, 3)
+        parsed = tcp.parse_scenario_status_payload(payload)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["result_code"], 0)
+        self.assertEqual(parsed["detail_code"], 0)
+        self.assertEqual(parsed["state"], 3)
+        self.assertEqual(parsed["name"], "")
+
+    def test_parse_scenario_status_notification_payload(self) -> None:
+        name = "Scenario_A"
+        payload = bytes([0x08, 0x04, 0x12, len(name)]) + name.encode("utf-8")
+        parsed = tcp.parse_scenario_status_notification_payload(payload)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["state"], 4)
+        self.assertEqual(parsed["name"], name)
 
 
 if __name__ == "__main__":

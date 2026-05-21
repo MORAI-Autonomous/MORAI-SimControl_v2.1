@@ -12,19 +12,21 @@
 
 1. [transport/message_schema.py](/C:/Dev/MORAI-SimControl_v2.1/transport/message_schema.py:1)에 request `MessageSpec` 추가
 2. response가 있으면 `RESPONSE_MESSAGES`에도 추가
-3. [transport/protocol_defs.py](/C:/Dev/MORAI-SimControl_v2.1/transport/protocol_defs.py:1)에 `MSG_TYPE_*`와 필요한 format/size 상수 추가
-4. [transport/tcp_transport.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_transport.py:1)에 send 함수와 payload builder 추가
-5. response parser가 필요하면 같은 파일에 parser 추가
-6. 앱 로직에서 response를 직접 처리해야 하면 [transport/tcp_thread.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_thread.py:1)에 분기 추가
-7. panel, runner, CLI 같은 실제 호출부 연결
+3. 시뮬레이터가 push 하는 passive update가 있으면 `NOTIFICATION_MESSAGES`에도 추가
+4. [transport/protocol_defs.py](/C:/Dev/MORAI-SimControl_v2.1/transport/protocol_defs.py:1)에 `MSG_TYPE_*`와 필요한 format/size 상수 추가
+5. [transport/tcp_transport.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_transport.py:1)에 send 함수와 payload builder 추가
+6. response / notification parser가 필요하면 같은 파일에 parser 추가
+7. 앱 로직에서 response나 passive update를 직접 처리해야 하면 [transport/tcp_thread.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_thread.py:1)에 분기 추가
+8. panel, runner, CLI 같은 실제 호출부 연결
 
 ## 기존 인터페이스 수정
 
 1. [transport/message_schema.py](/C:/Dev/MORAI-SimControl_v2.1/transport/message_schema.py:1) 수정
 2. [transport/protocol_defs.py](/C:/Dev/MORAI-SimControl_v2.1/transport/protocol_defs.py:1) 반영 확인
 3. [transport/tcp_transport.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_transport.py:1) send/parser 수정
-4. [transport/tcp_thread.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_thread.py:1) 처리/로그 갱신
-5. 실제 호출부가 새 필드를 모두 전달하는지 확인
+4. passive update가 있으면 `NOTIFICATION_MESSAGES`와 notification parser도 같이 수정
+5. [transport/tcp_thread.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_thread.py:1) 처리/로그 갱신
+6. 실제 호출부가 새 필드를 모두 전달하는지 확인
 
 ## Validation
 
@@ -37,4 +39,5 @@
 - 명세 변경은 항상 `message_schema.py`부터 시작합니다.
 - request payload가 바뀌면 builder와 golden payload test를 같이 봅니다.
 - response payload가 바뀌면 parser와 `tcp_thread.py` 처리도 같이 봅니다.
+- notification payload가 있으면 `msg_class = 0x03` 경로와 문서 `Notifications` 섹션도 같이 봅니다.
 - `docs/tcp-api.md`는 생성물로 유지합니다.

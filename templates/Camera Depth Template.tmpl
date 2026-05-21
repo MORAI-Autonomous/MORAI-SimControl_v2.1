@@ -1,0 +1,80 @@
+{
+  "version": "1.0.0-alpha",
+  "messageTemplate": {
+    "name": "Camera Depth Template",
+    "isControl": false,
+    "isSensor": true,
+    "description": "",
+    "segmentList": [
+      {
+        "type": "FIELDS",
+        "relationName": "CameraEntity",
+        "fieldList": [
+          {
+            "name": "width",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.size.x",
+            "variableType": "FLOAT",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "height",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.size.y",
+            "variableType": "FLOAT",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "encoding",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.sensor_data_depth.encoding",
+            "variableType": "STRING",
+            "length": 5,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "is bigendian",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.sensor_data_depth.is_bigendian",
+            "variableType": "BOOL",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "step",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.sensor_data_depth.step",
+            "variableType": "UINT32",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "image size",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.sensor_data_depth.image_size",
+            "variableType": "INT32",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "image data",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.sensor_data_depth.image_data",
+            "variableType": "BYTES",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          }
+        ]
+      }
+    ]
+  }
+}

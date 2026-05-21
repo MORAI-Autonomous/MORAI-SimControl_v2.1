@@ -85,6 +85,15 @@ def _send_packet(
     """Build the header, send the packet, and emit optional send log."""
     header = build_header(proto.MSG_CLASS_REQ, msg_type, len(payload), request_id, proto.FLAG)
     sock.sendall(header + payload)
+    if msg_type == proto.MSG_TYPE_GET_SIMULATOR_STATUS:
+        header_hex = " ".join(f"{b:02X}" for b in header)
+        payload_hex = " ".join(f"{b:02X}" for b in payload) if payload else "(empty)"
+        print(
+            "[SEND][TCP][DBG] "
+            f"GetSimulatorStatus class=0x{proto.MSG_CLASS_REQ:02X} "
+            f"type=0x{msg_type:04X} size={len(payload)} rid={request_id} "
+            f"header=[{header_hex}] payload=[{payload_hex}]"
+        )
     if log:
         print(f"[SEND][TCP] {log} rid={request_id}")
 
@@ -166,6 +175,11 @@ def build_set_trajectory_payload(
 def send_get_status(sock: socket.socket, request_id: int) -> None:
     _send_packet(sock, request_id, proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS, b"",
                  "GetStatus(0x1101)")
+
+
+def send_get_simulator_status(sock: socket.socket, request_id: int) -> None:
+    _send_packet(sock, request_id, proto.MSG_TYPE_GET_SIMULATOR_STATUS, b"",
+                 "GetSimulatorStatus(0x1001)")
 
 
 def send_simulation_time_mode_command(
@@ -327,6 +341,65 @@ def send_active_suite_status(sock: socket.socket, request_id: int) -> None:
 # Response parsers
 # ============================================================
 
+def parse_get_simulator_status_payload(payload: bytes) -> Optional[Dict[str, Any]]:
+    if len(payload) != proto.GET_SIMULATOR_STATUS_SIZE:
+        return None
+    try:
+        values, offset = unpack_fields(get_response_message(0x1001).fields, payload)
+    except ValueError:
+        return None
+    if offset != len(payload):
+        return None
+    if values.get("result_code") != 0:
+        return values
+    if values.get("state") not in proto.SIMULATOR_STATE_MAP:
+        return None
+    return values
+
+
+def parse_get_simulator_status_notification_payload(payload: bytes) -> Optional[Dict[str, Any]]:
+    """
+    Parse protobuf-encoded datamodel::SimulatorStatus notification.
+
+    Expected minimal wire format for `message SimulatorStatus { enum state = 1; }`:
+      0x08 <varint(state)>
+    """
+    if not payload:
+        return None
+
+    offset = 0
+    state: Optional[int] = None
+    while offset < len(payload):
+        key = payload[offset]
+        offset += 1
+        field_number = key >> 3
+        wire_type = key & 0x07
+
+        if wire_type != 0:
+            return None
+
+        shift = 0
+        value = 0
+        while True:
+            if offset >= len(payload) or shift > 63:
+                return None
+            b = payload[offset]
+            offset += 1
+            value |= (b & 0x7F) << shift
+            if (b & 0x80) == 0:
+                break
+            shift += 7
+
+        if field_number == 1:
+            state = int(value)
+        else:
+            # message currently expected to contain only state enum
+            continue
+
+    if state is None or state not in proto.SIMULATOR_STATE_MAP:
+        return None
+    return {"state": state}
+
 def parse_result_code(payload: bytes) -> Optional[Tuple[int, int]]:
     if len(payload) != proto.RESULT_SIZE:
         return None
@@ -412,9 +485,94 @@ def parse_active_suite_status_payload(payload: bytes) -> Optional[Dict[str, Any]
 
 
 def parse_scenario_status_payload(payload: bytes) -> Optional[Dict[str, Any]]:
+    if len(payload) == 12:
+        try:
+            result_code, detail_code, state = struct.unpack("<III", payload)
+        except struct.error as e:
+            print(f"[PARSE][ScenarioStatus] {e}")
+            return None
+        if state not in (1, 2, 3, 4):
+            return None
+        return {
+            "result_code": result_code,
+            "detail_code": detail_code,
+            "state": state,
+            "name": "",
+        }
     try:
         values, _, offset = unpack_message_payload(0x1504, payload, direction="response")
     except ValueError as e:
         print(f"[PARSE][ScenarioStatus] {e}")
         return None
-    return values if offset == len(payload) else None
+    if offset != len(payload):
+        return None
+    if values.get("state") not in (1, 2, 3, 4):
+        return None
+    return values
+
+
+def parse_scenario_status_notification_payload(payload: bytes) -> Optional[Dict[str, Any]]:
+    """
+    Parse protobuf-like scenario status notification.
+
+    Expected minimal wire format:
+      field #1: varint state
+      field #2: length-delimited utf-8 scenario name
+    """
+    if not payload:
+        return None
+
+    offset = 0
+    state: Optional[int] = None
+    name = ""
+    while offset < len(payload):
+        key = payload[offset]
+        offset += 1
+        field_number = key >> 3
+        wire_type = key & 0x07
+
+        if wire_type == 0:
+            shift = 0
+            value = 0
+            while True:
+                if offset >= len(payload):
+                    return None
+                b = payload[offset]
+                offset += 1
+                value |= (b & 0x7F) << shift
+                if (b & 0x80) == 0:
+                    break
+                shift += 7
+                if shift > 35:
+                    return None
+            if field_number == 1:
+                state = value
+        elif wire_type == 2:
+            shift = 0
+            length = 0
+            while True:
+                if offset >= len(payload):
+                    return None
+                b = payload[offset]
+                offset += 1
+                length |= (b & 0x7F) << shift
+                if (b & 0x80) == 0:
+                    break
+                shift += 7
+                if shift > 35:
+                    return None
+            end = offset + length
+            if end > len(payload):
+                return None
+            if field_number == 2:
+                try:
+                    name = payload[offset:end].decode("utf-8")
+                except UnicodeDecodeError:
+                    return None
+            offset = end
+        else:
+            return None
+
+    if state not in (1, 2, 3, 4):
+        return None
+    return {"state": state, "name": name}
