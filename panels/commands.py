@@ -24,6 +24,9 @@ _timer_cancel:     threading.Event    = threading.Event()
 _timer_thread:     Optional[threading.Thread] = None
 _elapsed_cancel:   threading.Event    = threading.Event()
 _elapsed_thread:   Optional[threading.Thread] = None
+_elapsed_lock:     threading.Lock     = threading.Lock()
+_elapsed_accum_sec: float             = 0.0
+_elapsed_running_since: Optional[float] = None
 _load_suite_lock:  threading.Lock      = threading.Lock()
 _load_suite_pending_rid: Optional[int] = None
 _load_suite_started_at: float          = 0.0
@@ -329,8 +332,11 @@ def _on_auto_toggle() -> None:
 def _on_sc_play() -> None:
     _save_state()
     _timer_cancel.set()
-    _elapsed_cancel.set()
-    _start_elapsed_counter()
+    with _elapsed_lock:
+        resume = (_elapsed_accum_sec > 0.0 and _elapsed_running_since is None)
+    if not resume:
+        _elapsed_cancel.set()
+    _start_elapsed_counter(resume=resume)
     _start_sc_timer()
     _dispatch(
         proto.MSG_TYPE_SCENARIO_CONTROL,
@@ -342,6 +348,10 @@ def _on_sc_play() -> None:
 def _on_sc_stop() -> None:
     _timer_cancel.set()
     _elapsed_cancel.set()
+    with _elapsed_lock:
+        global _elapsed_accum_sec, _elapsed_running_since
+        _elapsed_accum_sec = 0.0
+        _elapsed_running_since = None
     ui_queue.post(lambda: dpg.does_item_exist("sc_elapsed_text") and
                   dpg.set_value("sc_elapsed_text", "0:00"))
     _dispatch(
@@ -378,28 +388,40 @@ def _start_sc_timer() -> None:
     _timer_thread.start()
 
 
-def _start_elapsed_counter() -> None:
-    global _elapsed_thread, _elapsed_cancel
+def _start_elapsed_counter(resume: bool = False) -> None:
+    global _elapsed_thread, _elapsed_cancel, _elapsed_accum_sec, _elapsed_running_since
     auto_stop = dpg.get_value("sc_timer_enabled")
     total_sec = dpg.get_value("sc_timer_min") * 60 + dpg.get_value("sc_timer_sec")
-    _elapsed_cancel = threading.Event()
+    if not resume:
+        _elapsed_cancel = threading.Event()
+        with _elapsed_lock:
+            _elapsed_accum_sec = 0.0
+            _elapsed_running_since = time.monotonic()
+    else:
+        with _elapsed_lock:
+            if _elapsed_running_since is None:
+                _elapsed_running_since = time.monotonic()
     cancel = _elapsed_cancel
 
     def _fmt(s: int) -> str:
         return f"{s // 60}:{s % 60:02d}"
 
     def _run() -> None:
-        elapsed = 0
         while True:
-            text = f"{_fmt(elapsed)} / {_fmt(total_sec)}" if (auto_stop and total_sec > 0) else _fmt(elapsed)
+            with _elapsed_lock:
+                elapsed = _elapsed_accum_sec
+                if _elapsed_running_since is not None:
+                    elapsed += max(0.0, time.monotonic() - _elapsed_running_since)
+            elapsed_i = int(elapsed)
+            text = f"{_fmt(elapsed_i)} / {_fmt(total_sec)}" if (auto_stop and total_sec > 0) else _fmt(elapsed_i)
             ui_queue.post(lambda t=text: dpg.does_item_exist("sc_elapsed_text") and
                           dpg.set_value("sc_elapsed_text", t))
-            if cancel.wait(timeout=1.0):
+            if cancel.wait(timeout=0.2):
                 break
-            elapsed += 1
 
-    _elapsed_thread = threading.Thread(target=_run, daemon=True)
-    _elapsed_thread.start()
+    if _elapsed_thread is None or not _elapsed_thread.is_alive():
+        _elapsed_thread = threading.Thread(target=_run, daemon=True)
+        _elapsed_thread.start()
 
 
 def _browse_suite() -> None:
@@ -526,6 +548,8 @@ def on_simulator_status(state: int) -> None:
 
 
 def on_scenario_status(state: int, name: str = "") -> None:
+    global _elapsed_accum_sec, _elapsed_running_since
+
     def _apply(s=state, scenario_name=name) -> None:
         if not dpg.does_item_exist("sc_status_text"):
             return
@@ -551,9 +575,23 @@ def on_scenario_status(state: int, name: str = "") -> None:
 
     ui_queue.post(_apply)
 
-    if state in (3, 4):
+    if state == 1:
+        with _elapsed_lock:
+            if _elapsed_running_since is None:
+                _elapsed_running_since = time.monotonic()
+        if _elapsed_thread is None or not _elapsed_thread.is_alive():
+            _start_elapsed_counter(resume=True)
+    elif state == 2:
+        with _elapsed_lock:
+            if _elapsed_running_since is not None:
+                _elapsed_accum_sec += max(0.0, time.monotonic() - _elapsed_running_since)
+                _elapsed_running_since = None
+    elif state in (3, 4):
         _timer_cancel.set()
         _elapsed_cancel.set()
+        with _elapsed_lock:
+            _elapsed_accum_sec = 0.0
+            _elapsed_running_since = None
         ui_queue.post(
             lambda: dpg.does_item_exist("sc_elapsed_text")
             and dpg.set_value("sc_elapsed_text", "0:00")
