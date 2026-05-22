@@ -4,3 +4,4 @@ config/monitor_state.json
 .vscode/settings.json
 config/fp_state.json
 config/*.json
+.github/workflows/
