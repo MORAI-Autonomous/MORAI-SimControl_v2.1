@@ -241,9 +241,13 @@ class CameraDepthReceiver(threading.Thread):
         depth_m = depth_raw * _DEPTH_SCALE_M
         valid_mask = depth_raw > 0.0
         if np.any(valid_mask):
+            depth_raw_min = float(np.min(depth_raw[valid_mask]))
+            depth_raw_max = float(np.max(depth_raw[valid_mask]))
             depth_min_m = float(np.min(depth_m[valid_mask]))
             depth_max_m = float(np.max(depth_m[valid_mask]))
         else:
+            depth_raw_min = 0.0
+            depth_raw_max = 0.0
             depth_min_m = 0.0
             depth_max_m = 0.0
 
@@ -256,6 +260,8 @@ class CameraDepthReceiver(threading.Thread):
             "step": int(step),
             "image_size": int(image_size),
             "depth_raw": depth_raw,
+            "depth_raw_min": depth_raw_min,
+            "depth_raw_max": depth_raw_max,
             "depth_m": depth_m,
             "depth_min_m": depth_min_m,
             "depth_max_m": depth_max_m,

@@ -5,6 +5,9 @@ MORAI 시뮬레이터를 TCP/UDP로 제어하기 위한 Python 예제 코드입�
 - `app.py`: DearPyGUI 기반 GUI 예제
 - `app_cli.py`: CLI 예제
 - `autonomous_driving/`: Path Follow 예제 로직
+- `lane_control/`: camera 기반 lane follow와 제어 로직
+- `panels/`: DearPyGUI 패널
+- `receivers/`: UDP sensor/control receiver
 - `transport/`: TCP 요청/응답, 프로토콜 정의, 수신 스레드
 
 ## Requirements
@@ -63,20 +66,48 @@ utils/
 - `transport/`: TCP packet builder/parser, request/response schema, receiver thread
 - `receivers/`: UDP receiver와 `.tmpl` 기반 parser
 - `panels/`: DearPyGUI 패널
+- `lane_control/`: lane detection, BEV/preprocess, PD/PI control
 - `autonomous_driving/`: Path Follow, trajectory, multi-vehicle 제어
 - `config/`: 런타임 상태 저장 파일
 - `docs/`: 구조, 워크플로, TCP 인터페이스 문서
 - `tools/udp_debug/`: standalone UDP 분석/우회 스크립트 모음
+
+주요 문서:
+
+- [docs/architecture.md](/C:/Dev/MORAI-SimControl_v2.1/docs/architecture.md:1): 구조와 패턴
+- [docs/camera-sensor.md](/C:/Dev/MORAI-SimControl_v2.1/docs/camera-sensor.md:1): Camera Sensor / Depth Cam 조사 정리
+- [docs/tcp-api.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-api.md:1): TCP API reference
+- [docs/workflow.md](/C:/Dev/MORAI-SimControl_v2.1/docs/workflow.md:1): 개발 워크플로
 
 ## GUI Tabs
 
 - `UDP Monitor`: `.tmpl` 기반 UDP 데이터 모니터링
 - `UDP Control`: `isControl == true` 템플릿 기반 UDP control payload 전송
 - `Path Follow`: 경로 기반 자율주행 예제
+- `Lane Control`: camera 기반 lane follow 제어
+- `Camera Sensor`: RGB / Depth / BBox camera stream 확인
 - `File Playback`: CSV 기반 Manual Control 재생
 - `Transform Playback`: CSV 기반 Transform Control 재생
 
 ## Main Features
+
+### Camera Sensor
+
+Camera stream을 최대 4개 슬롯에서 독립적으로 수신하고 표시합니다.
+
+- template 선택: `Camera RGB.tmpl`, `Camera Depth.tmpl`, `Camera With 2D_3D Bounding Box.tmpl`
+- Depth 표시/scale 비교 옵션 제공
+- RGB+BBox 모드는 2D/3D bounding box overlay 표시
+- 상태 저장: `config/camera_sensor_state.json`
+- 상세 내용은 [docs/camera-sensor.md](/C:/Dev/MORAI-SimControl_v2.1/docs/camera-sensor.md:1)를 참고
+
+### Lane Control
+
+Camera frame 기반 차선 인식으로 차량을 제어합니다.
+
+- BEV 변환, 이진화, sliding window 기반 차선 검출
+- steering PD 제어와 speed PI 제어
+- GUI parameter tuning과 debug frame 확인
 
 ### Path Follow
 
@@ -121,44 +152,37 @@ speed = sqrt(local_velocity.x^2 + local_velocity.y^2)
 
 현재 `Vehicle Info` CSV의 velocity 단위는 `m/s` 기준으로 사용합니다.
 
-## TCP API Workflow
+## API Overview
 
-TCP 인터페이스 작업은 [transport/message_schema.py](/C:/Dev/MORAI-SimControl_v2.1/transport/message_schema.py:1)부터 시작합니다.
+### TCP API
 
-- request/response 필드 변경은 먼저 `message_schema.py`에서 수정
-- `python tools/gen_tcp_docs.py`로 [docs/tcp-api.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-api.md:1) 재생성
-- `python tools/gen_tcp_docs.py --check`로 schema, docs, protocol 검증
-- `python -m unittest tests.test_tcp_payloads`로 대표 payload/parser 회귀 확인
+TCP API 명세는 [transport/message_schema.py](/C:/Dev/MORAI-SimControl_v2.1/transport/message_schema.py:1)를 기준으로 관리합니다.
+상세 packet header, payload layout, request/response/notification 목록은 자동 생성 문서인 [docs/tcp-api.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-api.md:1)를 참고합니다.
 
-상세 체크리스트는 [docs/tcp-interface-checklist.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-interface-checklist.md:1)를 참고하면 됩니다.
+주요 구현 파일:
 
-## TCP Commands
+- [transport/protocol_defs.py](/C:/Dev/MORAI-SimControl_v2.1/transport/protocol_defs.py:1)
+- [transport/tcp_transport.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_transport.py:1)
+- [transport/tcp_thread.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_thread.py:1)
 
-Simulation Time:
+### UDP Template API
 
-- `0x1101` `GetSimulationTimeStatus`
-- `0x1102` `SetSimulationTimeModeCommand`
+UDP payload는 `templates/*.tmpl` JSON template을 기준으로 파싱하거나 생성합니다.
 
-Fixed Step:
+- `isControl == false`: `UDP Monitor`와 camera/sensor 수신 계열에서 사용
+- `isControl == true`: `UDP Control`에서 입력 폼 생성과 payload 전송에 사용
+- template 목록과 control/receive 분리는 [panels/monitor_utils.py](/C:/Dev/MORAI-SimControl_v2.1/panels/monitor_utils.py:1)에서 처리
 
-- `0x1201` `FixedStep`
-- `0x1202` `SaveData`
+## API Change Workflow
 
-Object Control:
+TCP 인터페이스를 추가하거나 수정할 때는 [docs/tcp-interface-checklist.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-interface-checklist.md:1)를 따릅니다.
 
-- `0x1301` `CreateObject`
-- `0x1302` `ManualControlById`
-- `0x1303` `TransformControlById`
-- `0x1304` `SetTrajectory`
+기본 검증:
 
-Suite / Scenario:
-
-- `0x1401` `ActiveSuiteStatus`
-- `0x1402` `LoadSuite`
-- `0x1504` `ScenarioStatus`
-- `0x1505` `ScenarioControl`
-
-상세 필드 정의는 [docs/tcp-api.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-api.md:1)에서 자동 생성됩니다.
+```bash
+python tools/gen_tcp_docs.py --check
+python -m unittest tests.test_tcp_payloads
+```
 
 ## Notes
 

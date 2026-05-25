@@ -22,7 +22,6 @@ import panels.monitor            as monitor_panel
 import panels.commands           as cmd_panel
 import panels.lane_control_panel  as lc_panel
 import panels.camera_sensor_panel as cam_sensor_panel
-import panels.depth_sensor_panel as depth_sensor_panel
 import panels.autonomous_panel    as au_panel
 import panels.file_playback_panel as fp_panel
 import panels.transform_playback_panel as tfp_panel
@@ -684,14 +683,12 @@ def build_ui(state: AppState):
         dpg.configure_item("mon_scroll", show=(name == "udp"))
         dpg.configure_item("udp_ctrl_scroll", show=(name == "udp_ctrl"))
         dpg.configure_item("cam_sensor_scroll", show=(name == "cam_sensor"))
-        dpg.configure_item("depth_sensor_scroll", show=(name == "depth_sensor"))
         dpg.configure_item("lc_scroll",  show=(name == "lc"))
         dpg.configure_item("au_scroll",  show=(name == "au"))
         dpg.configure_item("fp_scroll",  show=(name == "fp"))
         dpg.configure_item("tfp_scroll", show=(name == "tfp"))
         for tag, key in [("tab_btn_udp", "udp"), ("tab_btn_udp_ctrl", "udp_ctrl"),
                          ("tab_btn_cam_sensor", "cam_sensor"),
-                         ("tab_btn_depth_sensor", "depth_sensor"),
                          ("tab_btn_lc", "lc"),
                          ("tab_btn_au", "au"), ("tab_btn_fp", "fp"),
                          ("tab_btn_tfp", "tfp")]:
@@ -779,8 +776,6 @@ def build_ui(state: AppState):
                                    callback=lambda: _select_tab("udp_ctrl"))
                     dpg.add_button(label=" Camera Sensor ", tag="tab_btn_cam_sensor",
                                    callback=lambda: _select_tab("cam_sensor"))
-                    dpg.add_button(label=" Depth Sensor ", tag="tab_btn_depth_sensor",
-                                   callback=lambda: _select_tab("depth_sensor"))
                     dpg.add_button(label=" Lane Control ", tag="tab_btn_lc",
                                    callback=lambda: _select_tab("lc"))
                     dpg.add_button(label=" Path Follow ", tag="tab_btn_au",
@@ -807,11 +802,6 @@ def build_ui(state: AppState):
                                       border=False, show=False):
                     cam_sensor_panel.build(parent="cam_sensor_scroll")
 
-                with dpg.child_window(tag="depth_sensor_scroll",
-                                      width=-1, height=-1,
-                                      border=False, show=False):
-                    depth_sensor_panel.build(parent="depth_sensor_scroll")
-
                 with dpg.child_window(tag="lc_scroll",
                                       width=-1, height=-1,
                                       border=False, show=False):
@@ -836,7 +826,6 @@ def build_ui(state: AppState):
                 dpg.bind_item_theme("tab_btn_udp", "theme_tab_active")
                 dpg.bind_item_theme("tab_btn_udp_ctrl", "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_cam_sensor", "theme_tab_inactive")
-                dpg.bind_item_theme("tab_btn_depth_sensor", "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_lc",  "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_au",  "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_fp",  "theme_tab_inactive")
@@ -998,7 +987,6 @@ def main():
         _runner.stop()
     if state.lc_runner:
         state.lc_runner.stop()
-    depth_sensor_panel.stop()
     cam_sensor_panel.stop()
     if state.receiver:
         state.receiver.stop()

@@ -234,14 +234,16 @@ speed = sqrt(local_velocity.x^2 + local_velocity.y^2)
 
 ## Camera Sensor Panel
 
-`Camera Sensor` 패널은 `Lane Control`과 별개로 raw camera stream만 확인하는 독립 패널입니다.
+`Camera Sensor` 패널은 `Lane Control`과 별개로 camera stream을 확인하는 독립 패널입니다.
 
-- 수신기: [C:\Dev\MORAI-SimControl_v2.1\receivers\camera_receiver.py](C:/Dev/MORAI-SimControl_v2.1/receivers/camera_receiver.py:1)
+- RGB / Depth / BBox template 선택 지원
+- 수신기: [C:\Dev\MORAI-SimControl_v2.1\receivers\camera_receiver.py](C:/Dev/MORAI-SimControl_v2.1/receivers/camera_receiver.py:1), [C:\Dev\MORAI-SimControl_v2.1\receivers\camera_depth_receiver.py](C:/Dev/MORAI-SimControl_v2.1/receivers/camera_depth_receiver.py:1), [C:\Dev\MORAI-SimControl_v2.1\receivers\camera_sensor_receiver.py](C:/Dev/MORAI-SimControl_v2.1/receivers/camera_sensor_receiver.py:1)
 - 패널: [C:\Dev\MORAI-SimControl_v2.1\panels\camera_sensor_panel.py](C:/Dev/MORAI-SimControl_v2.1/panels/camera_sensor_panel.py:1)
+- 상세: [C:\Dev\MORAI-SimControl_v2.1\docs\camera-sensor.md](C:/Dev/MORAI-SimControl_v2.1/docs/camera-sensor.md:1)
 
 원칙:
 
-- raw frame만 렌더링
+- camera stream 확인과 표시용 렌더링만 담당
 - `LaneController`의 debug composite 생성 책임과 분리
 - background receiver thread에서 받은 frame은 `ui_queue.post()`로 texture에 반영
 
