@@ -31,7 +31,7 @@
           {
             "name": "encoding",
             "relationName": "CameraEntity",
-            "variableName": "camera_attributes.sensor_data_depth.encoding",
+            "variableName": "camera_attributes.depth.encoding",
             "variableType": "STRING",
             "length": 5,
             "defaultValue": "",
@@ -40,8 +40,17 @@
           {
             "name": "is bigendian",
             "relationName": "CameraEntity",
-            "variableName": "camera_attributes.sensor_data_depth.is_bigendian",
+            "variableName": "camera_attributes.depth.is_bigendian",
             "variableType": "BOOL",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },          
+          {
+            "name": "image size",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.depth.image_size",
+            "variableType": "INT32",
             "length": 0,
             "defaultValue": "",
             "equation": ""
@@ -49,17 +58,8 @@
           {
             "name": "step",
             "relationName": "CameraEntity",
-            "variableName": "camera_attributes.sensor_data_depth.step",
+            "variableName": "camera_attributes.depth.step",
             "variableType": "UINT32",
-            "length": 0,
-            "defaultValue": "",
-            "equation": ""
-          },
-          {
-            "name": "image size",
-            "relationName": "CameraEntity",
-            "variableName": "camera_attributes.sensor_data_depth.image_size",
-            "variableType": "INT32",
             "length": 0,
             "defaultValue": "",
             "equation": ""
@@ -67,7 +67,7 @@
           {
             "name": "image data",
             "relationName": "CameraEntity",
-            "variableName": "camera_attributes.sensor_data_depth.image_data",
+            "variableName": "camera_attributes.depth.image_data",
             "variableType": "BYTES",
             "length": 0,
             "defaultValue": "",

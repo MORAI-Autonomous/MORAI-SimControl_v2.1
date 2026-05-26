@@ -67,8 +67,8 @@ Depth receiver는 `Camera Depth.tmpl` 구조에 맞춰 payload를 해석합니�
 - height
 - encoding
 - is bigendian
-- step
 - image size
+- step
 - image data
 
 현재 지원 encoding:

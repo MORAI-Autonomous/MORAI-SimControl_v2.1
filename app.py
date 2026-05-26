@@ -29,17 +29,17 @@ import panels.udp_control_panel as udp_ctrl_panel
 import transport.commands as udp_cmd
 
 APP_TITLE = "Sim Control Example"
-_logo_tag = None   # 로고 텍스처 태그 (main()에서 로드 후 설정)
+_logo_tag = None   # Loaded in main() when the logo texture is available.
 
-# ── 레이아웃 상수 ─────────────────────────────────────────
-W_INIT, H_INIT = 1400, 1200  # 초기 뷰포트 크기
-W_MIN,  H_MIN  = 900,  600   # 최소 크기
-CMD_W      = 400        # 커맨드 패널 너비 (고정)
-LOG_H      = 280        # 로그 패널 높이 (고정)
-TITLEBAR_H = 38         # 타이틀바 + separator 높이
-PAD        = 12         # 좌우/하단 여백
+# Layout constants
+W_INIT, H_INIT = 1400, 1200  # Initial viewport size.
+W_MIN,  H_MIN  = 900,  600   # Minimum viewport size.
+CMD_W      = 400        # Fixed command panel width.
+LOG_H      = 280        # Fixed log panel height.
+TITLEBAR_H = 38         # Title bar plus separator height.
+PAD        = 12         # Horizontal and bottom padding.
 
-# 동적 크기 헬퍼 — 리사이즈 시 뷰포트 실제 크기 반환
+# Viewport size helpers used by responsive layout code.
 def _vp_w():  return dpg.get_viewport_width()
 def _vp_h():  return dpg.get_viewport_height()
 def _top_h(): return max(_vp_h() - TITLEBAR_H - LOG_H - PAD, 100)
@@ -81,7 +81,7 @@ def pending_pop(pending, lock, request_id, msg_type):
 def _make_tcp_socket():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    s.settimeout(5.0)   # 전송 블로킹 5s 상한 → UI 먹통 방지
+    s.settimeout(5.0)   # Bound blocking sends so the UI does not hang.
     return s
 
 def _close_socket(sock):
@@ -93,7 +93,7 @@ def _set_conn_status(connected: bool):
     ui_queue.post(lambda c=connected: (
         dpg.configure_item("conn_label",
             color=(100, 255, 100, 255) if c else (255, 80, 80, 255)),
-        dpg.set_value("conn_label", "● Connected" if c else "○ Disconnected"),
+        dpg.set_value("conn_label", "Connected" if c else "Disconnected"),
         dpg.configure_item("btn_reconnect", show=not c),
     ))
 
@@ -172,7 +172,7 @@ class AppState:
 
     def start_fp(self, rows: list, entity_id: str) -> None:
         if self.fp_caller is not None and self.fp_caller.is_alive():
-            log_panel.append("[FP] 이미 재생 중입니다.", "WARN")
+            log_panel.append("[FP] already running.", "WARN")
             return
         self.fp_caller = ac.AutoCaller(
             tcp_sock=self.tcp_sock,
@@ -199,11 +199,11 @@ class AppState:
 
     def start_tfp(self, vehicles: list) -> None:
         if self.tfp_caller is not None and self.tfp_caller.is_alive():
-            log_panel.append("[TFP] 이미 재생 중입니다.", "WARN")
+            log_panel.append("[TFP] already running.", "WARN")
             return
         total_rows = max((len(v["rows"]) for v in vehicles), default=0)
         if total_rows <= 0:
-            log_panel.append("[TFP] 재생할 행이 없습니다.", "WARN")
+            log_panel.append("[TFP] no rows to play.", "WARN")
             return
         self.tfp_caller = ac.AutoCaller(
             tcp_sock=self.tcp_sock,
@@ -230,7 +230,7 @@ class AppState:
 
     def start_ad(self, vehicles: list, collision_cfg: dict = None) -> None:
         if self.ad_runners:
-            log_panel.append("[AD] 이미 실행 중입니다.", "WARN")
+            log_panel.append("[AD] already running.", "WARN")
             return
         AdRunner_mod.clear_shared_positions()
         chaser_id = (collision_cfg or {}).get("chaser_entity_id")
@@ -265,9 +265,9 @@ class AppState:
                     role = f"Target ({speed_kph:.0f} km/h)"
                 else:
                     role = f"PathFollow (max={v.get('max_speed_kph', 0):.0f} km/h)"
-                log_panel.append(f"[AD:{v['entity_id']}] 시작 (port={v['vi_port']}, {role})")
+                log_panel.append(f"[AD:{v['entity_id']}] started (port={v['vi_port']}, {role})")
             except Exception as e:
-                log_panel.append(f"[AD:{v['entity_id']}] 시작 실패: {e}", "ERROR")
+                log_panel.append(f"[AD:{v['entity_id']}] start failed: {e}", "ERROR")
         if not self.ad_runners:
             au_panel.reset_ui()
 
@@ -286,12 +286,12 @@ class AppState:
         for runner in self.step_ad_runners:
             updated = runner.update_max_speed_kph(entity_id, max_speed_kph) or updated
         if updated:
-            log_panel.append(f"[AD:{entity_id}] max speed 업데이트 -> {max_speed_kph:.0f} km/h", "INFO")
+            log_panel.append(f"[AD:{entity_id}] max speed updated -> {max_speed_kph:.0f} km/h", "INFO")
 
     def start_step_ad(self, vehicles: list, save_data: bool = False,
                       collision_cfg: dict = None) -> None:
         if self.step_ad_runners:
-            log_panel.append("[StepAD] 이미 실행 중입니다.", "WARN")
+            log_panel.append("[StepAD] already running.", "WARN")
             return
         try:
             def _on_done(s=self):
@@ -315,9 +315,9 @@ class AppState:
             runner.start()
             self.step_ad_runners.append(runner)
             ids = ", ".join(v["entity_id"] for v in vehicles)
-            log_panel.append(f"[StepAD] 시작 (vehicles: {ids})")
+            log_panel.append(f"[StepAD] started (vehicles: {ids})")
         except Exception as e:
-            log_panel.append(f"[StepAD] 시작 실패: {e}", "ERROR")
+            log_panel.append(f"[StepAD] start failed: {e}", "ERROR")
             au_panel.reset_ui()
 
     def stop_step_ad(self) -> None:
@@ -337,7 +337,7 @@ class AppState:
         invert_steer: bool = True,
     ) -> None:
         if self.lc_runner is not None:
-            log_panel.append("[LC] 이미 실행 중입니다.", "WARN")
+            log_panel.append("[LC] already running.", "WARN")
             return
         try:
             self.lc_runner = LaneRunner(
@@ -359,7 +359,7 @@ class AppState:
             self.lc_runner.start()
             lc_panel.set_runner(self.lc_runner)
         except Exception as e:
-            log_panel.append(f"[LC] 시작 실패: {e}", "ERROR")
+            log_panel.append(f"[LC] start failed: {e}", "ERROR")
             self.lc_runner = None
             lc_panel.reset_ui()
 
@@ -424,7 +424,7 @@ class AppState:
                     )
                     break
                 except Exception as e:
-                    log_panel.append(f"Connect failed: {e} — retry 5s", "ERROR")
+                    log_panel.append(f"Connect failed: {e}; retry in 5s", "ERROR")
                     _set_conn_status(False)
                     _close_socket(sock)
                     time.sleep(5)
@@ -436,8 +436,8 @@ class AppState:
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_disconnect(self):
-        self.tcp_sock = None                                    # 즉시 null → dispatch null guard 히트
-        # 대기 중인 ev.wait() 즉시 해제 — StepAdRunner 등이 timeout까지 기다리지 않도록
+        self.tcp_sock = None                                    # Make dispatch hit the null guard immediately.
+        # Release waiting ev.wait() calls so runners do not wait for timeout.
         with self.lock:
             for item in self.pending.values():
                 item["ev"].set()
@@ -510,21 +510,21 @@ def _patch_auto_caller(caller: ac.AutoCaller, on_done=None):
 # ============================================================
 def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=None):
     """
-    AutoCaller.run 을 CSV 파일 재생 루프로 교체한다.
-    각 행마다:
-      1. ManualControlById 전송 (fire-and-forget)
-      2. FixedStep 전송 → ACK 대기
-      3. SaveData 전송 → ACK 대기
+    Replace AutoCaller.run with the CSV playback loop.
+    For each row:
+      1. Send ManualControlById (fire-and-forget)
+      2. Send FixedStep and wait for ACK
+      3. Send SaveData and wait for ACK
     """
     def patched_run():
         total = len(rows)
-        log_panel.append(f"[FP] 시작: {total}행, entity={entity_id}", "INFO")
+        log_panel.append(f"[FP] started: rows={total}, entity={entity_id}", "INFO")
 
         for i, row in enumerate(rows):
             if caller._stop.is_set():
                 break
 
-            # ── 1. ManualControlById (no ACK) ─────────────────
+            # 1. ManualControlById (no ACK)
             rid = caller._next_rid()
             tcp.send_manual_control_by_id(
                 caller.tcp_sock, rid,
@@ -537,7 +537,7 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
             if caller._stop.is_set():
                 break
 
-            # ── 2. FixedStep (ACK 대기) ────────────────────────
+            # 2. FixedStep (wait for ACK)
             rid = caller._next_rid()
             ev  = caller.pending_add(caller.pending, caller.lock, rid, MSG_TYPE_FIXED_STEP)
             tcp.send_fixed_step(caller.tcp_sock, rid, step_count=caller.step_count)
@@ -550,7 +550,7 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
             if caller._stop.is_set():
                 break
 
-            # ── 3. SaveData (ACK 대기) ─────────────────────────
+            # 3. SaveData (wait for ACK)
             rid = caller._next_rid()
             ev  = caller.pending_add(caller.pending, caller.lock, rid, MSG_TYPE_SAVE_DATA)
             tcp.send_save_data(caller.tcp_sock, rid)
@@ -563,12 +563,12 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
             if caller.delay_sec > 0:
                 time.sleep(caller.delay_sec)
 
-            # ── Progress ───────────────────────────────────────
+            # Progress
             fp_panel.update_progress(i + 1, total)
 
         stopped = caller._stop.is_set()
         fp_panel.reset_ui(stopped=stopped)
-        log_panel.append(f"[FP] {'중단됨' if stopped else '재생 완료'} ({total}행)", "INFO")
+        log_panel.append(f"[FP] {'stopped' if stopped else 'playback complete'} ({total} rows)", "INFO")
         if on_done:
             on_done()
 
@@ -580,15 +580,15 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
 # ============================================================
 def _patch_tfp_caller(caller: ac.AutoCaller, vehicles: list, on_done=None):
     """
-    AutoCaller.run 을 TransformControlById CSV 재생 루프로 교체한다.
-    각 step 마다:
-      1. 모든 차량 TransformControlById 전송 (fire-and-forget)
-      2. CSV 시간 간격만큼 대기
+    Replace AutoCaller.run with the TransformControlById CSV playback loop.
+    For each step:
+      1. Send TransformControlById for all vehicles (fire-and-forget)
+      2. Wait according to the CSV timestamp interval
     """
     def patched_run():
         total = max((len(v["rows"]) for v in vehicles), default=0)
         ids = ", ".join(v["entity_id"] for v in vehicles)
-        log_panel.append(f"[TFP] 시작: {total}행, vehicles={ids}", "INFO")
+        log_panel.append(f"[TFP] started: rows={total}, vehicles={ids}", "INFO")
 
         def _row_time(i: int):
             for vehicle in vehicles:
@@ -631,7 +631,7 @@ def _patch_tfp_caller(caller: ac.AutoCaller, vehicles: list, on_done=None):
 
         stopped = caller._stop.is_set()
         tfp_panel.reset_ui(stopped=stopped)
-        log_panel.append(f"[TFP] {'중단됨' if stopped else '재생 완료'} ({total}행)", "INFO")
+        log_panel.append(f"[TFP] {'stopped' if stopped else 'playback complete'} ({total} rows)", "INFO")
         if on_done:
             on_done()
 
@@ -665,7 +665,7 @@ def build_ui(state: AppState):
             dpg.add_theme_style(dpg.mvStyleVar_WindowPadding,  x=8, y=6)
     dpg.bind_theme(global_theme)
 
-    # ── 커스텀 탭 버튼 테마 (active / inactive) ──────────────────
+    # Custom tab button themes.
     with dpg.theme(tag="theme_tab_active"):
         with dpg.theme_component(dpg.mvButton):
             dpg.add_theme_color(dpg.mvThemeCol_Button,        (45, 80, 130, 255))
@@ -707,7 +707,7 @@ def build_ui(state: AppState):
                     no_resize=True, no_move=True,
                     no_scrollbar=True, no_scroll_with_mouse=True):
 
-        # ── 타이틀바 ──────────────────────────────────────
+        # Title bar
         def _apply_conn(s=None, a=None):
             global TCP_SERVER_IP, TCP_SERVER_PORT
             new_ip   = dpg.get_value("tb_ip_input").strip()
@@ -748,27 +748,27 @@ def build_ui(state: AppState):
                               min_value=1, max_value=65535,
                               step=0,
                               callback=_apply_conn)
-            dpg.add_text("● Connected", tag="conn_label", color=(140, 200, 140))
+            dpg.add_text("Connected", tag="conn_label", color=(140, 200, 140))
             dpg.add_spacer(width=8)
             dpg.add_button(label="Reconnect", tag="btn_reconnect",
                            callback=lambda: state.connect(), show=False)
         dpg.add_separator()
 
-        # ── 상단: 커맨드(좌) | 모니터(우) ────────────────
+        # Top area: command panel on the left, monitor panels on the right.
         with dpg.group(horizontal=True):
-            # 커맨드 패널 — 내부 컨텐츠가 길므로 세로 스크롤만 허용
+            # Command panel: content can be tall, so it owns vertical scrolling.
             with dpg.child_window(tag="cmd_window",
                                   width=CMD_W, height=_top_h(),
                                   border=True,
                                   no_scrollbar=False):
                 cmd_panel.build(parent="cmd_window")
 
-            # 모니터 탭 — tab_bar 는 고정, 콘텐츠 스크롤은 탭 내부 child_window 가 담당
+            # Monitor tabs: custom buttons stay fixed, each tab child owns scrolling.
             with dpg.child_window(tag="mon_window",
                                   width=_mon_w(), height=_top_h(),
                                   border=True,
                                   no_scrollbar=True, no_scroll_with_mouse=True):
-                # ── 커스텀 탭 버튼 행 ──────────────────────────
+                # Custom tab button row
                 with dpg.group(horizontal=True):
                     dpg.add_button(label=" UDP Monitor ", tag="tab_btn_udp",
                                    callback=lambda: _select_tab("udp"))
@@ -786,7 +786,7 @@ def build_ui(state: AppState):
                                    callback=lambda: _select_tab("tfp"))
                 dpg.add_separator()
 
-                # ── 탭 콘텐츠 (한 번에 하나만 표시) ───────────
+                # Tab content; only one child is visible at a time.
                 with dpg.child_window(tag="mon_scroll",
                                       width=-1, height=-1,
                                       border=False, show=True):
@@ -822,7 +822,7 @@ def build_ui(state: AppState):
                                       border=False, show=False):
                     tfp_panel.build(parent="tfp_scroll")
 
-                # 초기 버튼 테마 적용
+                # Initial button themes.
                 dpg.bind_item_theme("tab_btn_udp", "theme_tab_active")
                 dpg.bind_item_theme("tab_btn_udp_ctrl", "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_cam_sensor", "theme_tab_inactive")
@@ -831,16 +831,16 @@ def build_ui(state: AppState):
                 dpg.bind_item_theme("tab_btn_fp",  "theme_tab_inactive")
                 dpg.bind_item_theme("tab_btn_tfp", "theme_tab_inactive")
 
-        # ── 하단: 로그 ────────────────────────────────────
-        # no_scrollbar=True: log_child 가 자체 스크롤 담당
+        # Bottom log area.
+        # no_scrollbar=True because log_child owns its own scrolling.
         with dpg.child_window(tag="log_window",
                               width=_vp_w() - PAD, height=-1,
                               border=True,
                               no_scrollbar=True, no_scroll_with_mouse=True):
             log_panel.build(parent="log_window")
 
-    # viewport resize callback 에서 직접 DPG 레이아웃을 건드리지 않고
-    # 메인 루프에서만 반영해 hit-test / layout 꼬임 가능성을 줄인다.
+    # The viewport resize callback only marks layout dirty.
+    # Actual DPG layout changes happen in the main loop.
     _layout_state = {
         "dirty": True,
         "last_size": (-1, -1),
@@ -888,7 +888,7 @@ def main():
 
     dpg.create_context()
 
-    # ── 텍스처 로드 ───────────────────────────────────────────
+    # Load textures.
     global _logo_tag
     _ASSET_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
     _LOGO_PATH  = os.path.join(_ASSET_DIR, "Logo_SIM_V2_1_Black_80X80.PNG")
@@ -903,10 +903,10 @@ def main():
             _fw, _fh, _fch, _fdata = dpg.load_image(_FOLDER_PATH)
             dpg.add_static_texture(_fw, _fh, _fdata, tag="folder_icon")
 
-    # 한글·유니코드 폰트 로드 (기본 폰트는 ASCII만 지원)
+    # Load Korean/Unicode-capable fonts; DearPyGUI default font is ASCII-focused.
     _FONT_CANDIDATES = [
-        "C:/Windows/Fonts/malgun.ttf",    # 맑은 고딕 (Windows 기본)
-        "C:/Windows/Fonts/gulim.ttc",     # 굴림
+        "C:/Windows/Fonts/malgun.ttf",    # Malgun Gothic, Windows default.
+        "C:/Windows/Fonts/gulim.ttc",     # Gulim.
     ]
     for _fp in _FONT_CANDIDATES:
         if os.path.exists(_fp):
@@ -914,11 +914,11 @@ def main():
                 with dpg.font(_fp, 17) as _font:
                     dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                     dpg.add_font_range_hint(dpg.mvFontRangeHint_Korean)
-                    dpg.add_font_range(0x2000, 0x27FF)  # General Punctuation ~ Dingbats (—,→,■,▶,✗ 등)
+                    dpg.add_font_range(0x2000, 0x27FF)  # General Punctuation through Dingbats.
             dpg.bind_font(_font)
             break
 
-    # PNG → ICO 변환 후 뷰포트 아이콘 설정
+    # Convert PNG to ICO for the viewport icon when needed.
     _ICO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.ico")
     if os.path.exists(_LOGO_PATH) and not os.path.exists(_ICO_PATH):
         try:
@@ -950,16 +950,16 @@ def main():
     apply_layout(force=True)
 
     state.connect()
-    _TARGET_FPS     = 60                    # idle ? ?? fps ??
+    _TARGET_FPS     = 60                    # Cap idle rendering to this FPS.
     _TARGET_FRAME_S = 1.0 / _TARGET_FPS
 
     while dpg.is_dearpygui_running():
         frame_start = time.perf_counter()
 
-        # --- viewport/layout ??? --------------------------------------------
+        # --- viewport/layout --------------------------------------------------
         apply_layout()
 
-        # --- log flush: pending ??? set_value ?? 1? ------------------------
+        # --- log flush --------------------------------------------------------
         log_panel.flush()
 
         # --- ui_queue drain -----------------------------------------------------
@@ -968,8 +968,8 @@ def main():
         # --- DPG render ---------------------------------------------------------
         dpg.render_dearpygui_frame()
 
-        # --- idle fps ?? (60fps ??) ------------------------------------------
-        # render? ?? ?? fps? GPU ??? ??
+        # --- idle fps cap -----------------------------------------------------
+        # Sleep only when rendering is faster than the target frame time.
         elapsed = time.perf_counter() - frame_start
         sleep_t = _TARGET_FRAME_S - elapsed
         if sleep_t > 0.001:

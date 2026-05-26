@@ -12,7 +12,7 @@ _CHUNK_HEADER_FMT = "<IHH"
 _CHUNK_HEADER_SIZE = struct.calcsize(_CHUNK_HEADER_FMT)
 _RECV_BUF = 65535
 _ASSEMBLY_TIMEOUT = 5.0
-_DEPTH_HEADER_FMT = "<ii5s?Ii"
+_DEPTH_HEADER_FMT = "<ii5s?iI"
 _DEPTH_HEADER_SIZE = struct.calcsize(_DEPTH_HEADER_FMT)
 _DEPTH_SCALE_M = 200.0 / 255.0
 
@@ -181,7 +181,7 @@ class CameraDepthReceiver(threading.Thread):
             return None
 
         try:
-            width_i, height_i, encoding_raw, is_bigendian, step, image_size = struct.unpack_from(
+            width_i, height_i, encoding_raw, is_bigendian, image_size, step = struct.unpack_from(
                 _DEPTH_HEADER_FMT, payload, 0
             )
         except struct.error as e:

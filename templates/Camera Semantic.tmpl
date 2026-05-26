@@ -1,0 +1,37 @@
+{
+	"version": "1.0.0-alpha",
+	"messageTemplate":
+	{
+		"name": "Camera Semantic",
+		"messageCategory": "Sensor",
+		"isControl": false,
+		"isSensor": false,
+		"description": "",
+		"segmentList": [
+			{
+				"type": "FIELDS",
+				"relationName": "CameraEntity",
+				"fieldList": [
+					{
+						"name": "image_size",
+						"relationName": "CameraEntity",
+						"variableName": "camera_attributes.semantic.image_size",
+						"variableType": "INT32"
+					},
+					{
+						"name": "step",
+						"relationName": "CameraEntity",
+						"variableName": "camera_attributes.semantic.step",
+						"variableType": "UINT32"
+					},
+					{
+						"name": "image_data",
+						"relationName": "CameraEntity",
+						"variableName": "camera_attributes.semantic.image_data",
+						"variableType": "BYTES"
+					}
+				]
+			}
+		]
+	}
+}

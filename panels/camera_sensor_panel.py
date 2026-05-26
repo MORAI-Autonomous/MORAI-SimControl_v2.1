@@ -13,6 +13,7 @@ import numpy as np
 import panels.log as log
 from receivers.camera_depth_receiver import CameraDepthReceiver
 from receivers.camera_receiver import CameraReceiver
+from receivers.camera_semantic_receiver import CameraSemanticReceiver
 from receivers.camera_sensor_receiver import CameraSensorReceiver, draw_bbox_overlays
 import utils.ui_queue as ui_queue
 
@@ -32,8 +33,10 @@ _TEX_BLANK: list = [0.0] * (_TEX_W * _TEX_H * 4)
 
 _TPL_RGB = "Camera RGB.tmpl"
 _TPL_DEPTH = "Camera Depth.tmpl"
+_TPL_SEMANTIC = "Camera Semantic.tmpl"
+_TPL_INSTANCE = "Instance Cam.tmpl"
 _TPL_RGB_BBOX = "Camera With 2D_3D Bounding Box.tmpl"
-_TEMPLATE_ITEMS = [_TPL_RGB, _TPL_DEPTH, _TPL_RGB_BBOX]
+_TEMPLATE_ITEMS = [_TPL_RGB, _TPL_DEPTH, _TPL_SEMANTIC, _TPL_INSTANCE, _TPL_RGB_BBOX]
 _DEPTH_VIEW_GRAYSCALE = "Grayscale"
 _DEPTH_VIEW_COLOR_MAP = "Color Map"
 _DEPTH_VIEW_ITEMS = [_DEPTH_VIEW_GRAYSCALE, _DEPTH_VIEW_COLOR_MAP]
@@ -265,6 +268,20 @@ def _start_slot(slot: int) -> None:
             port=port,
             on_packet=lambda packet, s=slot: _on_depth_packet(s, packet),
         )
+    elif template_name == _TPL_SEMANTIC:
+        state.receiver_kind = "semantic"
+        state.receiver = CameraSemanticReceiver(
+            ip=ip,
+            port=port,
+            on_packet=lambda packet, s=slot: _on_semantic_packet(s, packet),
+        )
+    elif template_name == _TPL_INSTANCE:
+        state.receiver_kind = "instance"
+        state.receiver = CameraSemanticReceiver(
+            ip=ip,
+            port=port,
+            on_packet=lambda packet, s=slot: _on_instance_packet(s, packet),
+        )
     else:
         state.receiver_kind = "bbox"
         state.receiver = CameraSensorReceiver(
@@ -438,6 +455,60 @@ def _on_depth_packet(slot: int, packet: dict) -> None:
     )
 
 
+def _on_semantic_packet(slot: int, packet: dict) -> None:
+    _on_segmentation_packet(slot, packet, label="Semantic", log_key="Semantic")
+
+
+def _on_instance_packet(slot: int, packet: dict) -> None:
+    _on_segmentation_packet(slot, packet, label="Instance", log_key="Instance")
+
+
+def _on_segmentation_packet(slot: int, packet: dict, label: str, log_key: str) -> None:
+    state = _slots[slot]
+    now = time.monotonic()
+    state.last_rx_t = now
+    if now - state.last_frame_t < _FRAME_INTERVAL:
+        return
+    state.last_frame_t = now
+
+    frame = packet.get("frame")
+    if frame is None:
+        return
+
+    src_h, src_w = frame.shape[:2]
+    fps = float(packet.get("fps", state.receiver.fps if state.receiver is not None else 0.0))
+    pixel_format = str(packet.get("pixel_format", "Semantic"))
+    step = int(packet.get("step", 0))
+    image_size = int(packet.get("image_size", 0))
+    value_range = str(packet.get("value_range", "-"))
+    unique_count = int(packet.get("unique_count", 0))
+    parse_mode = str(packet.get("parse_mode", "-"))
+
+    if now - state.last_debug_log_t >= 1.0:
+        state.last_debug_log_t = now
+        log.append(
+            f"[CameraSensor:{slot + 1}][{log_key}] frame={src_w}x{src_h} "
+            f"format={pixel_format} step={step} image_size={image_size} "
+            f"mode={parse_mode} range={value_range} unique={unique_count} fps={fps:.1f}",
+            "INFO",
+        )
+
+    if pixel_format == "LABEL8":
+        info_text = f"Labels: {value_range} ({unique_count})"
+    else:
+        info_text = f"{pixel_format} step={step}"
+    _render_slot_image(
+        slot=slot,
+        display_bgr=frame,
+        src_w=src_w,
+        src_h=src_h,
+        fps=fps,
+        type_text=label,
+        info_text=info_text,
+        rx_t=now,
+    )
+
+
 def _render_slot_image(
     slot: int,
     display_bgr: np.ndarray,
@@ -521,6 +592,10 @@ def _receiver_type_text(kind: str) -> str:
         return "RGB+BBox"
     if kind == "depth":
         return "32FC1"
+    if kind == "semantic":
+        return "Semantic"
+    if kind == "instance":
+        return "Instance"
     return "-"
 
 
