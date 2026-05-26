@@ -3,7 +3,7 @@
 MORAI 시뮬레이터를 TCP/UDP로 제어하기 위한 Python 예제 코드입니다.
 
 - `app.py`: DearPyGUI 기반 GUI 예제
-- `app_cli.py`: CLI 예제
+- `app_cli.py`: CLI 예제 (지원종료)
 - `autonomous_driving/`: Path Follow 예제 로직
 - `lane_control/`: camera 기반 lane follow와 제어 로직
 - `panels/`: DearPyGUI 패널
@@ -98,16 +98,11 @@ Camera stream을 최대 4개 슬롯에서 독립적으로 수신하고 표시합
 - template 선택: `Camera RGB.tmpl`, `Camera Depth.tmpl`, `Camera With 2D_3D Bounding Box.tmpl`
 - Depth 표시/scale 비교 옵션 제공
 - RGB+BBox 모드는 2D/3D bounding box overlay 표시
-- 상태 저장: `config/camera_sensor_state.json`
 - 상세 내용은 [docs/camera-sensor.md](/C:/Dev/MORAI-SimControl_v2.1/docs/camera-sensor.md:1)를 참고
 
 ### Lane Control
 
-Camera frame 기반 차선 인식으로 차량을 제어합니다.
-
-- BEV 변환, 이진화, sliding window 기반 차선 검출
-- steering PD 제어와 speed PI 제어
-- GUI parameter tuning과 debug frame 확인
+- 개발 중
 
 ### Path Follow
 
