@@ -24,11 +24,10 @@ _VIEW_H = 292
 _FRAME_INTERVAL = 1.0 / 30.0
 _TEX_W = 960
 _TEX_H = 540
-_STATE_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "config",
-    "camera_sensor_state.json",
-)
+_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_STATE_FILE = os.path.join(_ROOT_DIR, "config", "camera_sensor_state.json")
+_DEPTH_DEBUG_DIR = os.path.join(_ROOT_DIR, "debug", "camera_depth")
+_DEPTH_DEBUG_SAVE_INTERVAL = 1.0
 _TEX_BLANK: list = [0.0] * (_TEX_W * _TEX_H * 4)
 
 _TPL_RGB = "Camera RGB.tmpl"
@@ -37,16 +36,17 @@ _TPL_SEMANTIC = "Camera Semantic.tmpl"
 _TPL_INSTANCE = "Instance Cam.tmpl"
 _TPL_RGB_BBOX = "Camera With 2D_3D Bounding Box.tmpl"
 _TEMPLATE_ITEMS = [_TPL_RGB, _TPL_DEPTH, _TPL_SEMANTIC, _TPL_INSTANCE, _TPL_RGB_BBOX]
+_DEPTH_VIEW_SIMULATOR = "Simulator"
 _DEPTH_VIEW_GRAYSCALE = "Grayscale"
-_DEPTH_VIEW_COLOR_MAP = "Color Map"
-_DEPTH_VIEW_ITEMS = [_DEPTH_VIEW_GRAYSCALE, _DEPTH_VIEW_COLOR_MAP]
+_DEPTH_VIEW_TURBO = "Turbo"
+_DEPTH_VIEW_ITEMS = [_DEPTH_VIEW_SIMULATOR, _DEPTH_VIEW_GRAYSCALE, _DEPTH_VIEW_TURBO]
 _DEPTH_SCALE_MORAI_255 = "MORAI 0-255"
 _DEPTH_SCALE_RAW_32FC1 = "Raw 32FC1"
 _DEPTH_SCALE_ITEMS = [_DEPTH_SCALE_MORAI_255, _DEPTH_SCALE_RAW_32FC1]
 _DEPTH_SCALE_M = 200.0 / 255.0
 _TEMPLATE_PATHS = {
     _TPL_RGB_BBOX: os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        _ROOT_DIR,
         "templates",
         _TPL_RGB_BBOX,
     ),
@@ -57,11 +57,12 @@ _TEMPLATE_PATHS = {
 class _SlotState:
     receiver: Optional[object] = None
     receiver_kind: str = ""
-    depth_view_mode: str = _DEPTH_VIEW_GRAYSCALE
+    depth_view_mode: str = _DEPTH_VIEW_SIMULATOR
     depth_scale_mode: str = _DEPTH_SCALE_MORAI_255
     last_frame_t: float = 0.0
     last_rx_t: float = 0.0
     last_debug_log_t: float = 0.0
+    last_depth_save_t: float = 0.0
 
 
 _slots: Dict[int, _SlotState] = {i: _SlotState() for i in range(_SLOT_COUNT)}
@@ -142,7 +143,7 @@ def _build_slot(slot: int) -> None:
             dpg.add_text("Depth View:", color=(180, 180, 180, 255))
             dpg.add_combo(
                 items=_DEPTH_VIEW_ITEMS,
-                default_value=_DEPTH_VIEW_GRAYSCALE,
+                default_value=_DEPTH_VIEW_SIMULATOR,
                 width=110,
                 tag=_tag(slot, "depth_view"),
                 callback=lambda sender, app_data, user_data: _on_depth_view_change(
@@ -424,6 +425,8 @@ def _on_depth_packet(slot: int, packet: dict) -> None:
         max_m=200.0,
         view_mode=state.depth_view_mode,
     )
+    # Debug only: enable when comparing this render path with simulator-saved PNGs.
+    # _save_depth_visual_debug(slot, state, vis_bgr, now)
     src_h, src_w = vis_bgr.shape[:2]
     fps = float(packet.get("fps", state.receiver.fps if state.receiver is not None else 0.0))
     depth_min_m, depth_max_m = _depth_range(depth_m)
@@ -562,6 +565,24 @@ def _render_slot_image(
     ui_queue.post(_apply)
 
 
+def _save_depth_visual_debug(
+    slot: int,
+    state: _SlotState,
+    vis_bgr: np.ndarray,
+    now: float,
+) -> None:
+    if now - state.last_depth_save_t < _DEPTH_DEBUG_SAVE_INTERVAL:
+        return
+    state.last_depth_save_t = now
+
+    try:
+        os.makedirs(_DEPTH_DEBUG_DIR, exist_ok=True)
+        path = os.path.join(_DEPTH_DEBUG_DIR, f"slot_{slot + 1}_visualize_depth_latest.png")
+        cv2.imwrite(path, vis_bgr)
+    except Exception as e:
+        log.append(f"[CameraSensor:{slot + 1}][Depth] debug PNG save failed: {e}", "WARN")
+
+
 def _visualize_depth(
     depth_m: np.ndarray,
     min_m: float,
@@ -573,12 +594,12 @@ def _visualize_depth(
 
     valid = depth_m > 0.0
     clipped = np.clip(depth_m, min_m, max_m)
-    scaled = 1.0 - ((clipped - min_m) / (max_m - min_m))
-    scaled = np.clip(scaled, 0.0, 1.0)
-    gray = (scaled * 255.0).astype(np.uint8)
+    norm = (clipped - min_m) / (max_m - min_m)
+    norm = np.clip(norm, 0.0, 1.0)
+    gray = ((1.0 - norm) * 255.0).astype(np.uint8)
     gray[~valid] = 0
 
-    if view_mode == "Color Map":
+    if view_mode == _DEPTH_VIEW_TURBO:
         vis = cv2.applyColorMap(gray, cv2.COLORMAP_TURBO)
         vis[~valid] = 0
         return vis
@@ -615,9 +636,11 @@ def _normalize_template(template_name: str) -> str:
 
 
 def _normalize_depth_view(view_mode: str) -> str:
+    if view_mode == "Color Map":
+        return _DEPTH_VIEW_SIMULATOR
     if view_mode in _DEPTH_VIEW_ITEMS:
         return view_mode
-    return _DEPTH_VIEW_GRAYSCALE
+    return _DEPTH_VIEW_SIMULATOR
 
 
 def _normalize_depth_scale(scale_mode: str) -> str:
@@ -726,7 +749,7 @@ def _load_state() -> None:
                 )
             if dpg.does_item_exist(_tag(slot, "depth_view")):
                 depth_view_mode = _normalize_depth_view(
-                    str(slots[slot].get("depth_view", _DEPTH_VIEW_GRAYSCALE))
+                    str(slots[slot].get("depth_view", _DEPTH_VIEW_SIMULATOR))
                 )
                 dpg.set_value(_tag(slot, "depth_view"), depth_view_mode)
                 _slots[slot].depth_view_mode = depth_view_mode

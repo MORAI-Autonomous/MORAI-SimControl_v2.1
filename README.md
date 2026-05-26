@@ -59,6 +59,7 @@ tests/
 tools/
 transport/
 utils/
+samples/
 ```
 
 주요 디렉터리:
@@ -70,6 +71,7 @@ utils/
 - `autonomous_driving/`: Path Follow, trajectory, multi-vehicle 제어
 - `config/`: 런타임 상태 저장 파일
 - `docs/`: 구조, 워크플로, TCP 인터페이스 문서
+- `samples/`: 기능별 샘플 입력 파일
 - `tools/udp_debug/`: standalone UDP 분석/우회 스크립트 모음
 
 주요 문서:
@@ -116,6 +118,8 @@ MGeo 또는 CSV 경로를 기준으로 차량을 추종합니다.
 ### File Playback
 
 CSV에서 throttle, brake, steer 값을 읽어 순차적으로 재생합니다.
+
+샘플 파일: `samples/file_playback/Input_Sample_DriverCmd.csv`
 
 주요 컬럼:
 

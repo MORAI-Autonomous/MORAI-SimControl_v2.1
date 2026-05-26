@@ -38,7 +38,7 @@
 각 slot은 아래 값을 가집니다.
 
 - `Template`: RGB / Depth / BBox template 선택
-- `Depth View`: `Grayscale`, `Color Map`
+- `Depth View`: `Simulator`, `Grayscale`, `Turbo`
 - `Scale`: `MORAI 0-255`, `Raw 32FC1`
 - `IP`, `Port`
 - `Start`, `Stop`
@@ -165,7 +165,7 @@ linear depth
 
 - Depth test panel 기능을 Camera Sensor 패널로 통합
 - RGB / Depth / BBox template 선택 지원
-- Depth grayscale / color map 선택 지원
+- Depth simulator / grayscale / turbo 표시 모드 선택 지원
 - Depth scale 비교 모드 추가
 - raw range와 변환 후 depth range 표시
 - Camera Sensor 내부 중첩 스크롤 제거

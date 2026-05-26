@@ -4,4 +4,22 @@ config/monitor_state.json
 .vscode/settings.json
 config/fp_state.json
 config/*.json
+debug/
 .github/workflows/
+# Added by code-review-graph
+.code-review-graph/
+
+# Local AI/MCP/editor integration files
+.mcp.json
+.opencode.json
+.vscode/mcp.json
+.gemini/
+.kiro/
+.qoder/
+.cursorrules
+.windsurfrules
+GEMINI.md
+QODER.md
+AGENTS.md
+CLAUDE.md
+.github/code-review-graph.instruction.md
