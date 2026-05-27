@@ -87,7 +87,7 @@ samples/
 - `UDP Control`: `isControl == true` 템플릿 기반 UDP control payload 전송
 - `Path Follow`: 경로 기반 자율주행 예제
 - `Lane Control`: camera 기반 lane follow 제어
-- `Camera Sensor`: RGB / Depth / BBox camera stream 확인
+- `Camera Sensor`: RGB / Depth / Semantic / Instance / BBox camera stream 확인
 - `File Playback`: CSV 기반 Manual Control 재생
 - `Transform Playback`: CSV 기반 Transform Control 재생
 
@@ -97,8 +97,9 @@ samples/
 
 Camera stream을 최대 4개 슬롯에서 독립적으로 수신하고 표시합니다.
 
-- template 선택: `Camera RGB.tmpl`, `Camera Depth.tmpl`, `Camera With 2D_3D Bounding Box.tmpl`
+- template 선택: RGB, Depth, Semantic, Instance, RGB+BBox camera
 - Depth 표시/scale 비교 옵션 제공
+- Semantic / Instance stream 표시 지원
 - RGB+BBox 모드는 2D/3D bounding box overlay 표시
 - 상세 내용은 [docs/camera-sensor.md](/C:/Dev/MORAI-SimControl_v2.1/docs/camera-sensor.md:1)를 참고
 
