@@ -13,7 +13,7 @@ from transport.message_schema import (
 # Network Config
 # ============================================================
 
-TCP_SERVER_IP   = "127.0.0.1"
+TCP_SERVER_IP   = "172.30.240.1"
 TCP_SERVER_PORT = 20000
 
 UDP_IP          = "127.0.0.1"

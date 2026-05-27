@@ -15,6 +15,7 @@ import transport.tcp_thread as tcp_thread_mod
 import automation.automation as ac
 import ad_runner as AdRunner_mod
 from ad_runner import AdRunner
+from ros2_ad_runner import Ros2AdRunner
 from step_ad_runner import StepAdRunner
 from lane_runner import LaneRunner
 import utils.ui_queue as ui_queue
@@ -297,6 +298,41 @@ class AppState:
         if self.ad_runners:
             log_panel.append("[AD] already running.", "WARN")
             return
+        interface = vehicles[0].get("interface", "UDP/TCP") if vehicles else "UDP/TCP"
+        if interface == "ROS2":
+            if collision_cfg:
+                log_panel.append("[AD:ROS2] collision mode is not supported in ROS2 mode yet.", "WARN")
+            if len(vehicles) > 1:
+                log_panel.append("[AD:ROS2] single-vehicle mode only; using the first vehicle.", "WARN")
+            if not vehicles:
+                au_panel.reset_ui()
+                return
+            v = vehicles[0]
+            try:
+                runner = Ros2AdRunner(
+                    entity_id             = v["entity_id"],
+                    vehicle_info_topic    = v.get("ros2_vehicle_info_topic", "/VehicleInfo"),
+                    manual_control_topic  = v.get("ros2_manual_control_topic", "/ManualControl"),
+                    path_file             = v.get("path", "path_link.csv"),
+                    map_name              = v.get("map_name"),
+                    max_speed_kph         = v.get("max_speed_kph"),
+                    log_fn                = lambda msg, level="INFO", eid=v["entity_id"]:
+                                               log_panel.append(f"[AD:{eid}:ROS2] {msg}", level),
+                    status_cb             = au_panel.update_status,
+                )
+                runner.start()
+                self.ad_runners.append(runner)
+                log_panel.append(
+                    f"[AD:{v['entity_id']}:ROS2] started "
+                    f"(sub={v.get('ros2_vehicle_info_topic', '/VehicleInfo')}, "
+                    f"pub={v.get('ros2_manual_control_topic', '/ManualControl')})"
+                )
+            except Exception as e:
+                log_panel.append(f"[AD:{v['entity_id']}:ROS2] start failed: {e}", "ERROR")
+            if not self.ad_runners:
+                au_panel.reset_ui()
+            return
+
         AdRunner_mod.clear_shared_positions()
         chaser_id = (collision_cfg or {}).get("chaser_entity_id")
         target_id = (collision_cfg or {}).get("target_entity_id")
@@ -965,6 +1001,8 @@ def main():
 
     # Load Korean/Unicode-capable fonts; DearPyGUI default font is ASCII-focused.
     _FONT_CANDIDATES = [
+        "/mnt/c/Windows/Fonts/malgun.ttf",  # WSL path to Windows Malgun Gothic.
+        "/mnt/c/Windows/Fonts/gulim.ttc",   # WSL path to Windows Gulim.
         "C:/Windows/Fonts/malgun.ttf",    # Malgun Gothic, Windows default.
         "C:/Windows/Fonts/gulim.ttc",     # Gulim.
     ]

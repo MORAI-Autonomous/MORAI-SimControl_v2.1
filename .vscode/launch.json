@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: app.py (WSL ROS2)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "python": "/usr/bin/python3",
+            "env": {
+                "PYTHONPATH": "/home/hwjung/install/morai_v2_1_ros2_msgs/local/lib/python3.10/dist-packages:/home/hwjung/morai_v2_1_ros2_msgs/install/morai_v2_1_ros2_msgs/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages",
+                "AMENT_PREFIX_PATH": "/home/hwjung/install/morai_v2_1_ros2_msgs:/home/hwjung/morai_v2_1_ros2_msgs/install/morai_v2_1_ros2_msgs:/opt/ros/humble",
+                "COLCON_PREFIX_PATH": "/home/hwjung/install:/home/hwjung/morai_v2_1_ros2_msgs/install",
+                "LD_LIBRARY_PATH": "/home/hwjung/install/morai_v2_1_ros2_msgs/lib:/home/hwjung/morai_v2_1_ros2_msgs/install/morai_v2_1_ros2_msgs/lib:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib"
+            }
+        }
+    ]
+}

@@ -28,6 +28,10 @@ def _get_available_maps() -> list:
 
 _MAX_VEHICLES = 6
 _DEFAULT_MAX_SPEED_KPH = 100.0
+_INTERFACE_UDP = "UDP/TCP"
+_INTERFACE_ROS2 = "ROS2"
+_DEFAULT_ROS2_VI_TOPIC = "/VehicleInfo"
+_DEFAULT_ROS2_CTRL_TOPIC = "/ManualControl"
 
 _start_ad_fn:      Optional[Callable] = None
 _stop_ad_fn:       Optional[Callable] = None
@@ -75,6 +79,36 @@ def build(parent) -> None:
             dpg.add_spacer(width=16)
             dpg.add_checkbox(tag="au_save_data", label="Save Data",
                              default_value=False, show=False)
+
+        dpg.add_spacer(height=6)
+        with dpg.group(horizontal=True):
+            dpg.add_text("Interface :", color=(180, 180, 180, 255))
+            dpg.add_combo(
+                tag="au_interface",
+                items=[_INTERFACE_UDP, _INTERFACE_ROS2],
+                default_value=_INTERFACE_UDP,
+                width=120,
+                callback=_on_interface_change,
+            )
+
+        with dpg.group(tag="au_ros2_settings", show=False):
+            dpg.add_spacer(height=4)
+            with dpg.group(horizontal=True):
+                dpg.add_text("Vehicle Info Topic :", color=(180, 180, 180, 255))
+                dpg.add_input_text(
+                    tag="au_ros2_vehicle_info_topic",
+                    default_value=_DEFAULT_ROS2_VI_TOPIC,
+                    width=220,
+                    callback=lambda: _save_state(),
+                )
+                dpg.add_spacer(width=10)
+                dpg.add_text("Manual Control Topic :", color=(180, 180, 180, 255))
+                dpg.add_input_text(
+                    tag="au_ros2_manual_control_topic",
+                    default_value=_DEFAULT_ROS2_CTRL_TOPIC,
+                    width=220,
+                    callback=lambda: _save_state(),
+                )
 
         dpg.add_spacer(height=6)
         with dpg.group(horizontal=True):
@@ -231,6 +265,23 @@ def _on_max_speed_change(slot: int) -> None:
 
 # ── Public callbacks ──────────────────────────────────────────
 
+def _on_interface_change(sender=None, app_data=None) -> None:
+    interface = app_data
+    if interface is None and dpg.does_item_exist("au_interface"):
+        interface = dpg.get_value("au_interface")
+    is_ros2 = interface == _INTERFACE_ROS2
+    if dpg.does_item_exist("au_ros2_settings"):
+        dpg.configure_item("au_ros2_settings", show=is_ros2)
+    if dpg.does_item_exist("au_fixed_step"):
+        dpg.configure_item("au_fixed_step", enabled=not is_ros2)
+        if is_ros2:
+            dpg.set_value("au_fixed_step", False)
+    if dpg.does_item_exist("au_save_data"):
+        show_save = (not is_ros2) and dpg.does_item_exist("au_fixed_step") and dpg.get_value("au_fixed_step")
+        dpg.configure_item("au_save_data", show=show_save)
+    _save_state()
+
+
 _STATUS_MIN_INTERVAL = 0.1   # 10Hz
 
 
@@ -316,6 +367,17 @@ def _on_start() -> None:
     global _running_step_mode, _entity_slot
     count    = dpg.get_value("au_vehicle_count")
     map_name = dpg.get_value("au_map_combo").strip() or None
+    interface = dpg.get_value("au_interface") if dpg.does_item_exist("au_interface") else _INTERFACE_UDP
+    ros2_vi_topic = (
+        dpg.get_value("au_ros2_vehicle_info_topic").strip()
+        if dpg.does_item_exist("au_ros2_vehicle_info_topic")
+        else _DEFAULT_ROS2_VI_TOPIC
+    ) or _DEFAULT_ROS2_VI_TOPIC
+    ros2_ctrl_topic = (
+        dpg.get_value("au_ros2_manual_control_topic").strip()
+        if dpg.does_item_exist("au_ros2_manual_control_topic")
+        else _DEFAULT_ROS2_CTRL_TOPIC
+    ) or _DEFAULT_ROS2_CTRL_TOPIC
     vehicles = []
     for i in range(1, count + 1):
         eid = dpg.get_value(f"au_entity_id_{i}").strip()
@@ -326,6 +388,9 @@ def _on_start() -> None:
             "path":          "path_link.csv",
             "entity_id":     eid,
             "vi_port":       dpg.get_value(f"au_vi_port_{i}"),
+            "interface":     interface,
+            "ros2_vehicle_info_topic": ros2_vi_topic,
+            "ros2_manual_control_topic": ros2_ctrl_topic,
             "max_speed_kph": dpg.get_value(f"au_max_speed_kph_{i}"),
         })
 
@@ -376,6 +441,9 @@ def _save_state() -> None:
         data = {
             "au_map_combo":            dpg.get_value("au_map_combo"),
             "au_vehicle_count":        dpg.get_value("au_vehicle_count"),
+            "au_interface":            dpg.get_value("au_interface"),
+            "au_ros2_vehicle_info_topic": dpg.get_value("au_ros2_vehicle_info_topic"),
+            "au_ros2_manual_control_topic": dpg.get_value("au_ros2_manual_control_topic"),
             "au_collision_enable":     dpg.get_value("au_collision_enable"),
             "au_collision_chaser":     dpg.get_value("au_collision_chaser"),
             "au_collision_target":     dpg.get_value("au_collision_target"),
@@ -412,6 +480,10 @@ def _load_state() -> None:
         _int ("au_collision_target",      data, 1)
         _float("au_collision_speed_kph",   data, 60.0)
         _float("au_collision_trigger_kph", data, 5.0)
+        _str("au_interface", data, _INTERFACE_UDP)
+        _str("au_ros2_vehicle_info_topic", data, _DEFAULT_ROS2_VI_TOPIC)
+        _str("au_ros2_manual_control_topic", data, _DEFAULT_ROS2_CTRL_TOPIC)
+        _on_interface_change(app_data=dpg.get_value("au_interface") if dpg.does_item_exist("au_interface") else _INTERFACE_UDP)
 
         # 체크박스 상태에 따라 설정 패널 표시
         if dpg.does_item_exist("au_collision_settings"):
@@ -435,6 +507,11 @@ def _int(tag: str, data: dict, default: int) -> None:
 def _float(tag: str, data: dict, default: float) -> None:
     if dpg.does_item_exist(tag):
         dpg.set_value(tag, float(data.get(tag, default)))
+
+
+def _str(tag: str, data: dict, default: str) -> None:
+    if dpg.does_item_exist(tag):
+        dpg.set_value(tag, str(data.get(tag, default)))
 
 
 def _collect_vehicle_state() -> list:
