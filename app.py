@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # app.py
+import json
 import os
 import socket
 import threading
@@ -34,6 +35,10 @@ _logo_tag = None   # Loaded in main() when the logo texture is available.
 # Layout constants
 W_INIT, H_INIT = 1400, 1200  # Initial viewport size.
 W_MIN,  H_MIN  = 900,  600   # Minimum viewport size.
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_STATE_FILE = os.path.join(_BASE_DIR, "config", "app_state.json")
+_DEFAULT_TAB = "udp"
+_TAB_KEYS = {"udp", "udp_ctrl", "cam_sensor", "lc", "au", "fp", "tfp"}
 CMD_W      = 400        # Fixed command panel width.
 LOG_H      = 280        # Fixed log panel height.
 TITLEBAR_H = 38         # Title bar plus separator height.
@@ -44,6 +49,65 @@ def _vp_w():  return dpg.get_viewport_width()
 def _vp_h():  return dpg.get_viewport_height()
 def _top_h(): return max(_vp_h() - TITLEBAR_H - LOG_H - PAD, 100)
 def _mon_w(): return max(_vp_w() - CMD_W - PAD * 3, 200)
+
+
+def _load_app_state() -> dict:
+    try:
+        with open(_APP_STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_app_state(state=None) -> None:
+    try:
+        width = int(dpg.get_viewport_width())
+        height = int(dpg.get_viewport_height())
+        if width < W_MIN or height < H_MIN:
+            return
+
+        os.makedirs(os.path.dirname(_APP_STATE_FILE), exist_ok=True)
+        with open(_APP_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "viewport": {
+                        "width": width,
+                        "height": height,
+                    },
+                    "selected_tab": _normalize_tab(
+                        getattr(state, "selected_tab", _DEFAULT_TAB)
+                    ),
+                },
+                f,
+                indent=2,
+            )
+    except Exception:
+        pass
+
+
+def _initial_viewport_size() -> tuple:
+    state = _load_app_state()
+    viewport = state.get("viewport")
+    if not isinstance(viewport, dict):
+        return W_INIT, H_INIT
+
+    try:
+        width = max(W_MIN, int(viewport.get("width", W_INIT)))
+        height = max(H_MIN, int(viewport.get("height", H_INIT)))
+    except Exception:
+        return W_INIT, H_INIT
+
+    return width, height
+
+
+def _normalize_tab(tab_name: str) -> str:
+    return tab_name if tab_name in _TAB_KEYS else _DEFAULT_TAB
+
+
+def _initial_selected_tab() -> str:
+    state = _load_app_state()
+    return _normalize_tab(str(state.get("selected_tab", _DEFAULT_TAB)))
 
 
 # ============================================================
@@ -114,6 +178,7 @@ class AppState:
         self.ad_runners:      list = []
         self.step_ad_runners: list = []
         self.lc_runner   = None
+        self.selected_tab = _initial_selected_tab()
         self._connecting = False
         self._conn_lock  = threading.Lock()
 
@@ -680,6 +745,8 @@ def build_ui(state: AppState):
             dpg.add_theme_color(dpg.mvThemeCol_Text,          (180, 180, 185, 255))
 
     def _select_tab(name: str) -> None:
+        name = _normalize_tab(name)
+        state.selected_tab = name
         dpg.configure_item("mon_scroll", show=(name == "udp"))
         dpg.configure_item("udp_ctrl_scroll", show=(name == "udp_ctrl"))
         dpg.configure_item("cam_sensor_scroll", show=(name == "cam_sensor"))
@@ -822,14 +889,7 @@ def build_ui(state: AppState):
                                       border=False, show=False):
                     tfp_panel.build(parent="tfp_scroll")
 
-                # Initial button themes.
-                dpg.bind_item_theme("tab_btn_udp", "theme_tab_active")
-                dpg.bind_item_theme("tab_btn_udp_ctrl", "theme_tab_inactive")
-                dpg.bind_item_theme("tab_btn_cam_sensor", "theme_tab_inactive")
-                dpg.bind_item_theme("tab_btn_lc",  "theme_tab_inactive")
-                dpg.bind_item_theme("tab_btn_au",  "theme_tab_inactive")
-                dpg.bind_item_theme("tab_btn_fp",  "theme_tab_inactive")
-                dpg.bind_item_theme("tab_btn_tfp", "theme_tab_inactive")
+                _select_tab(state.selected_tab)
 
         # Bottom log area.
         # no_scrollbar=True because log_child owns its own scrolling.
@@ -927,9 +987,10 @@ def main():
         except Exception:
             pass
 
+    viewport_w, viewport_h = _initial_viewport_size()
     dpg.create_viewport(
         title=APP_TITLE,
-        width=W_INIT, height=H_INIT,
+        width=viewport_w, height=viewport_h,
         min_width=W_MIN, min_height=H_MIN,
         resizable=True,
         small_icon=_ICO_PATH if os.path.exists(_ICO_PATH) else "",
@@ -992,6 +1053,7 @@ def main():
         state.receiver.stop()
     if state.tcp_sock:
         _close_socket(state.tcp_sock)
+    _save_app_state(state)
     dpg.destroy_context()
 
 
