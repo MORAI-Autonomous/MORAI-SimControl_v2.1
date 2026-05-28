@@ -7,18 +7,21 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-_TMPL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
+from utils.template_paths import iter_template_paths, resolve_template_path
 
 
 @dataclass(frozen=True)
 class TemplateInfo:
     filename: str
+    path: str
     name: str
     is_control: bool
 
 
 def _load_template_info(filename: str) -> Optional[TemplateInfo]:
-    path = os.path.join(_TMPL_DIR, filename)
+    path = resolve_template_path(filename)
+    if path is None:
+        return None
     try:
         with open(path, "r", encoding="utf-8") as fp:
             raw = json.load(fp)
@@ -27,21 +30,20 @@ def _load_template_info(filename: str) -> Optional[TemplateInfo]:
 
     mt = raw.get("messageTemplate", {})
     return TemplateInfo(
-        filename=filename,
+        filename=os.path.basename(path),
+        path=path,
         name=str(mt.get("name", filename.replace(".tmpl", ""))),
         is_control=bool(mt.get("isControl", False)),
     )
 
 
 def get_template_infos() -> List[TemplateInfo]:
-    if not os.path.isdir(_TMPL_DIR):
-        return []
     infos: List[TemplateInfo] = []
-    for filename in sorted(f for f in os.listdir(_TMPL_DIR) if f.lower().endswith(".tmpl")):
-        info = _load_template_info(filename)
+    for path in iter_template_paths() or ():
+        info = _load_template_info(os.path.basename(path))
         if info is not None:
             infos.append(info)
-    return infos
+    return sorted(infos, key=lambda info: info.filename.lower())
 
 
 def get_templates() -> List[str]:

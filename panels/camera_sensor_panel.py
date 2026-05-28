@@ -15,6 +15,7 @@ from receivers.camera_depth_receiver import CameraDepthReceiver
 from receivers.camera_receiver import CameraReceiver
 from receivers.camera_semantic_receiver import CameraSemanticReceiver
 from receivers.camera_sensor_receiver import CameraSensorReceiver, draw_bbox_overlays
+from utils.template_paths import resolve_template_path
 import utils.ui_queue as ui_queue
 
 _SLOT_COUNT = 4
@@ -45,11 +46,7 @@ _DEPTH_SCALE_RAW_32FC1 = "Raw 32FC1"
 _DEPTH_SCALE_ITEMS = [_DEPTH_SCALE_MORAI_255, _DEPTH_SCALE_RAW_32FC1]
 _DEPTH_SCALE_M = 200.0 / 255.0
 _TEMPLATE_PATHS = {
-    _TPL_RGB_BBOX: os.path.join(
-        _ROOT_DIR,
-        "templates",
-        _TPL_RGB_BBOX,
-    ),
+    _TPL_RGB_BBOX: resolve_template_path(_TPL_RGB_BBOX),
 }
 
 
@@ -289,7 +286,7 @@ def _start_slot(slot: int) -> None:
             ip=ip,
             port=port,
             on_packet=lambda packet, s=slot: _on_bbox_packet(s, packet),
-            tmpl_path=_TEMPLATE_PATHS[_TPL_RGB_BBOX],
+            tmpl_path=_TEMPLATE_PATHS.get(_TPL_RGB_BBOX),
         )
 
     state.receiver.start()

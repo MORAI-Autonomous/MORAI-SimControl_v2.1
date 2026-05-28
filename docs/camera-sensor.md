@@ -1,4 +1,4 @@
-﻿# Camera Sensor Panel
+# Camera Sensor Panel
 
 이 문서는 `Camera Sensor` 패널의 현재 상태와 Depth Camera 송수신 조사 결과를 정리합니다.
 
@@ -15,16 +15,17 @@
 
 ## 주요 파일
 
-- [panels/camera_sensor_panel.py](/C:/Dev/MORAI-SimControl_v2.1/panels/camera_sensor_panel.py:1)
-- [receivers/camera_receiver.py](/C:/Dev/MORAI-SimControl_v2.1/receivers/camera_receiver.py:1)
-- [receivers/camera_depth_receiver.py](/C:/Dev/MORAI-SimControl_v2.1/receivers/camera_depth_receiver.py:1)
-- [receivers/camera_semantic_receiver.py](/C:/Dev/MORAI-SimControl_v2.1/receivers/camera_semantic_receiver.py:1)
-- [receivers/camera_sensor_receiver.py](/C:/Dev/MORAI-SimControl_v2.1/receivers/camera_sensor_receiver.py:1)
+- [panels/camera_sensor_panel.py](../panels/camera_sensor_panel.py)
+- [receivers/camera_receiver.py](../receivers/camera_receiver.py)
+- [receivers/camera_depth_receiver.py](../receivers/camera_depth_receiver.py)
+- [receivers/camera_semantic_receiver.py](../receivers/camera_semantic_receiver.py)
+- [receivers/camera_sensor_receiver.py](../receivers/camera_sensor_receiver.py)
 
 ## Templates
 
 현재 Camera Sensor 패널에서 선택하는 template은 5개입니다.
 
+- 위치: `templates/camera/`
 - `Camera RGB.tmpl`
 - `Camera Depth.tmpl`
 - `Camera Semantic.tmpl`

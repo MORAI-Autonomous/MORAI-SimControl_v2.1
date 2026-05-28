@@ -17,7 +17,7 @@ flowchart TD
     lane["lane_control/*<br/>camera lane follow"]
     ad["autonomous_driving/*<br/>path follow and MGeo logic"]
     utils["utils/*<br/>UI queue and input helpers"]
-    templates["templates/*.tmpl<br/>UDP message layouts"]
+    templates["templates/*/*.tmpl<br/>UDP message layouts"]
     config["config/*.json<br/>runtime state"]
     samples["samples/*<br/>playback inputs"]
 
@@ -186,7 +186,7 @@ flowchart TD
 
 - `panels/*` must not import `app.py`; callbacks should be injected from the entrypoint.
 - Background receiver threads must not update DearPyGUI directly; use `utils.ui_queue.post()`.
-- UDP camera/template changes should be reviewed with the matching `templates/*.tmpl` file.
+- UDP camera/template changes should be reviewed with the matching file under `templates/*/`.
 - TCP API changes should update `transport/message_schema.py`, regenerate `docs/tcp-api.md`, and run payload tests.
 - Depth camera changes should compare three outputs separately: raw receiver stats, `_visualize_depth()` debug PNG, and GUI texture preview.
 

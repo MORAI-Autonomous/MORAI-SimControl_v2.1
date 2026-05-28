@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # ui_queue.py
 """
 백그라운드 스레드(Receiver, AutoCaller 등)에서 DPG UI를 안전하게 업데이트하기 위한 큐.

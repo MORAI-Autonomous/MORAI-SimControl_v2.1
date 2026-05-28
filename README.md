@@ -1,4 +1,4 @@
-﻿# MORAI Sim Control Example Code
+# MORAI Sim Control Example Code
 
 MORAI 시뮬레이터를 TCP/UDP로 제어하기 위한 Python 예제 코드입니다.
 
@@ -45,9 +45,6 @@ python app_cli.py
 ```text
 app.py
 app_cli.py
-ad_runner.py
-step_ad_runner.py
-lane_runner.py
 
 autonomous_driving/
 config/
@@ -55,10 +52,16 @@ docs/
 panels/
 receivers/
 templates/
+  camera/
+  control/
+  event/
+  sensor/
+  vehicle/
 tests/
 tools/
 transport/
 utils/
+runners/
 samples/
 ```
 
@@ -67,19 +70,20 @@ samples/
 - `transport/`: TCP packet builder/parser, request/response schema, receiver thread
 - `receivers/`: UDP receiver와 `.tmpl` 기반 parser
 - `panels/`: DearPyGUI 패널
+- `runners/`: GUI에서 사용하는 Lane/Path Follow runner 래퍼
 - `lane_control/`: lane detection, BEV/preprocess, PD/PI control
 - `autonomous_driving/`: Path Follow, trajectory, multi-vehicle 제어
 - `config/`: 런타임 상태 저장 파일
 - `docs/`: 구조, 워크플로, TCP 인터페이스 문서
-- `samples/`: 기능별 샘플 입력 파일
+- `samples/`: 기능별 샘플 입력 파일과 suite 예제
 - `tools/udp_debug/`: standalone UDP 분석/우회 스크립트 모음
 
 주요 문서:
 
-- [docs/architecture.md](/C:/Dev/MORAI-SimControl_v2.1/docs/architecture.md:1): 구조와 패턴
-- [docs/camera-sensor.md](/C:/Dev/MORAI-SimControl_v2.1/docs/camera-sensor.md:1): Camera Sensor / Depth Cam 조사 정리
-- [docs/tcp-api.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-api.md:1): TCP API reference
-- [docs/workflow.md](/C:/Dev/MORAI-SimControl_v2.1/docs/workflow.md:1): 개발 워크플로
+- [docs/architecture.md](docs/architecture.md): 구조와 패턴
+- [docs/camera-sensor.md](docs/camera-sensor.md): Camera Sensor / Depth Cam 조사 정리
+- [docs/tcp-api.md](docs/tcp-api.md): TCP API reference
+- [docs/workflow.md](docs/workflow.md): 개발 워크플로
 
 ## GUI Tabs
 
@@ -101,7 +105,7 @@ Camera stream을 최대 4개 슬롯에서 독립적으로 수신하고 표시합
 - Depth 표시/scale 비교 옵션 제공
 - Semantic / Instance stream 표시 지원
 - RGB+BBox 모드는 2D/3D bounding box overlay 표시
-- 상세 내용은 [docs/camera-sensor.md](/C:/Dev/MORAI-SimControl_v2.1/docs/camera-sensor.md:1)를 참고
+- 상세 내용은 [docs/camera-sensor.md](docs/camera-sensor.md)를 참고
 
 ### Lane Control
 
@@ -156,26 +160,27 @@ speed = sqrt(local_velocity.x^2 + local_velocity.y^2)
 
 ### TCP API
 
-TCP API 명세는 [transport/message_schema.py](/C:/Dev/MORAI-SimControl_v2.1/transport/message_schema.py:1)를 기준으로 관리합니다.
-상세 packet header, payload layout, request/response/notification 목록은 자동 생성 문서인 [docs/tcp-api.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-api.md:1)를 참고합니다.
+TCP API 명세는 [transport/message_schema.py](transport/message_schema.py)를 기준으로 관리합니다.
+상세 packet header, payload layout, request/response/notification 목록은 자동 생성 문서인 [docs/tcp-api.md](docs/tcp-api.md)를 참고합니다.
 
 주요 구현 파일:
 
-- [transport/protocol_defs.py](/C:/Dev/MORAI-SimControl_v2.1/transport/protocol_defs.py:1)
-- [transport/tcp_transport.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_transport.py:1)
-- [transport/tcp_thread.py](/C:/Dev/MORAI-SimControl_v2.1/transport/tcp_thread.py:1)
+- [transport/protocol_defs.py](transport/protocol_defs.py)
+- [transport/tcp_transport.py](transport/tcp_transport.py)
+- [transport/tcp_thread.py](transport/tcp_thread.py)
 
 ### UDP Template API
 
-UDP payload는 `templates/*.tmpl` JSON template을 기준으로 파싱하거나 생성합니다.
+UDP payload는 `templates/**/*.tmpl` JSON template을 기준으로 파싱하거나 생성합니다.
 
 - `isControl == false`: `UDP Monitor`와 camera/sensor 수신 계열에서 사용
 - `isControl == true`: `UDP Control`에서 입력 폼 생성과 payload 전송에 사용
-- template 목록과 control/receive 분리는 [panels/monitor_utils.py](/C:/Dev/MORAI-SimControl_v2.1/panels/monitor_utils.py:1)에서 처리
+- template 파일은 `camera/`, `control/`, `event/`, `sensor/`, `vehicle/` 하위 폴더로 분리되어 있습니다.
+- template 목록과 control/receive 분리는 [panels/monitor_utils.py](panels/monitor_utils.py)에서 처리
 
 ## API Change Workflow
 
-TCP 인터페이스를 추가하거나 수정할 때는 [docs/tcp-interface-checklist.md](/C:/Dev/MORAI-SimControl_v2.1/docs/tcp-interface-checklist.md:1)를 따릅니다.
+TCP 인터페이스를 추가하거나 수정할 때는 [docs/tcp-interface-checklist.md](docs/tcp-interface-checklist.md)를 따릅니다.
 
 기본 검증:
 

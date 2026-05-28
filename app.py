@@ -13,11 +13,11 @@ from transport.protocol_defs import *
 import transport.tcp_transport as tcp
 import transport.tcp_thread as tcp_thread_mod
 import automation.automation as ac
-import ad_runner as AdRunner_mod
-from ad_runner import AdRunner
-from ros2_ad_runner import Ros2AdRunner
-from step_ad_runner import StepAdRunner
-from lane_runner import LaneRunner
+import runners.ad_runner as AdRunner_mod
+from runners.ad_runner import AdRunner
+from runners.ros2_ad_runner import Ros2AdRunner
+from runners.step_ad_runner import StepAdRunner
+from runners.lane_runner import LaneRunner
 import utils.ui_queue as ui_queue
 import panels.log               as log_panel
 import panels.monitor            as monitor_panel

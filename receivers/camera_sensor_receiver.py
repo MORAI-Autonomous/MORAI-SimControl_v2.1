@@ -13,6 +13,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from utils.template_paths import resolve_template_path
+
 _HEADER_FMT = "<IHH"
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
 _RECV_BUF = 65535
@@ -65,11 +67,13 @@ class CameraSensorReceiver(threading.Thread):
         self._debug_last: Dict[str, float] = {}
         self._packet_seq = 0
 
-        self._tmpl_path = tmpl_path or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "templates",
-            "CameraSensorMessageTemplate.tmpl",
+        self._tmpl_path = (
+            tmpl_path
+            or resolve_template_path("CameraSensorMessageTemplate.tmpl")
+            or resolve_template_path("Camera With 2D_3D Bounding Box.tmpl")
         )
+        if self._tmpl_path is None:
+            raise FileNotFoundError("CameraSensorMessageTemplate.tmpl")
         self._repeat_fields = self._load_repeat_fields()
         self._row_fmt = "<" + "".join(_TYPE_MAP[t][0] for _, t in self._repeat_fields)
         self._row_size = struct.calcsize(self._row_fmt)

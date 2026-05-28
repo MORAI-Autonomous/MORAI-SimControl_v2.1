@@ -10,9 +10,9 @@ import panels.log as log
 import transport.protocol_defs as proto
 from receivers.template_parser import TemplateParser, FieldDef
 from panels.monitor_utils import get_control_templates
+from utils.template_paths import resolve_template_path
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_TMPL_DIR = os.path.join(_BASE_DIR, "templates")
 _STATE_FILE = os.path.join(_BASE_DIR, "config", "udp_control_state.json")
 
 _send_fn: Optional[Callable] = None
@@ -106,8 +106,8 @@ def _on_template_change(sender, app_data, user_data=None) -> None:
 
 def _load_template(filename: str) -> None:
     global _current_template, _current_parser, _field_tags
-    path = os.path.join(_TMPL_DIR, filename)
-    if not os.path.isfile(path):
+    path = resolve_template_path(filename)
+    if path is None:
         _clear_template()
         return
 

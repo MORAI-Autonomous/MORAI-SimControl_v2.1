@@ -1,4 +1,4 @@
-﻿# Architecture Patterns
+# Architecture Patterns
 
 ## ui_queue
 
@@ -216,14 +216,15 @@ speed = sqrt(local_velocity.x^2 + local_velocity.y^2)
 
 ## UDP Template Split
 
-`templates/*.tmpl`에는 수신용 템플릿과 control용 템플릿이 섞여 있을 수 있습니다.
+`templates/`에는 수신용 템플릿과 control용 템플릿이 섞여 있을 수 있습니다.
+파일은 `camera/`, `control/`, `event/`, `sensor/`, `vehicle/` 하위 폴더로 분리되어 있으며, 패널 코드는 template resolver를 통해 파일명을 기준으로 찾습니다.
 
 - `isControl == false`
   - `UDP Monitor`에서 수신/파싱용으로 사용
 - `isControl == true`
   - `UDP Control`에서 입력 폼 생성과 UDP 전송용으로 사용
 
-분리 기준은 [C:\Dev\MORAI-SimControl_v2.1\panels\monitor_utils.py](C:/Dev/MORAI-SimControl_v2.1/panels/monitor_utils.py:1)에 있습니다.
+분리 기준은 [panels/monitor_utils.py](../panels/monitor_utils.py)에 있습니다.
 
 관련 상태 파일:
 
@@ -237,9 +238,9 @@ speed = sqrt(local_velocity.x^2 + local_velocity.y^2)
 `Camera Sensor` 패널은 `Lane Control`과 별개로 camera stream을 확인하는 독립 패널입니다.
 
 - RGB / Depth / BBox template 선택 지원
-- 수신기: [C:\Dev\MORAI-SimControl_v2.1\receivers\camera_receiver.py](C:/Dev/MORAI-SimControl_v2.1/receivers/camera_receiver.py:1), [C:\Dev\MORAI-SimControl_v2.1\receivers\camera_depth_receiver.py](C:/Dev/MORAI-SimControl_v2.1/receivers/camera_depth_receiver.py:1), [C:\Dev\MORAI-SimControl_v2.1\receivers\camera_sensor_receiver.py](C:/Dev/MORAI-SimControl_v2.1/receivers/camera_sensor_receiver.py:1)
-- 패널: [C:\Dev\MORAI-SimControl_v2.1\panels\camera_sensor_panel.py](C:/Dev/MORAI-SimControl_v2.1/panels/camera_sensor_panel.py:1)
-- 상세: [C:\Dev\MORAI-SimControl_v2.1\docs\camera-sensor.md](C:/Dev/MORAI-SimControl_v2.1/docs/camera-sensor.md:1)
+- 수신기: [receivers/camera_receiver.py](../receivers/camera_receiver.py), [receivers/camera_depth_receiver.py](../receivers/camera_depth_receiver.py), [receivers/camera_sensor_receiver.py](../receivers/camera_sensor_receiver.py)
+- 패널: [panels/camera_sensor_panel.py](../panels/camera_sensor_panel.py)
+- 상세: [docs/camera-sensor.md](./camera-sensor.md)
 
 원칙:
 

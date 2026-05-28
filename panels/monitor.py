@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 import dearpygui.dearpygui as dpg
 
 import utils.ui_queue as ui_queue
+from utils.template_paths import resolve_template_path
 from receivers.template_parser import TemplateParser
 from panels.monitor_utils import (get_receive_templates, is_control_template,
                                   tab_label, make_groups, fmt,
@@ -18,7 +19,6 @@ from panels.monitor_utils import (get_receive_templates, is_control_template,
 from panels.monitor_receiver import UDPThread
 
 _BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_TMPL_DIR   = os.path.join(_BASE_DIR, "templates")
 _STATE_FILE = os.path.join(_BASE_DIR, "config", "monitor_state.json")
 
 # 하단 탭바 태그 (build() 에서 생성, _open_monitor() 에서 참조)
@@ -108,8 +108,8 @@ def _open_monitor(filename: str,
         print(f"[Monitor] skip control template in monitor: {filename}")
         return
 
-    path = os.path.join(_TMPL_DIR, filename)
-    if not os.path.isfile(path):
+    path = resolve_template_path(filename)
+    if path is None:
         return
     try:
         parser = TemplateParser(path)
