@@ -41,7 +41,7 @@
 
 TCP 인터페이스 변경 시 권장 순서:
 
-1. `transport/message_schema.py` 수정
+1. `src/transport/message_schema.py` 수정
 2. `python tools/gen_tcp_docs.py`
 3. `python tools/gen_tcp_docs.py --check`
 4. `python -m unittest tests.test_tcp_payloads`

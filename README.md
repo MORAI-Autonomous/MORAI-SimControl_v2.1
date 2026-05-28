@@ -30,12 +30,13 @@ python app_cli.py
 ```text
 app.py                 GUI entrypoint
 app_cli.py             CLI entrypoint
-transport/             TCP protocol, schema, sender/receiver thread
-receivers/             UDP receivers and template-based parsers
-panels/                DearPyGUI panels
-runners/               GUI runner wrappers for lane/path follow
-lane_control/          Camera-based lane follow logic
-autonomous_driving/    MGeo/path-follow autonomous driving logic
+src/                   Python source root
+src/transport/         TCP protocol, schema, sender/receiver thread
+src/receivers/         UDP receivers and template-based parsers
+src/panels/            DearPyGUI panels
+src/runners/           GUI runner wrappers for lane/path follow
+src/lane_control/      Camera-based lane follow logic
+src/autonomous_driving/ MGeo/path-follow autonomous driving logic
 templates/             UDP template files grouped by domain
 samples/               Sample playback inputs and suite examples
 docs/                  Architecture, API, and workflow notes
@@ -58,7 +59,7 @@ Template files are grouped under `templates/camera`, `templates/control`, `templ
 
 ## API Notes
 
-TCP packet definitions are maintained in [transport/message_schema.py](transport/message_schema.py).
+TCP packet definitions are maintained in [src/transport/message_schema.py](src/transport/message_schema.py).
 The generated TCP API reference is [docs/tcp-api.md](docs/tcp-api.md).
 
 UDP payload parsing and generation are based on `templates/**/*.tmpl`.
@@ -74,7 +75,7 @@ The template discovery logic resolves templates by file name, so panels do not n
 ## Validation
 
 ```bash
-python -m compileall -q app.py app_cli.py runners panels receivers transport utils lane_control tools tests
+python -m compileall -q app.py app_cli.py sitecustomize.py src tools tests
 python tools/gen_tcp_docs.py --check
 python -m unittest tests.test_tcp_payloads
 ```

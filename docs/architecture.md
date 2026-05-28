@@ -6,15 +6,15 @@ This document captures the project rules that matter during feature work.
 
 ```text
 app.py
-  panels/*                 DearPyGUI UI surfaces
-  runners/*                Long-running feature wrappers
-  transport/*              TCP protocol and receiver thread
-  receivers/*              UDP receivers and template parsing
-  utils/ui_queue.py        Main-thread UI dispatch
+  src/panels/*             DearPyGUI UI surfaces
+  src/runners/*            Long-running feature wrappers
+  src/transport/*          TCP protocol and receiver thread
+  src/receivers/*          UDP receivers and template parsing
+  src/utils/ui_queue.py    Main-thread UI dispatch
 
 app_cli.py
-  transport/*
-  utils/input_helper.py
+  src/transport/*
+  src/utils/input_helper.py
 ```
 
 Panels should stay thin. They own DearPyGUI widgets and user interaction, but long-running work belongs in runners or receivers.
@@ -126,11 +126,11 @@ Code should resolve templates by file name through `utils.template_paths.resolve
 
 `Camera Sensor` is a standalone panel for checking camera streams.
 
-- UI: [panels/camera_sensor_panel.py](../panels/camera_sensor_panel.py)
-- RGB receiver: [receivers/camera_receiver.py](../receivers/camera_receiver.py)
-- Depth receiver: [receivers/camera_depth_receiver.py](../receivers/camera_depth_receiver.py)
-- Semantic/Instance receiver: [receivers/camera_semantic_receiver.py](../receivers/camera_semantic_receiver.py)
-- BBox receiver: [receivers/camera_sensor_receiver.py](../receivers/camera_sensor_receiver.py)
+- UI: [src/panels/camera_sensor_panel.py](../src/panels/camera_sensor_panel.py)
+- RGB receiver: [src/receivers/camera_receiver.py](../src/receivers/camera_receiver.py)
+- Depth receiver: [src/receivers/camera_depth_receiver.py](../src/receivers/camera_depth_receiver.py)
+- Semantic/Instance receiver: [src/receivers/camera_semantic_receiver.py](../src/receivers/camera_semantic_receiver.py)
+- BBox receiver: [src/receivers/camera_sensor_receiver.py](../src/receivers/camera_sensor_receiver.py)
 
 Depth rendering details live in [camera-sensor.md](camera-sensor.md).
 
@@ -149,7 +149,7 @@ Runtime parameters are updated through `LaneController.update_params(**kwargs)`.
 
 ## Path Follow
 
-`autonomous_driving/` owns MGeo/path-follow behavior. The GUI starts it through `runners/ad_runner.py` or `runners/step_ad_runner.py`.
+`src/autonomous_driving/` owns MGeo/path-follow behavior. The GUI starts it through `src/runners/ad_runner.py` or `src/runners/step_ad_runner.py`.
 
 Fixed Step mode coordinates this sequence:
 

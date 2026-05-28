@@ -105,7 +105,7 @@ def _rebuild(count: int) -> None:
 
 ## Slider Helper Pattern
 
-`panels/lane_control_panel.py`의 `_slider()`, `_slider_int()`처럼 공통 helper를 두면 일관된 UI를 유지하기 쉽습니다.
+`src/panels/lane_control_panel.py`의 `_slider()`, `_slider_int()`처럼 공통 helper를 두면 일관된 UI를 유지하기 쉽습니다.
 
 보통 포함할 요소:
 

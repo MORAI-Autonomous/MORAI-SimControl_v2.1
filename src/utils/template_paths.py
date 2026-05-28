@@ -3,7 +3,9 @@ from __future__ import annotations
 import os
 from typing import Iterable, Optional
 
-_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from utils.project_paths import ROOT_DIR
+
+_ROOT_DIR = str(ROOT_DIR)
 _TEMPLATE_DIR = os.path.join(_ROOT_DIR, "templates")
 
 

@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 import dearpygui.dearpygui as dpg
 
 import utils.ui_queue as ui_queue
+from utils.project_paths import ROOT_DIR
 from utils.template_paths import resolve_template_path
 from receivers.template_parser import TemplateParser
 from panels.monitor_utils import (get_receive_templates, is_control_template,
@@ -18,7 +19,7 @@ from panels.monitor_utils import (get_receive_templates, is_control_template,
                                   format_repeat_rows)
 from panels.monitor_receiver import UDPThread
 
-_BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BASE_DIR   = str(ROOT_DIR)
 _STATE_FILE = os.path.join(_BASE_DIR, "config", "monitor_state.json")
 
 # 하단 탭바 태그 (build() 에서 생성, _open_monitor() 에서 참조)

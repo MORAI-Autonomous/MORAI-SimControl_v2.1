@@ -16,11 +16,11 @@ Depth testing was previously separate, but is now integrated into this panel.
 
 ## Main Files
 
-- UI: [panels/camera_sensor_panel.py](../panels/camera_sensor_panel.py)
-- RGB receiver: [receivers/camera_receiver.py](../receivers/camera_receiver.py)
-- Depth receiver: [receivers/camera_depth_receiver.py](../receivers/camera_depth_receiver.py)
-- Semantic/Instance receiver: [receivers/camera_semantic_receiver.py](../receivers/camera_semantic_receiver.py)
-- BBox receiver: [receivers/camera_sensor_receiver.py](../receivers/camera_sensor_receiver.py)
+- UI: [src/panels/camera_sensor_panel.py](../src/panels/camera_sensor_panel.py)
+- RGB receiver: [src/receivers/camera_receiver.py](../src/receivers/camera_receiver.py)
+- Depth receiver: [src/receivers/camera_depth_receiver.py](../src/receivers/camera_depth_receiver.py)
+- Semantic/Instance receiver: [src/receivers/camera_semantic_receiver.py](../src/receivers/camera_semantic_receiver.py)
+- BBox receiver: [src/receivers/camera_sensor_receiver.py](../src/receivers/camera_sensor_receiver.py)
 
 ## Templates
 
@@ -195,5 +195,5 @@ Remaining simulator-side item:
 ## Validation
 
 ```bash
-python -m py_compile panels/camera_sensor_panel.py receivers/camera_depth_receiver.py receivers/camera_receiver.py receivers/camera_semantic_receiver.py receivers/camera_sensor_receiver.py
+python -m py_compile src/panels/camera_sensor_panel.py src/receivers/camera_depth_receiver.py src/receivers/camera_receiver.py src/receivers/camera_semantic_receiver.py src/receivers/camera_sensor_receiver.py
 ```

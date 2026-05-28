@@ -10,9 +10,10 @@ import panels.log as log
 import transport.protocol_defs as proto
 from receivers.template_parser import TemplateParser, FieldDef
 from panels.monitor_utils import get_control_templates
+from utils.project_paths import ROOT_DIR
 from utils.template_paths import resolve_template_path
 
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BASE_DIR = str(ROOT_DIR)
 _STATE_FILE = os.path.join(_BASE_DIR, "config", "udp_control_state.json")
 
 _send_fn: Optional[Callable] = None

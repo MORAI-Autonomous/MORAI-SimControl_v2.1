@@ -8,13 +8,14 @@ from typing import Callable, Optional
 import dearpygui.dearpygui as dpg
 import utils.ui_queue as ui_queue
 import panels.log as log
+from utils.project_paths import ROOT_DIR, SRC_DIR
 
 _MAP_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    str(SRC_DIR),
     "autonomous_driving", "config", "map"
 )
 _STATE_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    str(ROOT_DIR),
     "config", "au_state.json"
 )
 

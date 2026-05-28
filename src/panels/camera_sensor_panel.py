@@ -15,6 +15,7 @@ from receivers.camera_depth_receiver import CameraDepthReceiver
 from receivers.camera_receiver import CameraReceiver
 from receivers.camera_semantic_receiver import CameraSemanticReceiver
 from receivers.camera_sensor_receiver import CameraSensorReceiver, draw_bbox_overlays
+from utils.project_paths import ROOT_DIR
 from utils.template_paths import resolve_template_path
 import utils.ui_queue as ui_queue
 
@@ -25,7 +26,7 @@ _VIEW_H = 292
 _FRAME_INTERVAL = 1.0 / 30.0
 _TEX_W = 960
 _TEX_H = 540
-_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT_DIR = str(ROOT_DIR)
 _STATE_FILE = os.path.join(_ROOT_DIR, "config", "camera_sensor_state.json")
 _DEPTH_DEBUG_DIR = os.path.join(_ROOT_DIR, "debug", "camera_depth")
 _DEPTH_DEBUG_SAVE_INTERVAL = 1.0
