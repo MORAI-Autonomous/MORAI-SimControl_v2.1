@@ -11,7 +11,7 @@ flowchart TD
     cli["app_cli.py<br/>CLI entrypoint"]
 
     panels["panels/*<br/>GUI panels"]
-    runners["lane_runner.py / ad_runner.py / step_ad_runner.py<br/>GUI runner wrappers"]
+    runners["runners/*.py<br/>GUI runner wrappers"]
     transport["transport/*<br/>TCP schema, commands, transport, thread"]
     receivers["receivers/*<br/>UDP receivers and template parsing"]
     lane["lane_control/*<br/>camera lane follow"]
@@ -94,7 +94,7 @@ flowchart TD
     app["app.py"]
     command_panel["panels/commands.py"]
     udp_control["panels/udp_control_panel.py"]
-    runners["ad_runner.py / lane_runner.py / step_ad_runner.py"]
+    runners["runners/ad_runner.py / runners/lane_runner.py / runners/step_ad_runner.py"]
     docs["docs/tcp-api.md<br/>generated API reference"]
     tests["tests/test_tcp_payloads.py"]
     generator["tools/gen_tcp_docs.py"]
@@ -119,7 +119,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    runner["lane_runner.py<br/>GUI wrapper"]
+    runner["runners/lane_runner.py<br/>GUI wrapper"]
     panel["panels/lane_control_panel.py<br/>GUI state and preview"]
     controller["lane_control/lane_controller.py<br/>runtime loop"]
     detector["lane_control/lane_detector.py"]
@@ -149,7 +149,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    ad_runner["ad_runner.py / step_ad_runner.py<br/>GUI runner wrappers"]
+    ad_runner["runners/ad_runner.py / runners/step_ad_runner.py<br/>GUI runner wrappers"]
     ad_panel["panels/autonomous_panel.py / panels/step_ad_panel.py"]
     ad_core["autonomous_driving/autonomous_driving.py<br/>path-follow orchestration"]
     config["autonomous_driving/config/config.py"]
@@ -178,7 +178,7 @@ flowchart TD
 1. `transport/message_schema.py`, `transport/protocol_defs.py`, `transport/tcp_transport.py`
 2. `receivers/template_parser.py`, then the specific receiver being changed
 3. `panels/*` UI integration, checking `utils.ui_queue.post()` for background-thread UI writes
-4. Runner wrappers: `lane_runner.py`, `ad_runner.py`, `step_ad_runner.py`
+4. Runner wrappers: `runners/lane_runner.py`, `runners/ad_runner.py`, `runners/step_ad_runner.py`
 5. Domain logic: `lane_control/*` or `autonomous_driving/*`
 6. Docs and tests: `docs/*`, `tools/gen_tcp_docs.py`, `tests/test_tcp_payloads.py`
 

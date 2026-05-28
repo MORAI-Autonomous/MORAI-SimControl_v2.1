@@ -7,7 +7,7 @@ import time
 from transport.protocol_defs import *
 import transport.tcp_transport as tcp
 import transport.tcp_thread as tcp_thread
-import automation.automation as ac
+import runners.auto_caller as ac
 import utils.key_input as key_input
 import transport.commands as commands
 import utils.input_helper as prompt

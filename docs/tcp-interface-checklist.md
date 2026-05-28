@@ -1,43 +1,54 @@
 # TCP Interface Checklist
 
-이 문서는 TCP 인터페이스를 새로 추가하거나 기존 구조를 수정할 때의 작업 순서를 정리합니다.
+Use this checklist when adding or changing a TCP interface.
 
 ## Source Of Truth
 
-- 시작점은 항상 [transport/message_schema.py](../transport/message_schema.py) 입니다.
-- request/response 필드, 반복 필드, 설명을 먼저 여기서 수정합니다.
-- 문서와 일부 helper 검증은 이 파일을 기준으로 생성됩니다.
+[transport/message_schema.py](../transport/message_schema.py) is the source of truth for TCP command definitions.
 
-## 신규 인터페이스 추가
+Generated documentation and most payload tests are derived from that schema. Avoid editing [docs/tcp-api.md](tcp-api.md) by hand.
 
-1. [transport/message_schema.py](../transport/message_schema.py)에 request `MessageSpec` 추가
-2. response가 있으면 `RESPONSE_MESSAGES`에도 추가
-3. 시뮬레이터가 push 하는 passive update가 있으면 `NOTIFICATION_MESSAGES`에도 추가
-4. [transport/protocol_defs.py](../transport/protocol_defs.py)에 `MSG_TYPE_*`와 필요한 format/size 상수 추가
-5. [transport/tcp_transport.py](../transport/tcp_transport.py)에 send 함수와 payload builder 추가
-6. response / notification parser가 필요하면 같은 파일에 parser 추가
-7. 앱 로직에서 response나 passive update를 직접 처리해야 하면 [transport/tcp_thread.py](../transport/tcp_thread.py)에 분기 추가
-8. panel, runner, CLI 같은 실제 호출부 연결
+## Add A New Interface
 
-## 기존 인터페이스 수정
+1. Add the request `MessageSpec` in [transport/message_schema.py](../transport/message_schema.py).
+2. Add a matching response entry to `RESPONSE_MESSAGES` when the simulator sends one.
+3. Add passive simulator updates to `NOTIFICATION_MESSAGES` when needed.
+4. Add or verify the related `MSG_TYPE_*`, format, and size constants in [transport/protocol_defs.py](../transport/protocol_defs.py).
+5. Add the send helper and payload builder in [transport/tcp_transport.py](../transport/tcp_transport.py).
+6. Add response or notification parsing when the payload needs custom handling.
+7. Update [transport/tcp_thread.py](../transport/tcp_thread.py) if app logic must consume the response or notification.
+8. Wire the command into the caller: panel, runner, CLI, or tool.
+9. Add or update payload tests in [tests/test_tcp_payloads.py](../tests/test_tcp_payloads.py).
+10. Regenerate docs and run validation.
 
-1. [transport/message_schema.py](../transport/message_schema.py) 수정
-2. [transport/protocol_defs.py](../transport/protocol_defs.py) 반영 확인
-3. [transport/tcp_transport.py](../transport/tcp_transport.py) send/parser 수정
-4. passive update가 있으면 `NOTIFICATION_MESSAGES`와 notification parser도 같이 수정
-5. [transport/tcp_thread.py](../transport/tcp_thread.py) 처리/로그 갱신
-6. 실제 호출부가 새 필드를 모두 전달하는지 확인
+## Change An Existing Interface
+
+1. Update [transport/message_schema.py](../transport/message_schema.py).
+2. Verify [transport/protocol_defs.py](../transport/protocol_defs.py).
+3. Update send helpers, builders, and parsers in [transport/tcp_transport.py](../transport/tcp_transport.py).
+4. If passive updates are involved, update `NOTIFICATION_MESSAGES` and notification parsing together.
+5. Update response handling and logs in [transport/tcp_thread.py](../transport/tcp_thread.py).
+6. Check every caller passes the full updated field set.
+7. Update tests and generated docs.
 
 ## Validation
 
-- `python tools/gen_tcp_docs.py`
-- `python tools/gen_tcp_docs.py --check`
-- `python -m unittest tests.test_tcp_payloads`
+```bash
+python tools/gen_tcp_docs.py
+python tools/gen_tcp_docs.py --check
+python -m unittest tests.test_tcp_payloads
+```
 
-## Rule Of Thumb
+For a quick syntax pass:
 
-- 명세 변경은 항상 `message_schema.py`부터 시작합니다.
-- request payload가 바뀌면 builder와 golden payload test를 같이 봅니다.
-- response payload가 바뀌면 parser와 `tcp_thread.py` 처리도 같이 봅니다.
-- notification payload가 있으면 `msg_class = 0x03` 경로와 문서 `Notifications` 섹션도 같이 봅니다.
-- `docs/tcp-api.md`는 생성물로 유지합니다.
+```bash
+python -m compileall -q app.py app_cli.py runners panels receivers transport utils lane_control tools tests
+```
+
+## Rules Of Thumb
+
+- Start schema changes from `message_schema.py`.
+- If a request payload changes, update the builder and golden payload test together.
+- If a response payload changes, update the parser and `tcp_thread.py` handling together.
+- If a notification payload exists, check the `msg_class = 0x03` path and the generated `Notifications` section.
+- Treat `docs/tcp-api.md` as generated output.

@@ -1,200 +1,169 @@
 # Architecture Patterns
 
-## ui_queue
+This document captures the project rules that matter during feature work.
 
-DearPyGUI API 호출은 메인 스레드에서만 안전합니다.  
-백그라운드 스레드에서 UI를 변경해야 하면 반드시 `utils.ui_queue.post()`를 사용합니다.
+## Runtime Shape
 
-```python
-# 잘못된 예시
-dpg.set_value("tag", value)
+```text
+app.py
+  panels/*                 DearPyGUI UI surfaces
+  runners/*                Long-running feature wrappers
+  transport/*              TCP protocol and receiver thread
+  receivers/*              UDP receivers and template parsing
+  utils/ui_queue.py        Main-thread UI dispatch
 
-# 올바른 예시
-import utils.ui_queue as ui_queue
-ui_queue.post(lambda: dpg.set_value("tag", value))
+app_cli.py
+  transport/*
+  utils/input_helper.py
 ```
 
-`ui_queue.drain()`은 `app.py`의 메인 루프에서만 호출합니다.
+Panels should stay thin. They own DearPyGUI widgets and user interaction, but long-running work belongs in runners or receivers.
 
----
+## Main-Thread UI Updates
+
+DearPyGUI calls must run on the main thread. Receiver threads and runner threads should post UI work through `utils.ui_queue.post()`.
+
+```python
+import utils.ui_queue as ui_queue
+
+ui_queue.post(lambda: dpg.set_value("status_tag", "Running"))
+```
+
+`ui_queue.drain()` is called from the main loop in `app.py`.
 
 ## Panel Init Pattern
 
-패널 모듈은 `app.py`를 직접 import하지 않습니다.  
-대신 `init()`으로 필요한 callback을 주입받습니다.
+Panel modules must not import `app.py`. Shared app behavior is passed through `init(...)` callbacks.
 
 ```python
 # panels/some_panel.py
 _start_fn = None
-_stop_fn = None
 
-def init(start_fn, stop_fn):
-    global _start_fn, _stop_fn
+def init(start_fn):
+    global _start_fn
     _start_fn = start_fn
-    _stop_fn = stop_fn
 ```
 
 ```python
 # app.py
-some_panel.init(
-    start_fn=state.start_something,
-    stop_fn=state.stop_something,
-)
+some_panel.init(start_fn=state.start_something)
 ```
 
----
+This keeps panel code reusable and avoids circular imports.
 
 ## Runner Ownership
 
-장시간 동작하는 기능은 보통 runner가 담당하고, `AppState`가 그 생명주기를 소유합니다.
+Runners wrap long-running behavior and are owned by `AppState`.
 
-| Runner | 보관 필드 | 모드 | 비고 |
+| Runner | Owner field | Mode | Responsibility |
 |---|---|---|---|
-| `LaneRunner` | `self.lc_runner` | Fixed | 단일 인스턴스 |
-| `AdRunner` | `self.ad_runners` | Fixed | 차량별 개별 인스턴스 |
-| `StepAdRunner` | `self.step_ad_runners` | Fixed Step | 전체 차량을 한 runner가 관리 |
+| `runners.LaneRunner` | `self.lc_runner` | Fixed | Single lane-follow session |
+| `runners.AdRunner` | `self.ad_runners` | Fixed | One runner per path-follow vehicle |
+| `runners.StepAdRunner` | `self.step_ad_runners` | Fixed Step | Multi-vehicle fixed-step orchestration |
 
-```python
-for v in vehicles:
-    runner = AdRunner(...)
-    runner.start()
-    self.ad_runners.append(runner)
-```
+Runners should expose `start()` and `stop()` and should avoid direct DearPyGUI calls.
 
-```python
-runner = StepAdRunner(...)
-runner.start()
-self.step_ad_runners.append(runner)
-```
+## Status Callback Pattern
 
----
-
-## status_cb Pattern
-
-주기적으로 변하는 상태는 매 tick마다 로그를 쌓지 말고, status callback으로 UI 값만 교체합니다.
+High-frequency runtime state should update compact UI values through callbacks instead of writing log lines every tick.
 
 ```python
 runner = AdRunner(
     ...,
-    status_cb=au_panel.update_status,
+    status_cb=autonomous_panel.update_status,
 )
 ```
 
-```python
-def update_status(entity_id, x, y, vel_kmh, accel, brake, steer):
-    def _apply():
-        dpg.set_value("some_tag", f"{vel_kmh:.1f} km/h")
-    ui_queue.post(_apply)
-```
+The callback implementation should post UI updates through `ui_queue` when it can be called from a background thread.
 
-이 방식이 `log.append()`보다 UI 부하가 훨씬 적습니다.
+## Dynamic DearPyGUI Widgets
 
----
-
-## Dynamic Vehicle UI
-
-차량 수에 따라 입력 UI를 다시 만들 때는, 컨테이너 그룹을 미리 만들고 `children_only=True`로 비운 뒤 다시 생성합니다.
+Dynamic UI containers should be created once and rebuilt with `delete_item(..., children_only=True)`.
 
 ```python
 dpg.add_group(tag="au_vehicles_area")
-```
 
-```python
-def _build_vehicles(count: int) -> None:
+def rebuild_vehicles(count: int) -> None:
     dpg.delete_item("au_vehicles_area", children_only=True)
-    for i in range(1, count + 1):
+    for index in range(count):
         with dpg.group(parent="au_vehicles_area"):
-            dpg.add_input_text(tag=f"au_entity_id_{i}")
+            dpg.add_input_text(tag=f"au_entity_id_{index + 1}")
 ```
 
-주의:
+When updating dynamic tags later, guard with `dpg.does_item_exist(tag)`.
 
-- `delete_item(children_only=True)` 후에는 부모를 다시 명시해야 합니다.
-- 동적 태그를 참조하는 update 함수는 항상 `does_item_exist()`로 방어합니다.
+## Runtime Config
 
----
+Runtime state is stored under `config/*.json`.
 
-## config State Files
+- Missing files should not block startup.
+- State save failures should be logged, not treated as fatal application errors.
+- Create `config/` with `os.makedirs(..., exist_ok=True)` before saving.
 
-런타임 상태는 `config/*.json`에 저장합니다.
+Known state files:
 
-- 파일이 없어도 정상 시작해야 함
-- 저장 실패는 치명 오류로 취급하지 않음
-- `os.makedirs(..., exist_ok=True)`로 디렉터리를 자동 생성
-
-예:
-
+- `config/app_state.json`
 - `config/fp_state.json`
 - `config/tfp_state.json`
 - `config/monitor_state.json`
 - `config/udp_control_state.json`
 
----
+## Template Resolution
 
-## lane_control Structure
-
-`lane_control/`은 대략 다음 역할로 나뉩니다.
+UDP templates are grouped by domain under `templates/`.
 
 ```text
-lane_preprocessor.py   BEV 변환, 이진화, 필터
-lane_detector.py       Sliding Window 기반 차선 검출
+templates/camera/
+templates/control/
+templates/event/
+templates/sensor/
+templates/vehicle/
+```
+
+Code should resolve templates by file name through `utils.template_paths.resolve_template_path()` instead of hard-coding subfolders.
+
+## Camera Sensor
+
+`Camera Sensor` is a standalone panel for checking camera streams.
+
+- UI: [panels/camera_sensor_panel.py](../panels/camera_sensor_panel.py)
+- RGB receiver: [receivers/camera_receiver.py](../receivers/camera_receiver.py)
+- Depth receiver: [receivers/camera_depth_receiver.py](../receivers/camera_depth_receiver.py)
+- Semantic/Instance receiver: [receivers/camera_semantic_receiver.py](../receivers/camera_semantic_receiver.py)
+- BBox receiver: [receivers/camera_sensor_receiver.py](../receivers/camera_sensor_receiver.py)
+
+Depth rendering details live in [camera-sensor.md](camera-sensor.md).
+
+## Lane Control
+
+```text
+lane_preprocessor.py   BEV transform, thresholding, filters
+lane_detector.py       Sliding-window lane detection
 controllers.py         EMA, PD, Speed PI
-vehicle_info.py        Vehicle Info UDP 수신
-tune_panel.py          OpenCV 기반 튜닝 창
-lane_controller.py     메인 제어 루프
+vehicle_info.py        Vehicle Info UDP receiver wrapper
+tune_panel.py          OpenCV tuning window
+lane_controller.py     Main control loop
 ```
 
-`LaneController.update_params(**kwargs)`로 실행 중 파라미터를 갱신할 수 있습니다.
+Runtime parameters are updated through `LaneController.update_params(**kwargs)`.
 
-대표 파라미터:
+## Path Follow
 
-- `kp`, `kd`
-- `ema_alpha`
-- `steer_rate`
-- `offset_clip`
-- `invert_steer`
-- `target_kmh`
-- `bev_top_crop`
-- `min_blob_area`
-- `search_ratio`
-- `min_pixels`
+`autonomous_driving/` owns MGeo/path-follow behavior. The GUI starts it through `runners/ad_runner.py` or `runners/step_ad_runner.py`.
 
----
+Fixed Step mode coordinates this sequence:
 
-## autonomous_driving Optimization
-
-### PathManager Waypoint Cache
-
-매 tick 전체 경로를 처음부터 훑지 않고, 이전 waypoint 근처만 탐색합니다.
-
-```python
-BACK, FRONT = 5, 100
-for offset in range(-BACK, FRONT + 1):
-    i = (self._last_wp + offset) % n
-```
-
-### PurePursuit Lookahead Cache
-
-`_last_lfd_idx`부터 먼저 탐색하고, 실패하면 0부터 fallback 탐색합니다.
-
-```python
-for attempt in range(2):
-    start = self._last_lfd_idx if attempt == 0 else 0
-```
-
----
+1. Wait for FixedStep ACK.
+2. Optionally request SaveData.
+3. Wait for Vehicle Info updates.
+4. Send ManualControl commands.
+5. Send the next FixedStep request.
 
 ## Transform Playback
 
-`Transform Playback`은 CSV를 읽어 `TransformControlById`를 순차 전송하는 패널입니다.
+`Transform Playback` reads CSV rows and sends `TransformControlById` commands over time.
 
-기본 규칙:
-
-- 기본 차량 수: `2`
-- 상태 파일: `config/tfp_state.json`
-- 차량별 설정: `path`, `entity_id`
-
-CSV에서 읽는 주요 값:
+Expected columns include:
 
 - `time_sec`
 - `pos_x`, `pos_y`, `pos_z`
@@ -202,74 +171,8 @@ CSV에서 읽는 주요 값:
 - `steer_angle`
 - `speed`
 
-속도 계산:
+State is stored in `config/tfp_state.json`.
 
-```text
-speed = sqrt(local_velocity.x^2 + local_velocity.y^2)
-```
+## Resize Rule
 
-현재 `Vehicle Info` 계열 CSV의 velocity 단위는 `m/s` 기준으로 사용합니다.
-
-재생 흐름은 `FixedStep` 없이 timestamp 차이 기반으로 순차 전송하는 방식입니다.
-
----
-
-## UDP Template Split
-
-`templates/`에는 수신용 템플릿과 control용 템플릿이 섞여 있을 수 있습니다.
-파일은 `camera/`, `control/`, `event/`, `sensor/`, `vehicle/` 하위 폴더로 분리되어 있으며, 패널 코드는 template resolver를 통해 파일명을 기준으로 찾습니다.
-
-- `isControl == false`
-  - `UDP Monitor`에서 수신/파싱용으로 사용
-- `isControl == true`
-  - `UDP Control`에서 입력 폼 생성과 UDP 전송용으로 사용
-
-분리 기준은 [panels/monitor_utils.py](../panels/monitor_utils.py)에 있습니다.
-
-관련 상태 파일:
-
-- `config/monitor_state.json`
-- `config/udp_control_state.json`
-
----
-
-## Camera Sensor Panel
-
-`Camera Sensor` 패널은 `Lane Control`과 별개로 camera stream을 확인하는 독립 패널입니다.
-
-- RGB / Depth / BBox template 선택 지원
-- 수신기: [receivers/camera_receiver.py](../receivers/camera_receiver.py), [receivers/camera_depth_receiver.py](../receivers/camera_depth_receiver.py), [receivers/camera_sensor_receiver.py](../receivers/camera_sensor_receiver.py)
-- 패널: [panels/camera_sensor_panel.py](../panels/camera_sensor_panel.py)
-- 상세: [docs/camera-sensor.md](./camera-sensor.md)
-
-원칙:
-
-- camera stream 확인과 표시용 렌더링만 담당
-- `LaneController`의 debug composite 생성 책임과 분리
-- background receiver thread에서 받은 frame은 `ui_queue.post()`로 texture에 반영
-
----
-
-## Viewport Resize Rule
-
-viewport resize callback 안에서 직접 레이아웃을 바꾸지 않습니다.  
-callback에서는 dirty flag만 세우고, 실제 `dpg.configure_item()` 호출은 메인 루프에서 처리합니다.
-
-```python
-_layout_dirty = True
-
-def _mark_layout_dirty():
-    global _layout_dirty
-    _layout_dirty = True
-
-dpg.set_viewport_resize_callback(_mark_layout_dirty)
-```
-
-```python
-while dpg.is_dearpygui_running():
-    if _layout_dirty:
-        _apply_layout()
-    dpg.render_dearpygui_frame()
-```
-
-이 규칙은 창 이동/리사이즈 시 hit-test, scroll, layout 꼬임을 줄이기 위한 것입니다.
+Viewport resize callbacks should only mark layout state as dirty. Actual `dpg.configure_item()` work should happen from the main loop.

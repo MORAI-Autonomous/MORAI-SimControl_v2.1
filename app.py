@@ -12,7 +12,7 @@ import dearpygui.dearpygui as dpg
 from transport.protocol_defs import *
 import transport.tcp_transport as tcp
 import transport.tcp_thread as tcp_thread_mod
-import automation.automation as ac
+import runners.auto_caller as ac
 import runners.ad_runner as AdRunner_mod
 from runners.ad_runner import AdRunner
 from runners.ros2_ad_runner import Ros2AdRunner
@@ -567,7 +567,7 @@ class AppState:
 def _patch_auto_caller(caller: ac.AutoCaller, on_done=None):
     def patched_run():
         for i in range(caller.max_calls):
-            if caller._stop.is_set():
+            if caller._stop_event.is_set():
                 break
 
             rid = caller._next_rid()
@@ -580,7 +580,7 @@ def _patch_auto_caller(caller: ac.AutoCaller, on_done=None):
             caller.pending_pop(caller.pending, caller.lock, rid, MSG_TYPE_FIXED_STEP)
             if caller.delay_sec > 0:
                 time.sleep(caller.delay_sec)
-            if caller._stop.is_set():
+            if caller._stop_event.is_set():
                 break
 
             rid = caller._next_rid()
@@ -622,7 +622,7 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
         log_panel.append(f"[FP] started: rows={total}, entity={entity_id}", "INFO")
 
         for i, row in enumerate(rows):
-            if caller._stop.is_set():
+            if caller._stop_event.is_set():
                 break
 
             # 1. ManualControlById (no ACK)
@@ -635,7 +635,7 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
                 steer_angle=row['swa'],
             )
 
-            if caller._stop.is_set():
+            if caller._stop_event.is_set():
                 break
 
             # 2. FixedStep (wait for ACK)
@@ -648,7 +648,7 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
                 break
             caller.pending_pop(caller.pending, caller.lock, rid, MSG_TYPE_FIXED_STEP)
 
-            if caller._stop.is_set():
+            if caller._stop_event.is_set():
                 break
 
             # 3. SaveData (wait for ACK)
@@ -667,7 +667,7 @@ def _patch_fp_caller(caller: ac.AutoCaller, rows: list, entity_id: str, on_done=
             # Progress
             fp_panel.update_progress(i + 1, total)
 
-        stopped = caller._stop.is_set()
+        stopped = caller._stop_event.is_set()
         fp_panel.reset_ui(stopped=stopped)
         log_panel.append(f"[FP] {'stopped' if stopped else 'playback complete'} ({total} rows)", "INFO")
         if on_done:
@@ -698,7 +698,7 @@ def _patch_tfp_caller(caller: ac.AutoCaller, vehicles: list, on_done=None):
             return None
 
         for i in range(total):
-            if caller._stop.is_set():
+            if caller._stop_event.is_set():
                 break
 
             for vehicle in vehicles:
@@ -715,7 +715,7 @@ def _patch_tfp_caller(caller: ac.AutoCaller, vehicles: list, on_done=None):
                     speed=row["speed"],
                 )
 
-            if caller._stop.is_set():
+            if caller._stop_event.is_set():
                 break
 
             tfp_panel.update_progress(i + 1, total)
@@ -727,10 +727,10 @@ def _patch_tfp_caller(caller: ac.AutoCaller, vehicles: list, on_done=None):
                     sleep_sec = max(0.0, min(t_next - t_cur, 0.2))
                 else:
                     sleep_sec = max(caller.delay_sec, 0.02)
-                if sleep_sec > 0 and caller._stop.wait(timeout=sleep_sec):
+                if sleep_sec > 0 and caller._stop_event.wait(timeout=sleep_sec):
                     break
 
-        stopped = caller._stop.is_set()
+        stopped = caller._stop_event.is_set()
         tfp_panel.reset_ui(stopped=stopped)
         log_panel.append(f"[TFP] {'stopped' if stopped else 'playback complete'} ({total} rows)", "INFO")
         if on_done:

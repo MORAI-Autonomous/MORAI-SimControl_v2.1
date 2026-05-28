@@ -1,38 +1,40 @@
 # Camera Sensor Panel
 
-이 문서는 `Camera Sensor` 패널의 현재 상태와 Depth Camera 송수신 조사 결과를 정리합니다.
+`Camera Sensor` is the integrated panel for receiving and visualizing camera streams from the simulator.
 
-## 목적
+## Scope
 
-`Camera Sensor` 패널은 Lane Control과 분리된 camera stream 확인용 패널입니다.
+The panel supports up to four sensor slots and the following camera templates:
 
-- RGB camera 수신 확인
-- Depth camera 수신/시각화 확인
-- Semantic camera 수신/시각화 확인
-- Instance camera 수신/시각화 확인
-- RGB + 2D/3D bounding box overlay 확인
-- 최대 4개 sensor slot 독립 실행
+- RGB
+- Depth
+- Semantic
+- Instance
+- RGB with 2D/3D bounding boxes
 
-## 주요 파일
+Depth testing was previously separate, but is now integrated into this panel.
 
-- [panels/camera_sensor_panel.py](../panels/camera_sensor_panel.py)
-- [receivers/camera_receiver.py](../receivers/camera_receiver.py)
-- [receivers/camera_depth_receiver.py](../receivers/camera_depth_receiver.py)
-- [receivers/camera_semantic_receiver.py](../receivers/camera_semantic_receiver.py)
-- [receivers/camera_sensor_receiver.py](../receivers/camera_sensor_receiver.py)
+## Main Files
+
+- UI: [panels/camera_sensor_panel.py](../panels/camera_sensor_panel.py)
+- RGB receiver: [receivers/camera_receiver.py](../receivers/camera_receiver.py)
+- Depth receiver: [receivers/camera_depth_receiver.py](../receivers/camera_depth_receiver.py)
+- Semantic/Instance receiver: [receivers/camera_semantic_receiver.py](../receivers/camera_semantic_receiver.py)
+- BBox receiver: [receivers/camera_sensor_receiver.py](../receivers/camera_sensor_receiver.py)
 
 ## Templates
 
-현재 Camera Sensor 패널에서 선택하는 template은 5개입니다.
+Camera templates are stored under `templates/camera/`.
 
-- 위치: `templates/camera/`
 - `Camera RGB.tmpl`
 - `Camera Depth.tmpl`
 - `Camera Semantic.tmpl`
 - `Instance Cam.tmpl`
 - `Camera With 2D_3D Bounding Box.tmpl`
 
-예전 이름으로 저장된 상태값은 패널에서 새 이름으로 정규화합니다.
+The panel resolves templates by file name through `utils.template_paths`, so the UI does not depend on the physical subfolder.
+
+Legacy names are normalized in the panel when loading saved state:
 
 - `Camera Template.tmpl` -> `Camera RGB.tmpl`
 - `Camera Depth Template.tmpl` -> `Camera Depth.tmpl`
@@ -41,33 +43,28 @@
 
 ## Panel UI
 
-각 slot은 아래 값을 가집니다.
+Each slot stores:
 
-- `Template`: RGB / Depth / Semantic / Instance / BBox template 선택
+- `Template`
 - `Depth View`: `Simulator`, `Grayscale`, `Turbo`
 - `Scale`: `MORAI 0-255`, `Raw 32FC1`
 - `IP`, `Port`
-- `Start`, `Stop`
-- FPS, frame size, type, info, last RX 표시
+- Start/Stop state
+- FPS, frame size, type, info, last RX timestamp
 
-상태 파일:
+Panel state is saved to `config/camera_sensor_state.json`.
 
-- `config/camera_sensor_state.json`
-
-스크롤은 app의 `cam_sensor_scroll` 하나가 담당합니다. Camera Sensor 패널 내부의 전체 child window는 사용하지 않고, slot card의 내부 스크롤도 비활성화합니다.
+The panel uses one outer scroll container. Slot cards do not create their own nested scrollbars.
 
 ## Threading Rule
 
-receiver thread에서 DearPyGUI API를 직접 호출하지 않습니다.
+Receiver callbacks must not call DearPyGUI directly. They process the packet/frame and post UI updates through `utils.ui_queue.post()`.
 
-- receiver callback에서 frame/packet 처리
-- texture/UI 갱신은 `utils.ui_queue.post()`로 main thread에 전달
+## Depth Payload
 
-## Depth Payload Parsing
+`Camera Depth.tmpl` is parsed as a `32FC1` depth image.
 
-Depth receiver는 `Camera Depth.tmpl` 구조에 맞춰 payload를 해석합니다.
-
-필드:
+Expected fields:
 
 - width
 - height
@@ -77,70 +74,68 @@ Depth receiver는 `Camera Depth.tmpl` 구조에 맞춰 payload를 해석합니�
 - step
 - image data
 
-현재 지원 encoding:
+Receiver validation:
 
-- `32FC1`
+- width and height must be greater than zero.
+- encoding must be `32FC1`.
+- little-endian data is expected.
+- `step` must match `width * 4`.
+- `image_size` must match `width * height * 4`.
 
-현재 receiver는 아래 조건을 검증합니다.
+Image data is read as little-endian float32:
 
-- width / height > 0
-- encoding == `32FC1`
-- little-endian only
-- step == width * 4
-- image_size == width * height * 4
-
-수신된 image data는 `float32` 배열로 읽습니다.
-
-```text
+```python
 depth_raw = np.frombuffer(image_bytes, dtype="<f4").reshape((height, width))
 ```
 
 ## Depth Scale Modes
 
-Depth Cam 조사 중 raw 값의 의미가 명확하지 않아 두 가지 scale mode를 유지합니다.
-
 ### MORAI 0-255
 
-기존 해석 방식입니다.
+This mode treats the incoming value as a 0-255 encoded depth signal:
 
 ```text
 depth_m = depth_raw * (200.0 / 255.0)
 ```
 
-시뮬레이터가 0~255 계열로 encoding한 값을 보낸다고 가정합니다.
+It exists for compatibility with older simulator output.
 
 ### Raw 32FC1
 
-수신한 `32FC1` 값을 meter 단위 선형 depth로 가정합니다.
+This mode treats incoming `32FC1` values as meters:
 
 ```text
 depth_m = depth_raw
 ```
 
-ROS의 일반적인 `32FC1` depth image 관례에 가까운 해석입니다.
+This is the mode closest to typical ROS depth image semantics.
 
-## Depth Camera Investigation
+## Depth Visualization
 
-Depth Cam 송수신 테스트에서 클라이언트 수신 화면, 클라이언트 `_visualize_depth()` 저장 PNG, 시뮬레이터 `SaveDepthAsPng()` 저장 PNG, 시뮬레이터 viewport 화면이 서로 다르게 보이는 문제가 있었습니다.
+The client supports multiple visual modes. The most important comparison path is:
 
-확인된 점:
+1. Receiver stats: raw min/max and converted depth min/max
+2. Client `_visualize_depth()` debug PNG
+3. Simulator `SaveDepthAsPng()` PNG
+4. Simulator viewport preview
 
-- UDP 수신은 안정적으로 동작합니다.
-- frame size는 640 x 480으로 정상 수신됩니다.
-- FPS도 26~27 수준으로 안정적입니다.
-- `Depth View=Turbo`, `Scale=Raw 32FC1` 조건에서도 클라이언트 저장 PNG와 시뮬레이터 저장 PNG의 색감 차이가 남았습니다.
-- 클라이언트 GUI resize/display 경로가 아니라, 저장 PNG끼리 비교해도 차이가 확인됐습니다.
+The client debug PNG and simulator saved PNG should match when both use the same raw frame, scale mode, and color map.
 
-따라서 byte order, step, payload size, frame reshape 문제 가능성은 낮습니다.
+The simulator viewport can differ because it may use a separate visualization or post-process path.
 
-현재 가장 유력한 결론:
+## Depth Investigation Result
 
-- 클라이언트 수신/파싱과 `_visualize_depth()` 수식 문제 가능성은 낮습니다.
-- 시뮬레이터 `SaveDepthAsPng()`의 C++ `TurboLUT` 고인덱스 구간이 현재 Python OpenCV `cv2.COLORMAP_TURBO`와 다릅니다.
-- 고인덱스 `240~255` 구간에서 시뮬레이터 LUT가 더 어두운 값을 사용해 가까운 영역이 검게 뭉치고 horizontal band가 도드라지는 현상을 설명합니다.
-- 시뮬레이터 viewport는 별도 depth visualization / post-process 경로일 수 있으므로 저장 PNG와 직접 동일해야 하는 기준으로 보지 않습니다.
+The latest confirmed issue was not packet parsing, byte order, `step`, or reshape.
 
-클라이언트 환경에서 확인한 OpenCV Turbo RGB 예시:
+Observed facts:
+
+- UDP receive was stable.
+- Frame size was received as `640 x 480`.
+- FPS was stable around 26-27.
+- Client debug PNG and simulator saved PNG differed even outside the GUI resize/display path.
+- The strongest candidate was the simulator C++ `TurboLUT` high-index range, especially indices `240-255`.
+
+OpenCV Turbo RGB examples from the Python client environment:
 
 ```text
 240 = (169, 22, 1)
@@ -150,59 +145,54 @@ Depth Cam 송수신 테스트에서 클라이언트 수신 화면, 클라이언�
 255 = (122, 4, 3)
 ```
 
-## Recommended Direction
+If the simulator LUT uses darker values in this range, near objects and lower image regions can look too dark and horizontal bands can become more visible.
 
-권장 해결 방향은 시뮬레이터 저장 코드의 LUT 교체입니다.
+## Recommended Simulator Check
 
-- Python OpenCV `cv2.COLORMAP_TURBO`에서 256개 RGB 값을 추출
-- 시뮬레이터 `SaveDepthAsPng()`의 `TurboLUT[256][3]` 전체 교체
-- 같은 scene/frame 조건에서 클라이언트 `_visualize_depth()` debug PNG와 시뮬레이터 저장 PNG 재비교
+When the saved PNG does not match the client debug PNG:
 
-추가 확인 후보:
-
-- sky/far pixel이 `0`인지, `200+` 또는 far clip 값인지 확인
-- 시뮬레이터 viewport와 저장 PNG가 서로 다른 visualization 경로인지 확인
-
-클라이언트에는 `_save_depth_visual_debug()` helper가 남아 있지만 기본 실행은 비활성화되어 있습니다. 필요할 때 `_on_depth_packet()`의 주석 처리된 호출을 되살려 저장 PNG 비교에 사용합니다.
+1. Extract the exact 256 RGB entries from Python OpenCV `cv2.COLORMAP_TURBO`.
+2. Replace the simulator `SaveDepthAsPng()` `TurboLUT[256][3]` with those values.
+3. Compare the client debug PNG and simulator saved PNG from the same scene and frame.
+4. Separately inspect sky/far pixels to decide whether invalid/far values should be clamped to black.
 
 ## Semantic / Instance
 
-Semantic과 Instance camera는 공통 segmentation receiver를 사용합니다.
+Semantic and Instance cameras share the segmentation receiver.
 
-- encoded image payload는 `cv2.imdecode()`로 처리
-- raw `BGRA8`, `RGB8`, `LABEL8` 계열 payload를 fallback으로 처리
-- `LABEL8`은 OpenCV Turbo color map으로 시각화
-- step / image_size 필드 순서를 template 기준으로 검증
+Supported paths:
 
-현재 상태:
+- encoded image payload through `cv2.imdecode()`
+- raw `BGRA8`, `RGB8`, and `LABEL8` fallback payloads
+- `LABEL8` visualization through OpenCV Turbo color map
+- `step` and `image_size` validation from the template layout
 
-- `Camera Semantic.tmpl` 수신/렌더링 확인 완료
-- `Instance Cam.tmpl` 수신/렌더링 확인 완료
+Current status:
 
-## Current Status
+- `Camera Semantic.tmpl` receive/render verified
+- `Instance Cam.tmpl` receive/render verified
 
-현재 완료된 항목:
+## Current Completion Status
 
-- Depth test panel 기능을 Camera Sensor 패널로 통합
-- RGB / Depth / Semantic / Instance / BBox template 선택 지원
-- RGB / Depth / Semantic / Instance 타입별 송수신 및 데이터 표시 검증
-- Depth simulator / grayscale / turbo 표시 모드 선택 지원
-- Depth scale 비교 모드 추가
-- raw range와 변환 후 depth range 표시
-- Camera Sensor 내부 중첩 스크롤 제거
-- 클라이언트 Depth render 원본 PNG 저장 helper 추가, 기본 비활성화
-- 시뮬레이터 저장 PNG와 클라이언트 저장 PNG 색감 차이의 주요 원인을 C++ TurboLUT 불일치로 정리
+Completed:
 
-남은 항목:
+- Depth test UI integrated into `Camera Sensor`
+- RGB, Depth, Semantic, Instance, and BBox template selection
+- RGB receive/render verified
+- Depth receive/render verified
+- Semantic receive/render verified
+- Instance receive/render verified
+- Depth view mode selection
+- Depth scale mode selection
+- raw range and converted depth range display
+- nested scrollbar removed from Camera Sensor slot area
+- client-side depth debug PNG helper added but disabled by default
 
-- 시뮬레이터 `SaveDepthAsPng()` TurboLUT를 Python OpenCV 기준 값으로 교체
-- LUT 교체 후 클라이언트 debug PNG와 simulator PNG 재비교
-- sky/far pixel 처리 기준 확정
-- 필요 시 Depth display 기본값 재결정
+Remaining simulator-side item:
+
+- Align simulator `SaveDepthAsPng()` Turbo LUT with Python OpenCV Turbo, then re-compare saved PNG outputs.
 
 ## Validation
-
-관련 파일 수정 후 최소 검증:
 
 ```bash
 python -m py_compile panels/camera_sensor_panel.py receivers/camera_depth_receiver.py receivers/camera_receiver.py receivers/camera_semantic_receiver.py receivers/camera_sensor_receiver.py
