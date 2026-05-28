@@ -2,6 +2,24 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: app.py (Windows conda morai)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "python": "C:\\Users\\user\\Anaconda3\\envs\\morai\\python.exe"
+        },
+        {
+            "name": "Python: app_cli.py (Windows conda morai)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/app_cli.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "python": "C:\\Users\\user\\Anaconda3\\envs\\morai\\python.exe"
+        },
+        {
             "name": "Python: app.py (WSL ROS2)",
             "type": "debugpy",
             "request": "launch",
