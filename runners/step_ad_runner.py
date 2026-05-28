@@ -1,20 +1,5 @@
 from __future__ import annotations
 
-# step_ad_runner.py
-# ad_runner.py 구조 기반 + Fixed Step 추가.
-#
-# 루프 순서:
-#   ① 모든 차량 VI 읽기
-#   ② 모든 차량 ManualControl 전송 (fire-and-forget)
-#   ③ FixedStep 전송 → ACK 대기  (시뮬레이터 1틱 진행 + VI 전송)
-#
-# collision_cfg = {
-#   "chaser_entity_id": str,   # 이 차량은 path 대신 target을 추적
-#   "target_entity_id": str,   # 추적 대상
-#   "throttle": float,         # chaser 고정 스로틀
-#   "trigger_kph": float,      # target 이 이 속도 이상이면 chaser 출발
-# }
-
 import itertools
 import socket
 import threading
@@ -22,38 +7,33 @@ import time
 
 import numpy as np
 
-import transport.tcp_transport as tcp
 import transport.protocol_defs as proto
-from receivers.vehicle_info_receiver import parse_vehicle_info_payload
+import transport.tcp_transport as tcp
 from autonomous_driving.autonomous_driving import AutonomousDriving
 from autonomous_driving.vehicle_state import VehicleState
+from receivers.vehicle_info_receiver import parse_vehicle_info_payload
 
 MAX_STEER_RAD = 0.5
 
 _rid_iter = itertools.count(1)
+_SPEED_GAIN = 0.1
+_CHASE_LFD_MIN = 3.0
+_CHASE_LFD_MAX = 15.0
+_CHASE_STEER_GAIN = 1.35
+
 
 def _next_rid() -> int:
     return next(_rid_iter)
 
 
-# ── 속도 비례 제어 ────────────────────────────────────────────
-_SPEED_GAIN = 0.1   # throttle·brake per kph error
-
-def _speed_ctrl(current_kph: float, target_kph: float):
-    """현재 속도와 목표 속도 차이로 throttle / brake 계산."""
+def _speed_ctrl(current_kph: float, target_kph: float) -> tuple[float, float]:
     err = target_kph - current_kph
     if err > 0:
         return float(np.clip(err * _SPEED_GAIN, 0.0, 1.0)), 0.0
-    else:
-        return 0.0, float(np.clip(-err * _SPEED_GAIN, 0.0, 0.5))
+    return 0.0, float(np.clip(-err * _SPEED_GAIN, 0.0, 0.5))
 
-
-_CHASE_LFD_MIN = 3.0
-_CHASE_LFD_MAX = 15.0
-_CHASE_STEER_GAIN = 1.35
 
 def _calc_chase_steer_norm(parsed: dict, target_x: float, target_y: float, wheelbase: float) -> float:
-    """타겟 현재 위치를 직접 look-ahead point 로 두고 공격적으로 조향한다."""
     dx = target_x - parsed["location"]["x"]
     dy = target_y - parsed["location"]["y"]
     distance = float(np.hypot(dx, dy))
@@ -69,26 +49,29 @@ def _calc_chase_steer_norm(parsed: dict, target_x: float, target_y: float, wheel
     return float(np.clip(steer_rad / MAX_STEER_RAD, -1.0, 1.0))
 
 
-# ── 차량 컨텍스트 ─────────────────────────────────────────────
-
 class _VehicleCtx:
-    def __init__(self, entity_id: str, vi_ip: str, vi_port: int, path_file: str,
-                 map_name: str = None,
-                 is_chaser: bool = False,
-                 is_collision_target: bool = False,
-                 speed_kph: float = 60.0,
-                 trigger_kph: float = 5.0,
-                 max_speed_kph: float = None):
-        self.entity_id           = entity_id
-        self.is_chaser           = is_chaser
+    def __init__(
+        self,
+        entity_id: str,
+        vi_ip: str,
+        vi_port: int,
+        path_file: str,
+        map_name: str = None,
+        is_chaser: bool = False,
+        is_collision_target: bool = False,
+        speed_kph: float = 60.0,
+        trigger_kph: float = 5.0,
+        max_speed_kph: float = None,
+    ):
+        self.entity_id = entity_id
+        self.is_chaser = is_chaser
         self.is_collision_target = is_collision_target
-        # target: speed_kph 정속 / chaser: speed_kph × 1.2 로 추돌
-        self.target_speed_kph    = speed_kph if not is_chaser else speed_kph * 1.2
-        self.trigger_kph         = trigger_kph
-        self.ad                  = AutonomousDriving(path_file, map_name=map_name, max_speed_kph=max_speed_kph)
-        self.latest         = None
-        self.lock           = threading.Lock()
-        self.vi_event       = threading.Event()   # FixedStep 후 VI 도착 신호
+        self.target_speed_kph = speed_kph if not is_chaser else speed_kph * 1.2
+        self.trigger_kph = trigger_kph
+        self.ad = AutonomousDriving(path_file, map_name=map_name, max_speed_kph=max_speed_kph)
+        self.latest = None
+        self.lock = threading.Lock()
+        self.vi_event = threading.Event()
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -96,70 +79,73 @@ class _VehicleCtx:
         self.sock.bind((vi_ip, vi_port))
 
 
-# ── StepAdRunner ──────────────────────────────────────────────
-
 class StepAdRunner:
     _TIMING_INTERVAL = 100
     _STEP_DEBUG_INTERVAL = 20
 
     def __init__(
         self,
-        tcp_sock:      socket.socket,
-        vehicles:      list,           # [{ entity_id, vi_ip, vi_port, path }, ...]
-        pending:       dict,
-        lock:          threading.Lock,
-        request_id_ref,                # RequestIdCounter (app.py 공유)
+        tcp_sock: socket.socket,
+        vehicles: list,
+        pending: dict,
+        lock: threading.Lock,
+        request_id_ref,
         pending_add_fn,
         pending_pop_fn,
-        timeout_sec:   float = 10.0,
+        timeout_sec: float = 10.0,
         log_fn=None,
         status_cb=None,
         on_done=None,
-        collision_cfg: dict = None,    # 충돌 모드 설정 (없으면 일반 path follow)
-        save_data:     bool = False,
+        collision_cfg: dict = None,
+        save_data: bool = False,
         **kwargs,
     ):
-        self._tcp_sock      = tcp_sock
-        self._pending       = pending
-        self._lock          = lock
-        self._rid           = request_id_ref
-        self._pending_add   = pending_add_fn
-        self._pending_pop   = pending_pop_fn
-        self._timeout_sec   = timeout_sec
-        self._log           = log_fn or (lambda msg, level="INFO": print(f"[StepAD] {msg}"))
-        self._status_cb     = status_cb or (lambda *a: None)
-        self._on_done       = on_done
-        self._running       = False
+        self._tcp_sock = tcp_sock
+        self._pending = pending
+        self._lock = lock
+        self._rid = request_id_ref
+        self._pending_add = pending_add_fn
+        self._pending_pop = pending_pop_fn
+        self._timeout_sec = timeout_sec
+        self._log = log_fn or (lambda msg, level="INFO": print(f"[StepAD] {msg}"))
+        self._status_cb = status_cb or (lambda *a: None)
+        self._on_done = on_done
+        self._running = False
         self._collision_cfg = collision_cfg
-        self._save_data     = save_data
+        self._save_data = save_data
         self._ctxs: list[_VehicleCtx] = []
 
         chaser_id = (collision_cfg or {}).get("chaser_entity_id")
         target_id = (collision_cfg or {}).get("target_entity_id")
         speed_kph = (collision_cfg or {}).get("speed_kph", 60.0)
-        for v in vehicles:
-            is_chaser = (chaser_id == v["entity_id"])
-            is_target = bool(collision_cfg) and (v["entity_id"] == target_id)
+
+        for vehicle in vehicles:
+            is_chaser = chaser_id == vehicle["entity_id"]
+            is_target = bool(collision_cfg) and vehicle["entity_id"] == target_id
             ctx = _VehicleCtx(
-                entity_id           = v["entity_id"],
-                vi_ip               = v.get("vi_ip", "0.0.0.0"),
-                vi_port             = v["vi_port"],
-                path_file           = v.get("path", "path_link.csv"),
-                map_name            = v.get("map_name"),
-                is_chaser           = is_chaser,
-                is_collision_target = is_target,
-                speed_kph           = speed_kph,
-                trigger_kph         = (collision_cfg or {}).get("trigger_kph", 5.0),
-                max_speed_kph       = v.get("max_speed_kph"),
+                entity_id=vehicle["entity_id"],
+                vi_ip=vehicle.get("vi_ip", "0.0.0.0"),
+                vi_port=vehicle["vi_port"],
+                path_file=vehicle.get("path", "path_link.csv"),
+                map_name=vehicle.get("map_name"),
+                is_chaser=is_chaser,
+                is_collision_target=is_target,
+                speed_kph=speed_kph,
+                trigger_kph=(collision_cfg or {}).get("trigger_kph", 5.0),
+                max_speed_kph=vehicle.get("max_speed_kph"),
             )
             self._ctxs.append(ctx)
+
             if is_chaser:
                 role = f"Chaser ({speed_kph * 1.2:.0f} km/h)"
             elif is_target:
                 role = f"Target ({speed_kph:.0f} km/h)"
             else:
-                role = f"PathFollow (max={v.get('max_speed_kph', 0):.0f} km/h)"
-            self._log(f"[{ctx.entity_id}] VI 수신 대기 → {v.get('vi_ip', '0.0.0.0')}:{v['vi_port']} ({role})")
+                role = f"PathFollow (max={vehicle.get('max_speed_kph', 0):.0f} km/h)"
+            self._log(
+                f"[{ctx.entity_id}] waiting for VI on "
+                f"{vehicle.get('vi_ip', '0.0.0.0')}:{vehicle['vi_port']} ({role})"
+            )
 
     def update_max_speed_kph(self, entity_id: str, max_speed_kph: float) -> bool:
         for ctx in self._ctxs:
@@ -167,8 +153,6 @@ class StepAdRunner:
                 ctx.ad.set_max_speed_kph(float(max_speed_kph))
                 return True
         return False
-
-    # ── 공개 API ──────────────────────────────────────────────
 
     def start(self) -> None:
         self._running = True
@@ -184,21 +168,20 @@ class StepAdRunner:
             except Exception:
                 pass
 
-    # ── UDP 수신 스레드 (차량별) ───────────────────────────────
-
     def _recv_loop(self, ctx: _VehicleCtx) -> None:
         while self._running:
             try:
                 data, _ = ctx.sock.recvfrom(65535)
                 self._log(
-                    f"[VI][{ctx.entity_id}] UDP recv on {ctx.sock.getsockname()[0]}:{ctx.sock.getsockname()[1]} bytes={len(data)}",
+                    f"[VI][{ctx.entity_id}] UDP recv on "
+                    f"{ctx.sock.getsockname()[0]}:{ctx.sock.getsockname()[1]} bytes={len(data)}",
                     "INFO",
                 )
                 parsed = parse_vehicle_info_payload(data)
                 if parsed:
                     with ctx.lock:
                         ctx.latest = parsed
-                    ctx.vi_event.set()   # VI 도착 신호
+                    ctx.vi_event.set()
                     self._log(
                         f"[VI][{ctx.entity_id}] parse ok "
                         f"pos=({parsed['location']['x']:.3f}, {parsed['location']['y']:.3f}) "
@@ -217,49 +200,47 @@ class StepAdRunner:
             except OSError:
                 break
 
-    # ── 차량별 제어 ───────────────────────────────────────────
-
     def _send_path_follow(self, ctx: _VehicleCtx, parsed: dict) -> None:
-        """경로 추종 제어 (Pure Pursuit).
-        충돌 모드 target 차량은 Pure Pursuit 조향을 유지하되 속도를 speed_kph로 제어."""
         vs = VehicleState(
-            x        = parsed["location"]["x"],
-            y        = parsed["location"]["y"],
-            yaw      = np.deg2rad(parsed["rotation"]["z"]),
-            velocity = parsed["local_velocity"]["x"],
+            x=parsed["location"]["x"],
+            y=parsed["location"]["y"],
+            yaw=np.deg2rad(parsed["rotation"]["z"]),
+            velocity=parsed["local_velocity"]["x"],
         )
+
         try:
             ctrl, _ = ctx.ad.execute(vs)
             steer_n = float(np.clip(ctrl.steering / MAX_STEER_RAD, -1.0, 1.0))
 
             if ctx.is_collision_target or ctx.is_chaser:
-                # 충돌 모드: 조향은 Pure Pursuit, 속도는 설정값으로 고정
-                # (target = speed_kph, chaser = speed_kph × 1.2)
                 current_kph = abs(parsed["local_velocity"]["x"]) * 3.6
                 throttle, brake = _speed_ctrl(current_kph, ctx.target_speed_kph)
             else:
                 throttle, brake = ctrl.accel, ctrl.brake
 
             tcp.send_manual_control_by_id(
-                self._tcp_sock, _next_rid(),
-                entity_id   = ctx.entity_id,
-                throttle    = throttle,
-                brake       = brake,
-                steer_angle = steer_n,
+                self._tcp_sock,
+                _next_rid(),
+                entity_id=ctx.entity_id,
+                throttle=throttle,
+                brake=brake,
+                steer_angle=steer_n,
             )
             self._status_cb(
                 ctx.entity_id,
-                vs.position.x, vs.position.y,
+                vs.position.x,
+                vs.position.y,
                 vs.velocity * 3.6,
-                throttle, brake, steer_n,
+                throttle,
+                brake,
+                steer_n,
             )
-        except Exception as e:
-            self._log(f"[{ctx.entity_id}] 제어 오류: {e}", "ERROR")
+        except Exception as exc:
+            self._log(f"[{ctx.entity_id}] control error: {exc}", "ERROR")
 
     def _send_chaser(self, ctx: _VehicleCtx, parsed: dict) -> None:
-        """Trigger 이후 target 현재 위치를 직접 추적해 추돌을 유도한다."""
         target_id = self._collision_cfg["target_entity_id"]
-        target_ctx = next((c for c in self._ctxs if c.entity_id == target_id), None)
+        target_ctx = next((item for item in self._ctxs if item.entity_id == target_id), None)
         if target_ctx is None:
             return
 
@@ -268,13 +249,15 @@ class StepAdRunner:
         if target_parsed is None:
             return
 
-        # trigger: target 속도가 기준 이상이어야 출발
         target_kph = abs(target_parsed["local_velocity"]["x"]) * 3.6
         if target_kph < ctx.trigger_kph:
             tcp.send_manual_control_by_id(
-                self._tcp_sock, _next_rid(),
+                self._tcp_sock,
+                _next_rid(),
                 entity_id=ctx.entity_id,
-                throttle=0.0, brake=0.5, steer_angle=0.0,
+                throttle=0.0,
+                brake=0.5,
+                steer_angle=0.0,
             )
             return
 
@@ -287,23 +270,25 @@ class StepAdRunner:
             wheelbase=float(ctx.ad.pure_pursuit.wheelbase),
         )
         tcp.send_manual_control_by_id(
-            self._tcp_sock, _next_rid(),
+            self._tcp_sock,
+            _next_rid(),
             entity_id=ctx.entity_id,
-            throttle=throttle, brake=brake, steer_angle=steer_n,
+            throttle=throttle,
+            brake=brake,
+            steer_angle=steer_n,
         )
         self._status_cb(
             ctx.entity_id,
-            parsed["location"]["x"], parsed["location"]["y"],
+            parsed["location"]["x"],
+            parsed["location"]["y"],
             abs(parsed["local_velocity"]["x"]) * 3.6,
-            throttle, brake, steer_n,
+            throttle,
+            brake,
+            steer_n,
         )
 
-    # control loop
-
-    _TIMING_INTERVAL = 100
-
     def _control_loop(self) -> None:
-        self._log("주행 시작")
+        self._log("Driving started")
         step_index = 0
 
         _t_ack = []
@@ -328,10 +313,10 @@ class StepAdRunner:
                 else:
                     self._send_path_follow(ctx, parsed)
                 sent_ids.append(ctx.entity_id)
+
             if _should_debug():
                 sent_text = ", ".join(sent_ids) if sent_ids else "(none)"
                 self._log(f"[StepAD][step={step_index}] commands sent: {sent_text}", "INFO")
-
 
         def _presend_step():
             rid = self._rid.next()
@@ -348,7 +333,7 @@ class StepAdRunner:
             ev, rid = _presend_step()
             if not ev.wait(self._timeout_sec):
                 self._pending_pop(self._pending, self._lock, rid, proto.MSG_TYPE_FIXED_STEP)
-                self._log("초기 FixedStep ACK timeout - 중단", "ERROR")
+                self._log("Initial FixedStep ACK timeout - stopping", "ERROR")
                 return
             self._pending_pop(self._pending, self._lock, rid, proto.MSG_TYPE_FIXED_STEP)
             if _should_debug():
@@ -361,7 +346,7 @@ class StepAdRunner:
                 tcp.send_save_data(self._tcp_sock, save_rid)
                 for ctx in self._ctxs:
                     if not ctx.vi_event.wait(self._timeout_sec):
-                        self._log(f"[{ctx.entity_id}] 초기 VI timeout - 중단", "ERROR")
+                        self._log(f"[{ctx.entity_id}] initial VI timeout - stopping", "ERROR")
                         return
                     if _should_debug():
                         self._log(f"[StepAD][init] VI ready: {ctx.entity_id}", "INFO")
@@ -379,7 +364,8 @@ class StepAdRunner:
                 if not ev.wait(self._timeout_sec):
                     self._pending_pop(self._pending, self._lock, rid, proto.MSG_TYPE_FIXED_STEP)
                     self._log(
-                        f"FixedStep ACK timeout ({self._timeout_sec}s) - 중단. 시나리오가 Fixed Step 모드인지 확인하세요",
+                        f"FixedStep ACK timeout ({self._timeout_sec}s) - stopping. "
+                        "Check whether the scenario is running in Fixed Step mode.",
                         "ERROR",
                     )
                     break
@@ -396,7 +382,7 @@ class StepAdRunner:
                             self._log(f"[StepAD][step={step_index}] SaveData send rid={save_rid}", "INFO")
                         tcp.send_save_data(self._tcp_sock, save_rid)
                     except OSError as exc:
-                        self._log(f"SaveData 전송 오류: {exc}", "ERROR")
+                        self._log(f"SaveData send error: {exc}", "ERROR")
                         break
 
                 for ctx in self._ctxs:
@@ -404,7 +390,7 @@ class StepAdRunner:
                 try:
                     ev, rid = _presend_step()
                 except OSError as exc:
-                    self._log(f"FixedStep 전송 오류: {exc}", "ERROR")
+                    self._log(f"FixedStep send error: {exc}", "ERROR")
                     break
 
                 t2 = time.perf_counter()
@@ -413,7 +399,7 @@ class StepAdRunner:
                     for ctx in self._ctxs:
                         if not ctx.vi_event.wait(self._timeout_sec):
                             self._log(
-                                f"[{ctx.entity_id}] VI timeout ({self._timeout_sec}s) - 이전 상태로 계속",
+                                f"[{ctx.entity_id}] VI timeout ({self._timeout_sec}s) - keep previous state",
                                 "WARN",
                             )
                         elif _should_debug():
@@ -431,6 +417,7 @@ class StepAdRunner:
                 if len(_t_total) >= self._TIMING_INTERVAL:
                     def _stats(samples):
                         return sum(samples) / len(samples), min(samples), max(samples)
+
                     aa, an, ax = _stats(_t_ack)
                     va, vn, vx = _stats(_t_vi)
                     ca, cn, cx = _stats(_t_cmd)
@@ -446,10 +433,11 @@ class StepAdRunner:
                     _t_vi.clear()
                     _t_cmd.clear()
                     _t_total.clear()
+
                 step_index += 1
 
         finally:
             self._running = False
-            self._log("주행 종료")
+            self._log("Driving stopped")
             if self._on_done:
                 self._on_done()

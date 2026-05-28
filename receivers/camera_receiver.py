@@ -1,58 +1,61 @@
-# camera_receiver.py
-#
-# UDP 카메라 이미지 수신기
-# - MORAI 시뮬레이터의 Dynamic Camera 패킷 포맷 지원
-#   ① Chunked  : [PacketID:4B][ChunkIdx:2B][TotalChunks:2B] + payload
-#                조립 완료 후 → [size:4B][JPEG bytes]
-#   ② Headerless: [size:4B][JPEG bytes]
-# - on_frame(numpy_bgr) 콜백으로 프레임 전달 → 제어 파이프라인 연결용
-# - show=True 시 OpenCV 창으로 실시간 확인 가능
+from __future__ import annotations
 
-import socket
+"""UDP camera image receiver.
+
+Supported MORAI Dynamic Camera packet formats:
+  - Chunked: [PacketID:4B][ChunkIdx:2B][TotalChunks:2B] + payload
+  - Headerless: [size:4B][JPEG bytes]
+
+The assembled payload is expected to be [size:4B][JPEG bytes]. Decoded
+frames are delivered as BGR uint8 NumPy arrays.
+"""
+
 import select
+import socket
 import struct
 import threading
 import time
 from typing import Callable, Optional
 
-import numpy as np
 import cv2
+import numpy as np
 
-# ─── 패킷 상수 ──────────────────────────────────────────────────
-_HEADER_FMT  = "<IHH"   # PacketID(4), ChunkIdx(2), TotalChunks(2)
-_HEADER_SIZE = struct.calcsize(_HEADER_FMT)  # 8 bytes
-_RECV_BUF    = 65535
-_ASSEMBLY_TIMEOUT = 5.0  # 청크 조립 대기 최대 시간 (초)
+_HEADER_FMT = "<IHH"   # PacketID(4), ChunkIdx(2), TotalChunks(2)
+_HEADER_SIZE = struct.calcsize(_HEADER_FMT)
+_RECV_BUF = 65535
+_ASSEMBLY_TIMEOUT = 5.0
 
 
-# ─── 청크 조립 상태 ──────────────────────────────────────────────
 class _AssemblyState:
     def __init__(self):
         self.packet_id: Optional[int] = None
         self.total_chunks: int = 0
-        self.chunks: dict = {}
+        self.chunks: dict[int, bytes] = {}
         self.started_at: float = 0.0
 
-    def reset(self):
-        self.packet_id   = None
+    def reset(self) -> None:
+        self.packet_id = None
         self.total_chunks = 0
         self.chunks.clear()
-        self.started_at  = 0.0
+        self.started_at = 0.0
 
 
-# ─── CameraReceiver ─────────────────────────────────────────────
 class CameraReceiver(threading.Thread):
     """
-    UDP 카메라 이미지 수신 스레드
+    Receive JPEG camera frames over UDP.
 
     Parameters
     ----------
-    ip       : 바인딩할 IP (기본 "0.0.0.0" → 모든 인터페이스)
-    port     : 수신 포트
-    on_frame : 프레임 콜백 fn(frame: np.ndarray) — BGR uint8
-               None 이면 콜백 없이 show 전용으로만 동작
-    show     : True 시 OpenCV 창에 실시간 렌더링
-    window_name : OpenCV 창 이름 (None 이면 자동 생성)
+    ip:
+        UDP bind address.
+    port:
+        UDP receive port.
+    on_frame:
+        Optional callback receiving frame as BGR uint8 ndarray.
+    show:
+        Show decoded frames in an OpenCV window.
+    window_name:
+        OpenCV window title.
     """
 
     def __init__(
@@ -64,33 +67,30 @@ class CameraReceiver(threading.Thread):
         window_name: Optional[str] = None,
     ):
         super().__init__(daemon=True)
-        self.ip          = ip
-        self.port        = port
-        self.on_frame    = on_frame
-        self.show        = show
+        self.ip = ip
+        self.port = port
+        self.on_frame = on_frame
+        self.show = show
         self.window_name = window_name or f"Camera [{ip}:{port}]"
-        self.running     = False
+        self.running = False
 
-        # 통계
         self._frame_count = 0
-        self._fps_ts      = time.time()
-        self.fps          = 0.0          # 외부에서 읽을 수 있는 최신 FPS
-        self.last_frame: Optional[np.ndarray] = None  # 최신 프레임 (외부 참조용)
+        self._fps_ts = time.time()
+        self.fps = 0.0
+        self.last_frame: Optional[np.ndarray] = None
         self._lock = threading.Lock()
 
         self._asm = _AssemblyState()
 
-    # ── 공개 API ─────────────────────────────────────────────────
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
-        """최신 프레임을 스레드 안전하게 반환 (없으면 None)"""
+        """Return the latest decoded frame as a copy, or None."""
         with self._lock:
             return self.last_frame.copy() if self.last_frame is not None else None
 
-    # ── 내부 ─────────────────────────────────────────────────────
-    def run(self):
+    def run(self) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -114,7 +114,7 @@ class CameraReceiver(threading.Thread):
                 try:
                     while True:
                         try:
-                            data, addr = sock.recvfrom(_RECV_BUF)
+                            data, _ = sock.recvfrom(_RECV_BUF)
                         except BlockingIOError:
                             break
                         self._handle(data)
@@ -124,7 +124,7 @@ class CameraReceiver(threading.Thread):
 
                 if self.show:
                     key = cv2.waitKey(1) & 0xFF
-                    if key in (ord("q"), 27):   # q / ESC → 종료
+                    if key in (ord("q"), 27):
                         self.running = False
                         break
         finally:
@@ -133,8 +133,7 @@ class CameraReceiver(threading.Thread):
                 cv2.destroyWindow(self.window_name)
             print(f"[CameraReceiver] Stopped ({self.ip}:{self.port})")
 
-    # ── 패킷 처리 ────────────────────────────────────────────────
-    def _handle(self, data: bytes):
+    def _handle(self, data: bytes) -> None:
         if self._is_chunked(data):
             self._handle_chunked(data)
         else:
@@ -150,8 +149,8 @@ class CameraReceiver(threading.Thread):
             return False
         return pid != 0 and 0 < total <= 10000 and cidx < total
 
-    def _handle_headerless(self, data: bytes):
-        """[uint32 size][JPEG bytes]"""
+    def _handle_headerless(self, data: bytes) -> None:
+        """Handle [uint32 size][JPEG bytes]."""
         if len(data) < 4:
             return
         (img_size,) = struct.unpack("<I", data[:4])
@@ -159,27 +158,24 @@ class CameraReceiver(threading.Thread):
             return
         self._deliver(data[4: 4 + img_size])
 
-    def _handle_chunked(self, data: bytes):
-        """청크 조립 후 [uint32 size][JPEG bytes] 로 전달"""
+    def _handle_chunked(self, data: bytes) -> None:
+        """Assemble chunks and deliver [uint32 size][JPEG bytes]."""
         pid, cidx, total = struct.unpack(_HEADER_FMT, data[:_HEADER_SIZE])
         payload = data[_HEADER_SIZE:]
         asm = self._asm
 
-        # 새 패킷 시작
         if asm.packet_id != pid:
             asm.reset()
-            asm.packet_id    = pid
+            asm.packet_id = pid
             asm.total_chunks = total
-            asm.started_at   = time.time()
+            asm.started_at = time.time()
 
-        # 타임아웃 체크
         if time.time() - asm.started_at > _ASSEMBLY_TIMEOUT:
             asm.reset()
             return
 
         asm.chunks[cidx] = payload
 
-        # 조립 완료?
         if len(asm.chunks) < asm.total_chunks:
             return
 
@@ -198,33 +194,29 @@ class CameraReceiver(threading.Thread):
             return
         self._deliver(full[4: 4 + img_size])
 
-    def _deliver(self, img_bytes: bytes):
-        """디코딩 → 콜백 + 표시 + 통계"""
+    def _deliver(self, img_bytes: bytes) -> None:
+        """Decode a JPEG frame, update stats, optionally display, and callback."""
         np_buf = np.frombuffer(img_bytes, dtype=np.uint8)
-        frame  = cv2.imdecode(np_buf, cv2.IMREAD_COLOR)
+        frame = cv2.imdecode(np_buf, cv2.IMREAD_COLOR)
         if frame is None:
             return
 
-        # 최신 프레임 저장
         with self._lock:
             self.last_frame = frame
 
-        # FPS 계산
         self._frame_count += 1
         now = time.time()
         elapsed = now - self._fps_ts
         if elapsed >= 1.0:
-            self.fps      = self._frame_count / elapsed
+            self.fps = self._frame_count / elapsed
             self._frame_count = 0
-            self._fps_ts  = now
+            self._fps_ts = now
 
-        # OpenCV 창 렌더링
         if self.show:
             title = f"{self.window_name}  FPS: {self.fps:.1f}"
             cv2.imshow(self.window_name, frame)
             cv2.setWindowTitle(self.window_name, title)
 
-        # 콜백
         if self.on_frame is not None:
             try:
                 self.on_frame(frame)
@@ -232,18 +224,18 @@ class CameraReceiver(threading.Thread):
                 print(f"[CameraReceiver] on_frame error: {e}")
 
 
-# ─── 단독 실행 (수신 확인용) ─────────────────────────────────────
-def main():
+def main() -> None:
     import argparse
-    parser = argparse.ArgumentParser(description="Camera UDP Receiver — 수신 확인용")
-    parser.add_argument("--ip",   default="127.0.0.1",  help="바인딩 IP (기본: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=9090, help="수신 포트 (기본: 9090)")
+
+    parser = argparse.ArgumentParser(description="Camera UDP receiver test")
+    parser.add_argument("--ip", default="127.0.0.1", help="Bind IP address")
+    parser.add_argument("--port", type=int, default=9090, help="UDP receive port")
     args = parser.parse_args()
 
     receiver = CameraReceiver(ip=args.ip, port=args.port, show=True)
     receiver.start()
 
-    print("수신 중... 창에서 q 또는 ESC 키로 종료")
+    print("Receiving. Press q or ESC in the OpenCV window to exit.")
     try:
         while receiver.is_alive():
             time.sleep(0.5)
@@ -252,7 +244,7 @@ def main():
     finally:
         receiver.stop()
         receiver.join(timeout=2.0)
-        print("종료")
+        print("Stopped")
 
 
 if __name__ == "__main__":

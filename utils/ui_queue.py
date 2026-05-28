@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-# ui_queue.py
-"""
-백그라운드 스레드(Receiver, AutoCaller 등)에서 DPG UI를 안전하게 업데이트하기 위한 큐.
+"""Thread-safe queue for DearPyGUI UI updates.
 
-사용법:
-  - 백그라운드 스레드: post(lambda: dpg.set_value("tag", val))
-  - 메인 루프:        drain() 을 매 프레임 호출
+Background threads call post(lambda: dpg.set_value("tag", val)).
+The main render loop calls drain() once per frame.
 """
+
 import queue
 import time
 from typing import Callable
@@ -16,18 +14,20 @@ _q: queue.Queue[Callable] = queue.Queue()
 
 
 def post(fn: Callable) -> None:
-    """백그라운드 스레드에서 UI 업데이트 람다를 등록."""
+    """Queue a UI update callable from a background thread."""
     _q.put(fn)
 
 
-_DRAIN_CAP       = 200    # 한 프레임당 최대 처리 항목 수
-_WARN_BACKLOG    = 50     # 이 이상 쌓이면 경고
-_WARN_ITEM_MS    = 50.0   # 단일 항목이 이 시간 초과 시 경고
+_DRAIN_CAP = 200       # Maximum items processed per frame.
+_WARN_BACKLOG = 50     # Warn when queue backlog grows beyond this.
+_WARN_ITEM_MS = 50.0   # Warn when one queued item is slow.
 
 
 def drain() -> int:
-    """DPG render loop에서 매 프레임 호출 — 큐에 쌓인 UI 업데이트를 소비.
-    처리한 항목 수를 반환."""
+    """Drain queued UI updates from the DPG render loop.
+
+    Returns the number of processed items.
+    """
     backlog = _q.qsize()
     if backlog > _WARN_BACKLOG:
         print(f"[ui_queue] backlog={backlog}")
