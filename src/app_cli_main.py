@@ -101,6 +101,7 @@ def print_key_bindings():
     print("  [6] ManualControlById            (TCP 0x1302)")
     print("  [7] TransformControlById         (TCP 0x1303)")
     print("  [8] SetTrajectory                (TCP 0x1304)")
+    print("  [9] DeleteObject                 (TCP 0x1305)")
     print("---- Scenario Control --------")
     print("  [a] ScenarioStatus               (TCP 0x1504)")
     print("  [b] ScenarioControl              (TCP 0x1505)")
@@ -220,16 +221,14 @@ def main():
                              lambda rid: tcp.send_transform_control_by_id(tcp_sock, rid, **params))
 
                 elif key == "8":
+                    params = prompt.prompt_set_trajectory()
                     dispatch(MSG_TYPE_SET_TRAJECTORY_COMMAND,
-                             lambda rid: tcp.send_set_trajectory(
-                                 tcp_sock, rid,
-                                 entity_id="Car_1",
-                                 follow_mode=2,
-                                 trajectory_name="Route_1",
-                                 points=[
-                                     (237.4360, -299.4899, 0.0210, 2.0),
-                                     (199.6393, -280.8129, 0.1524, 4.0),
-                                 ]))
+                             lambda rid: tcp.send_set_trajectory(tcp_sock, rid, **params))
+
+                elif key == "9":
+                    params = prompt.prompt_delete_object()
+                    dispatch(MSG_TYPE_DELETE_OBJECT,
+                             lambda rid: tcp.send_delete_object(tcp_sock, rid, **params))
 
                 elif key in ("a", "A"):
                     dispatch(MSG_TYPE_SCENARIO_STATUS,

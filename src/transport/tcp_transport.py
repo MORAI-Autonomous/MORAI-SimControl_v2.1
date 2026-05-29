@@ -85,15 +85,6 @@ def _send_packet(
     """Build the header, send the packet, and emit optional send log."""
     header = build_header(proto.MSG_CLASS_REQ, msg_type, len(payload), request_id, proto.FLAG)
     sock.sendall(header + payload)
-    if msg_type == proto.MSG_TYPE_GET_SIMULATOR_STATUS:
-        header_hex = " ".join(f"{b:02X}" for b in header)
-        payload_hex = " ".join(f"{b:02X}" for b in payload) if payload else "(empty)"
-        print(
-            "[SEND][TCP][DBG] "
-            f"GetSimulatorStatus class=0x{proto.MSG_CLASS_REQ:02X} "
-            f"type=0x{msg_type:04X} size={len(payload)} rid={request_id} "
-            f"header=[{header_hex}] payload=[{payload_hex}]"
-        )
     if log:
         print(f"[SEND][TCP] {log} rid={request_id}")
 
@@ -297,8 +288,26 @@ def send_set_trajectory(
     points: List[Tuple[float, float, float, float]],
 ) -> None:
     payload = build_set_trajectory_payload(entity_id, follow_mode, trajectory_name, points)
+    print(
+        f"[SEND][TCP] SetTrajectory payload_size={len(payload)} "
+        f"packet_size={proto.HEADER_SIZE + len(payload)} "
+        f"points={len(points)} rid={request_id}"
+    )
     _send_packet(sock, request_id, proto.MSG_TYPE_SET_TRAJECTORY_COMMAND, payload,
                  f"SetTrajectory(0x1304) id={entity_id} points={len(points)}")
+
+
+def send_delete_object(sock: socket.socket, request_id: int, entity_id: str) -> None:
+    payload = pack_message_payload(
+        proto.MSG_TYPE_DELETE_OBJECT,
+        {"entity_id": entity_id},
+    )
+    print(
+        f"[SEND][TCP] DeleteObject payload_size={len(payload)} "
+        f"packet_size={proto.HEADER_SIZE + len(payload)} rid={request_id}"
+    )
+    _send_packet(sock, request_id, proto.MSG_TYPE_DELETE_OBJECT, payload,
+                 f"DeleteObject(0x1305) id={entity_id}")
 
 
 def send_load_suite(sock: socket.socket, request_id: int, suite_path: str) -> None:

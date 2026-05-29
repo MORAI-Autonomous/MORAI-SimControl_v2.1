@@ -99,12 +99,6 @@ class Receiver(threading.Thread):
 
             elif msg_class == proto.MSG_CLASS_NOTI \
                     and msg_type == proto.MSG_TYPE_GET_SIMULATOR_STATUS:
-                header = tcp.build_header(msg_class, msg_type, payload_size, request_id, flag)
-                log.append(
-                    "[DBG][0x1001][NOTI] "
-                    f"header=[{_hex_dump(header)}] payload=[{_hex_dump(payload)}]",
-                    "INFO",
-                )
                 parsed = tcp.parse_get_simulator_status_notification_payload(payload)
                 if parsed:
                     state = parsed["state"]
@@ -119,12 +113,6 @@ class Receiver(threading.Thread):
 
             elif msg_class == proto.MSG_CLASS_RESP \
                     and msg_type == proto.MSG_TYPE_GET_SIMULATOR_STATUS:
-                header = tcp.build_header(msg_class, msg_type, payload_size, request_id, flag)
-                log.append(
-                    "[DBG][0x1001][RESP] "
-                    f"header=[{_hex_dump(header)}] payload=[{_hex_dump(payload)}]",
-                    "INFO",
-                )
                 parsed = tcp.parse_get_simulator_status_payload(payload)
                 if parsed:
                     state = parsed["state"]
@@ -163,17 +151,20 @@ class Receiver(threading.Thread):
                 parsed = tcp.parse_get_status_payload(payload)
                 if parsed:
                     mode_detail = (
+                        f"result={parsed['result_code']}({result_to_string(parsed['result_code'])}) "
+                        f"detail={parsed['detail_code']} "
                         f"target_fps={parsed['target_fps']} "
                         f"physics_dt={parsed['physics_delta_time']}ms "
                         f"rtf={parsed['rtf']} user_control={parsed['user_control']}"
                     )
+                    level = "RECV" if parsed["result_code"] == 0 else "WARN"
                     log.append(
                         f"GetStatus rid={request_id} "
                         f"mode={time_mode_to_string(parsed['mode'])} "
                         f"{mode_detail} "
                         f"step={parsed['step_index']} "
                         f"sim={parsed['seconds']}s {parsed['nanos']}ns",
-                        "RECV"
+                        level
                     )
                 else:
                     log.append(f"GetStatus parse_failed rid={request_id}", "WARN")
@@ -191,6 +182,38 @@ class Receiver(threading.Thread):
                     )
                 else:
                     log.append(f"CreateObject parse_failed rid={request_id}", "WARN")
+
+            # SetTrajectory (0x1304)
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_SET_TRAJECTORY_COMMAND:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "WARN"
+                    log.append(
+                        f"SetTrajectory rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level
+                    )
+                else:
+                    log.append(f"SetTrajectory parse_failed rid={request_id}", "WARN")
+
+            # DeleteObject (0x1305)
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_DELETE_OBJECT:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "WARN"
+                    log.append(
+                        f"DeleteObject rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level
+                    )
+                else:
+                    log.append(f"DeleteObject parse_failed rid={request_id}", "WARN")
 
             # ActiveSuiteStatus (0x1401)
             elif msg_class == proto.MSG_CLASS_RESP \

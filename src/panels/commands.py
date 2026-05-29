@@ -189,67 +189,8 @@ def build(parent: int | str) -> None:
             dpg.add_text("-", tag="sc_status_text", color=(140, 140, 140, 255))
 
         # ── Object Control ─────────────────────────────────
-        _section("OBJECT CONTROL")
-
-        # ID : [entity_id input]
-        with dpg.group(horizontal=True):
-            dpg.add_text("ID        :", color=(180, 180, 180, 255))
-            dpg.add_input_text(tag="obj_entity_id",
-                               default_value="Car_1", width=140)
-
         # ── Manual Control (collapsing) ────────────────────
-        with dpg.collapsing_header(label="Manual Control", default_open=True):
-            dpg.add_spacer(height=2)
-            with dpg.group(horizontal=True):
-                for tag, label, default in [
-                    ("mc_thr",   "Throttle",    0.4),
-                    ("mc_brk",   "Brake",       0.0),
-                    ("mc_steer", "Steer Angle", 0.0),
-                ]:
-                    dpg.add_text(label, color=(160, 160, 160, 255))
-                    dpg.add_input_float(tag=tag, default_value=default,
-                                        min_value=-1.0, max_value=1.0,
-                                        step=0, width=60, format="%.2f")
-            dpg.add_spacer(height=2)
-            dpg.add_button(label="Send",
-                callback=lambda: _dispatch(
-                    proto.MSG_TYPE_MANUAL_CONTROL_BY_ID_COMMAND,
-                    lambda rid: tcp.send_manual_control_by_id(
-                        _tcp_sock, rid,
-                        entity_id=dpg.get_value("obj_entity_id"),
-                        throttle=dpg.get_value("mc_thr"),
-                        brake=dpg.get_value("mc_brk"),
-                        steer_angle=dpg.get_value("mc_steer"))))
-
         # ── Transform Control (collapsing) ─────────────────
-        with dpg.collapsing_header(label="Transform Control", default_open=True):
-            dpg.add_spacer(height=2)
-            with dpg.group(horizontal=True):
-                for tag, lbl in [("tc_px","px"),("tc_py","py"),("tc_pz","pz")]:
-                    dpg.add_text(lbl, color=(160, 160, 160, 255))
-                    dpg.add_input_float(tag=tag, default_value=0.0, step=0, width=80)
-            with dpg.group(horizontal=True):
-                for tag, lbl in [("tc_rx","rx"),("tc_ry","ry"),("tc_rz","rz")]:
-                    dpg.add_text(lbl, color=(160, 160, 160, 255))
-                    dpg.add_input_float(tag=tag, default_value=0.0, step=0, width=80)
-            with dpg.group(horizontal=True):
-                dpg.add_text("steer", color=(160, 160, 160, 255))
-                dpg.add_input_float(tag="tc_steer", default_value=0.0, step=0, width=80)
-                dpg.add_text("speed", color=(160, 160, 160, 255))
-                dpg.add_input_float(tag="tc_speed", default_value=0.0, step=0, width=80)
-            dpg.add_spacer(height=2)
-            dpg.add_button(label="Send",
-                callback=lambda: _dispatch(
-                    proto.MSG_TYPE_TRANSFORM_CONTROL_BY_ID_COMMAND,
-                    lambda rid: tcp.send_transform_control_by_id(
-                        _tcp_sock, rid,
-                        entity_id=dpg.get_value("obj_entity_id"),
-                        pos_x=dpg.get_value("tc_px"), pos_y=dpg.get_value("tc_py"),
-                        pos_z=dpg.get_value("tc_pz"), rot_x=dpg.get_value("tc_rx"),
-                        rot_y=dpg.get_value("tc_ry"), rot_z=dpg.get_value("tc_rz"),
-                        steer_angle=dpg.get_value("tc_steer"),
-                        speed=dpg.get_value("tc_speed"))))
-
         # ── Fixed Step ─────────────────────────────────────
         _section("FIXED STEP")
 

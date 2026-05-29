@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import contextlib
+import io
 import struct
 import sys
 import unittest
@@ -105,6 +107,37 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         )
         self.assertEqual(actual, expected)
 
+    def test_set_trajectory_packet_header_matches_payload_size(self) -> None:
+        sent = []
+        points = [
+            (1.0, 2.0, 3.0, 0.0),
+            (4.0, 5.0, 6.0, 0.5),
+        ]
+
+        class FakeSocket:
+            def sendall(self, data: bytes) -> None:
+                sent.append(data)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            tcp.send_set_trajectory(
+                FakeSocket(),
+                9,
+                entity_id="Car_1",
+                follow_mode=2,
+                trajectory_name="Route_1",
+                points=points,
+            )
+        packet = sent[0]
+        _, msg_class, msg_type, payload_size, request_id, flag = struct.unpack(
+            proto.HEADER_FMT,
+            packet[:proto.HEADER_SIZE],
+        )
+        self.assertEqual(msg_class, proto.MSG_CLASS_REQ)
+        self.assertEqual(msg_type, proto.MSG_TYPE_SET_TRAJECTORY_COMMAND)
+        self.assertEqual(payload_size, len(packet) - proto.HEADER_SIZE)
+        self.assertEqual(request_id, 9)
+        self.assertEqual(flag, proto.FLAG)
+
     def test_load_suite_payload(self) -> None:
         suite_path = "C:/Suite/Test.suite"
         expected = struct.pack("<I", len(suite_path.encode("utf-8"))) + suite_path.encode("utf-8")
@@ -125,9 +158,40 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         )
         self.assertEqual(actual, expected)
 
+    def test_delete_object_payload_is_raw_entity_id(self) -> None:
+        actual = tcp.pack_message_payload(
+            proto.MSG_TYPE_DELETE_OBJECT,
+            {"entity_id": "Car_1"},
+        )
+        self.assertEqual(actual, b"Car_1")
+
+    def test_delete_object_packet_header_uses_raw_string_size(self) -> None:
+        sent = []
+
+        class FakeSocket:
+            def sendall(self, data: bytes) -> None:
+                sent.append(data)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            tcp.send_delete_object(FakeSocket(), 7, "Car_1")
+        packet = sent[0]
+        self.assertEqual(len(packet), proto.HEADER_SIZE + len(b"Car_1"))
+        _, msg_class, msg_type, payload_size, request_id, flag = struct.unpack(
+            proto.HEADER_FMT,
+            packet[:proto.HEADER_SIZE],
+        )
+        self.assertEqual(msg_class, proto.MSG_CLASS_REQ)
+        self.assertEqual(msg_type, proto.MSG_TYPE_DELETE_OBJECT)
+        self.assertEqual(payload_size, len(b"Car_1"))
+        self.assertEqual(request_id, 7)
+        self.assertEqual(flag, proto.FLAG)
+        self.assertEqual(packet[proto.HEADER_SIZE:], b"Car_1")
+
     def test_parse_get_status_variable_payload(self) -> None:
         payload = struct.pack(
             proto.GET_STATUS_FMT,
+            0,
+            0,
             proto.TIME_MODE_VARIABLE,
             60,
             10,
@@ -139,6 +203,8 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         )
         parsed = tcp.parse_get_status_payload(payload)
         self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["result_code"], 0)
+        self.assertEqual(parsed["detail_code"], 0)
         self.assertEqual(parsed["mode"], proto.TIME_MODE_VARIABLE)
         self.assertEqual(parsed["target_fps"], 60)
         self.assertEqual(parsed["physics_delta_time"], 10)
@@ -165,6 +231,8 @@ class TcpPayloadGoldenTests(unittest.TestCase):
     def test_parse_get_status_fixed_payload(self) -> None:
         payload = struct.pack(
             proto.GET_STATUS_FMT,
+            0,
+            0,
             proto.TIME_MODE_FIXED,
             60,
             10,
@@ -176,6 +244,8 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         )
         parsed = tcp.parse_get_status_payload(payload)
         self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["result_code"], 0)
+        self.assertEqual(parsed["detail_code"], 0)
         self.assertEqual(parsed["mode"], proto.TIME_MODE_FIXED)
         self.assertEqual(parsed["target_fps"], 60)
         self.assertEqual(parsed["physics_delta_time"], 10)

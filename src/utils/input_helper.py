@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+import transport.object_enums as object_enums
+from utils import trajectory_samples
 
 
 # ============================================================
@@ -92,15 +94,27 @@ def _ask_select(prompt: str, options: dict[int, str], default: int) -> int:
 def prompt_create_object() -> dict:
     print("\n-- Create Object ------------------------------")
     return {
-        "entity_type": _ask_int("entity_type", 1),
+        "entity_type": _ask_select(
+            "entity_type",
+            object_enums.enum_options(object_enums.ENTITY_TYPE_ITEMS),
+            1,
+        ),
         "pos_x": _ask_float("pos x", 267.5667),
         "pos_y": _ask_float("pos y", -299.4991),
         "pos_z": _ask_float("pos z", 0.0522),
         "rot_x": _ask_float("rot x", -0.18),
         "rot_y": _ask_float("rot y", -179.982),
         "rot_z": _ask_float("rot z", -0.51),
-        "driving_mode": _ask_int("driving_mode", 2),
-        "ground_vehicle_model": _ask_int("ground_vehicle_model", 12),
+        "driving_mode": _ask_select(
+            "driving_mode",
+            object_enums.enum_options(object_enums.VEHICLE_DRIVING_MODE_ITEMS),
+            2,
+        ),
+        "ground_vehicle_model": _ask_select(
+            "ground_vehicle_model",
+            object_enums.enum_options(object_enums.GROUND_VEHICLE_MODEL_ITEMS),
+            12,
+        ),
     }
 
 
@@ -111,6 +125,34 @@ def prompt_manual_control_by_id() -> dict:
         "throttle": _ask_float("throttle", 0.4),
         "brake": _ask_float("brake", 0.0),
         "steer_angle": _ask_float("steer angle", 0.0),
+    }
+
+
+def prompt_delete_object() -> dict:
+    print("\n-- Delete Object ------------------------------")
+    return {
+        "entity_id": _ask_str("entity id", "Car_1"),
+    }
+
+
+def prompt_set_trajectory() -> dict:
+    print("\n-- Set Trajectory -----------------------------")
+    sample_options = {
+        idx: name
+        for idx, (name, _) in enumerate(trajectory_samples.TRAJECTORY_SAMPLES, start=1)
+    }
+    sample_index = _ask_select("sample", sample_options, 1)
+    sample_name = sample_options[sample_index]
+    points = list(trajectory_samples.get_sample(sample_name))
+    return {
+        "entity_id": _ask_str("entity id", "Car_1"),
+        "follow_mode": _ask_select(
+            "follow_mode",
+            object_enums.enum_options(trajectory_samples.TRAJECTORY_FOLLOW_MODE_ITEMS),
+            2,
+        ),
+        "trajectory_name": _ask_str("trajectory name", "Route_1"),
+        "points": points,
     }
 
 

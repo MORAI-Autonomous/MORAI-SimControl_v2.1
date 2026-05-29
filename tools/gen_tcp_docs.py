@@ -89,6 +89,12 @@ def validate_schema_against_protocol_defs() -> None:
     resp_1304 = get_response_message(0x1304)
     _expect(proto.RESULT_SIZE == get_min_payload_size(resp_1304), "0x1304 response size mismatch")
 
+    msg_1305 = get_message(0x1305)
+    _expect(get_min_payload_size(msg_1305) == 0, "0x1305 request min size mismatch")
+
+    resp_1305 = get_response_message(0x1305)
+    _expect(proto.RESULT_SIZE == get_min_payload_size(resp_1305), "0x1305 response size mismatch")
+
     resp_1401 = get_response_message(0x1401)
     _expect(
         proto.RESULT_SIZE + proto.ACTIVE_SUITE_STATUS_RESP_MIN_SIZE == get_min_payload_size(resp_1401),

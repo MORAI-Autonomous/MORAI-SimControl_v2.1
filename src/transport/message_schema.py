@@ -47,6 +47,7 @@ TYPE_LABELS: Dict[str, str] = {
     "float32": "float32",
     "float64": "float64",
     "string_u32": "uint32 length + utf-8 bytes",
+    "string_raw": "utf-8 bytes",
 }
 
 TYPE_SIZES: Dict[str, Optional[int]] = {
@@ -57,6 +58,7 @@ TYPE_SIZES: Dict[str, Optional[int]] = {
     "float32": 4,
     "float64": 8,
     "string_u32": None,
+    "string_raw": None,
 }
 
 STRUCT_FORMAT_CHARS: Dict[str, str] = {
@@ -123,15 +125,15 @@ MESSAGES: tuple[MessageSpec, ...] = (
         summary="Create an entity with initial transform and vehicle configuration.",
         handler="tcp.send_create_object()",
         fields=(
-            FieldSpec("entity_type", "int32"),
+            FieldSpec("entity_type", "int32", "EntityType enum value"),
             FieldSpec("pos_x", "float32"),
             FieldSpec("pos_y", "float32"),
             FieldSpec("pos_z", "float32"),
             FieldSpec("rot_x", "float32"),
             FieldSpec("rot_y", "float32"),
             FieldSpec("rot_z", "float32"),
-            FieldSpec("driving_mode", "int32"),
-            FieldSpec("ground_vehicle_model", "int32"),
+            FieldSpec("driving_mode", "int32", "VehicleDrivingMode enum value"),
+            FieldSpec("ground_vehicle_model", "int32", "GroundVehicleModel enum value"),
         ),
     ),
     MessageSpec(
@@ -173,7 +175,7 @@ MESSAGES: tuple[MessageSpec, ...] = (
         handler="tcp.send_set_trajectory()",
         fields=(
             FieldSpec("entity_id", "string_u32"),
-            FieldSpec("follow_mode", "int32"),
+            FieldSpec("follow_mode", "int32", "1 = POSITION, 2 = FOLLOW"),
             FieldSpec("trajectory_name", "string_u32"),
             FieldSpec("point_count", "uint32"),
         ),
@@ -184,6 +186,15 @@ MESSAGES: tuple[MessageSpec, ...] = (
             FieldSpec("points[].time", "float64"),
         ),
         notes=("Each trajectory point is serialized as four float64 values.",),
+    ),
+    MessageSpec(
+        msg_type=0x1305,
+        name="DeleteObject",
+        direction="request",
+        summary="Delete a target entity by identifier.",
+        handler="tcp.send_delete_object()",
+        fields=(FieldSpec("entity_id", "string_raw", "UTF-8 entity identifier. No length prefix."),),
+        notes=("Header payload_size is the UTF-8 byte length of entity_id.",),
     ),
     MessageSpec(
         msg_type=0x1401,
@@ -240,9 +251,11 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
         msg_type=0x1101,
         name="GetSimulationTimeStatus",
         direction="response",
-        summary="Return current simulation time mode and current simulation clock state using a fixed 40-byte payload.",
+        summary="Return result code plus current simulation time mode and simulation clock state.",
         parser="tcp.parse_get_status_payload()",
         fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
             FieldSpec("mode", "uint32", "1 = TIME_MODE_VARIABLE, 2 = TIME_MODE_FIXED"),
             FieldSpec("target_fps", "int32", "Target FPS"),
             FieldSpec("physics_delta_time", "int32", "Physics delta time in ms"),
@@ -328,6 +341,17 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
         name="SetTrajectory",
         direction="response",
         summary="Return result code for a set-trajectory request.",
+        parser="tcp.parse_result_code()",
+        fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
+        ),
+    ),
+    MessageSpec(
+        msg_type=0x1305,
+        name="DeleteObject",
+        direction="response",
+        summary="Return result code for a delete-object request.",
         parser="tcp.parse_result_code()",
         fields=(
             FieldSpec("result_code", "uint32"),
@@ -480,13 +504,18 @@ def get_min_payload_size(message: MessageSpec) -> int:
             total = 0
             for field in variant.fields:
                 size = TYPE_SIZES[field.field_type]
-                total += 4 if size is None else size
+                if field.field_type == "string_raw":
+                    total += 0
+                else:
+                    total += 4 if size is None else size
             totals.append(total)
         return min(totals) if totals else 0
     total = 0
     for field in message.fields:
         size = TYPE_SIZES[field.field_type]
-        if size is None:
+        if field.field_type == "string_raw":
+            total += 0
+        elif size is None:
             total += 4
         else:
             total += size
@@ -531,6 +560,8 @@ def render_struct_format(fields: Iterable[FieldSpec]) -> str:
     for field in fields:
         if field.field_type == "string_u32":
             fmt_parts.append("[uint32 len][bytes]")
+        elif field.field_type == "string_raw":
+            fmt_parts.append("[bytes]")
         else:
             fmt_parts.append(STRUCT_FORMAT_CHARS[field.field_type])
     return " ".join(fmt_parts) if fmt_parts else "(no payload)"
@@ -549,7 +580,7 @@ def get_variant_for_values(message: MessageSpec, values: Mapping[str, Any]) -> V
 
 
 def fixed_fields(fields: Iterable[FieldSpec]) -> tuple[FieldSpec, ...]:
-    return tuple(field for field in fields if field.field_type != "string_u32")
+    return tuple(field for field in fields if field.field_type not in ("string_u32", "string_raw"))
 
 
 def prefixed_string_fields(fields: Iterable[FieldSpec]) -> tuple[FieldSpec, ...]:
@@ -564,6 +595,8 @@ def pack_value(field_type: str, value: Any) -> bytes:
     if field_type == "string_u32":
         encoded = str(value).encode("utf-8")
         return struct.pack("<I", len(encoded)) + encoded
+    if field_type == "string_raw":
+        return str(value).encode("utf-8")
     return struct.pack("<" + STRUCT_FORMAT_CHARS[field_type], value)
 
 
@@ -616,6 +649,9 @@ def unpack_value(field_type: str, payload: bytes, offset: int = 0) -> Tuple[Any,
         if end > len(payload):
             raise ValueError(f"not enough bytes for string value at offset {offset}")
         return payload[offset:end].decode("utf-8", errors="replace"), end
+
+    if field_type == "string_raw":
+        return payload[offset:].decode("utf-8", errors="replace"), len(payload)
 
     size = TYPE_SIZES[field_type]
     if size is None or offset + size > len(payload):

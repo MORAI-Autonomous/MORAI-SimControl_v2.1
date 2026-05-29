@@ -24,7 +24,7 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | Msg Type | Name | Request Payload | Response Payload |
 |----------|------|-----------------|------------------|
 | [`0x1001`](#api-0x1001) | [`GetSimulatorStatus`](#api-0x1001) | `0 bytes` | `12 bytes` |
-| [`0x1101`](#api-0x1101) | [`GetSimulationTimeStatus`](#api-0x1101) | `0 bytes` | `40 bytes` |
+| [`0x1101`](#api-0x1101) | [`GetSimulationTimeStatus`](#api-0x1101) | `0 bytes` | `48 bytes` |
 | [`0x1102`](#api-0x1102) | [`SetSimulationTimeModeCommand`](#api-0x1102) | `20 bytes` | `20 bytes` |
 | [`0x1201`](#api-0x1201) | [`FixedStep`](#api-0x1201) | `4 bytes` | `8 bytes` |
 | [`0x1202`](#api-0x1202) | [`SaveData`](#api-0x1202) | `0 bytes` | `8 bytes` |
@@ -32,6 +32,7 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | [`0x1302`](#api-0x1302) | [`ManualControlById`](#api-0x1302) | `>= 28 bytes` | `8 bytes` |
 | [`0x1303`](#api-0x1303) | [`TransformControlById`](#api-0x1303) | `>= 40 bytes` | `8 bytes` |
 | [`0x1304`](#api-0x1304) | [`SetTrajectory`](#api-0x1304) | `>= 16 bytes + 32 bytes * item_count` | `8 bytes` |
+| [`0x1305`](#api-0x1305) | [`DeleteObject`](#api-0x1305) | `>= 0 bytes` | `8 bytes` |
 | [`0x1401`](#api-0x1401) | [`ActiveSuiteStatus`](#api-0x1401) | `0 bytes` | `>= 20 bytes + variable bytes * item_count` |
 | [`0x1402`](#api-0x1402) | [`LoadSuite`](#api-0x1402) | `>= 4 bytes` | `8 bytes` |
 | [`0x1504`](#api-0x1504) | [`ScenarioStatus`](#api-0x1504) | `0 bytes` | `>= 16 bytes` |
@@ -108,15 +109,17 @@ Notes:
 
 ### Resp
 
-- Payload: `40 bytes`
+- Payload: `48 bytes`
 - Parser: `tcp.parse_get_status_payload()`
 
-Return current simulation time mode and current simulation clock state using a fixed 40-byte payload.
+Return result code plus current simulation time mode and simulation clock state.
 
-Wire layout: `I i i i i Q q i`
+Wire layout: `I I I i i i i Q q i`
 
 | Field | Type | Description |
 |------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
 | `mode` | `uint32` | 1 = TIME_MODE_VARIABLE, 2 = TIME_MODE_FIXED |
 | `target_fps` | `int32` | Target FPS |
 | `physics_delta_time` | `int32` | Physics delta time in ms |
@@ -238,15 +241,15 @@ Wire layout: `i f f f f f f i i`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `entity_type` | `int32` | - |
+| `entity_type` | `int32` | EntityType enum value |
 | `pos_x` | `float32` | - |
 | `pos_y` | `float32` | - |
 | `pos_z` | `float32` | - |
 | `rot_x` | `float32` | - |
 | `rot_y` | `float32` | - |
 | `rot_z` | `float32` | - |
-| `driving_mode` | `int32` | - |
-| `ground_vehicle_model` | `int32` | - |
+| `driving_mode` | `int32` | VehicleDrivingMode enum value |
+| `ground_vehicle_model` | `int32` | GroundVehicleModel enum value |
 
 ### Resp
 
@@ -349,7 +352,7 @@ Wire layout: `[uint32 len][bytes] i [uint32 len][bytes] I`
 | Field | Type | Description |
 |------|------|-------------|
 | `entity_id` | `uint32 length + utf-8 bytes` | - |
-| `follow_mode` | `int32` | - |
+| `follow_mode` | `int32` | 1 = POSITION, 2 = FOLLOW |
 | `trajectory_name` | `uint32 length + utf-8 bytes` | - |
 | `point_count` | `uint32` | - |
 
@@ -371,6 +374,39 @@ Notes:
 - Parser: `tcp.parse_result_code()`
 
 Return result code for a set-trajectory request.
+
+Wire layout: `I I`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+
+<a id="api-0x1305"></a>
+## `0x1305` DeleteObject
+
+### Req
+
+- Payload: `>= 0 bytes`
+- Builder: `tcp.send_delete_object()`
+
+Delete a target entity by identifier.
+
+Wire layout: `[bytes]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `entity_id` | `utf-8 bytes` | UTF-8 entity identifier. No length prefix. |
+
+Notes:
+- Header payload_size is the UTF-8 byte length of entity_id.
+
+### Resp
+
+- Payload: `8 bytes`
+- Parser: `tcp.parse_result_code()`
+
+Return result code for a delete-object request.
 
 Wire layout: `I I`
 
