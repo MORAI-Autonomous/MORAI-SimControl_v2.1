@@ -81,6 +81,24 @@ MESSAGES: tuple[MessageSpec, ...] = (
         notes=("No payload.",),
     ),
     MessageSpec(
+        msg_type=0x1002,
+        name="GetSimulatorMode",
+        direction="request",
+        summary="Query the current simulator functional mode.",
+        handler="tcp.send_get_simulator_mode()",
+        notes=("No payload.",),
+    ),
+    MessageSpec(
+        msg_type=0x1003,
+        name="SetSimulatorMode",
+        direction="request",
+        summary="Request a transition to the specified simulator functional mode.",
+        handler="tcp.send_set_simulator_mode()",
+        fields=(
+            FieldSpec("mode", "uint32", "1=SCENARIO, 2=REPLAY, 3=TRAFFIC, 4=MONITORING, 5=COMPETITION"),
+        ),
+    ),
+    MessageSpec(
         msg_type=0x1101,
         name="GetSimulationTimeStatus",
         direction="request",
@@ -99,7 +117,7 @@ MESSAGES: tuple[MessageSpec, ...] = (
             FieldSpec("target_fps", "int32", "Target FPS (10~200)"),
             FieldSpec("physics_delta_time", "int32", "Physics delta time in ms (5~100)"),
             FieldSpec("rtf", "int32", "Fixed only. Variable mode must send 0"),
-            FieldSpec("user_control", "int32", "Fixed only. Variable mode must send 0"),
+            FieldSpec("user_control", "int32", "Fixed only. Variable mode sends 0"),
         ),
     ),
     MessageSpec(
@@ -245,6 +263,29 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
             FieldSpec("result_code", "uint32"),
             FieldSpec("detail_code", "uint32"),
             FieldSpec("state", "uint32", "0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY"),
+        ),
+    ),
+    MessageSpec(
+        msg_type=0x1002,
+        name="GetSimulatorMode",
+        direction="response",
+        summary="Return result code and the current simulator mode.",
+        parser="tcp.parse_get_simulator_mode_payload()",
+        fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
+            FieldSpec("mode", "uint32", "0=UNSPECIFIED, 1=SCENARIO, 2=REPLAY, 3=TRAFFIC, 4=MONITORING, 5=COMPETITION"),
+        ),
+    ),
+    MessageSpec(
+        msg_type=0x1003,
+        name="SetSimulatorMode",
+        direction="response",
+        summary="Return result code for a set-simulator-mode request.",
+        parser="tcp.parse_result_code()",
+        fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
         ),
     ),
     MessageSpec(

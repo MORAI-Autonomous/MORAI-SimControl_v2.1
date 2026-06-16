@@ -35,6 +35,12 @@ def validate_schema_against_protocol_defs() -> None:
     msg_1001 = get_message(0x1001)
     _expect(get_min_payload_size(msg_1001) == 0, "0x1001 request size mismatch")
 
+    msg_1002 = get_message(0x1002)
+    _expect(get_min_payload_size(msg_1002) == 0, "0x1002 request size mismatch")
+
+    msg_1003 = get_message(0x1003)
+    _expect(proto.SET_SIMULATOR_MODE_REQ_SIZE == get_min_payload_size(msg_1003), "0x1003 request size mismatch")
+
     msg_1102 = get_message(0x1102)
     _expect(
         proto.SET_SIM_TIME_MODE_REQ_SIZE == get_min_payload_size(msg_1102),
@@ -70,6 +76,12 @@ def validate_schema_against_protocol_defs() -> None:
 
     resp_1001 = get_response_message(0x1001)
     _expect(proto.GET_SIMULATOR_STATUS_SIZE == get_min_payload_size(resp_1001), "0x1001 response size mismatch")
+
+    resp_1002 = get_response_message(0x1002)
+    _expect(proto.GET_SIMULATOR_MODE_RESP_SIZE == get_min_payload_size(resp_1002), "0x1002 response size mismatch")
+
+    resp_1003 = get_response_message(0x1003)
+    _expect(proto.RESULT_SIZE == get_min_payload_size(resp_1003), "0x1003 response size mismatch")
 
     resp_1201 = get_response_message(0x1201)
     _expect(proto.RESULT_SIZE == get_min_payload_size(resp_1201), "0x1201 response size mismatch")

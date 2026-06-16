@@ -32,6 +32,8 @@ _load_suite_lock:  threading.Lock      = threading.Lock()
 _load_suite_pending_rid: Optional[int] = None
 _load_suite_started_at: float          = 0.0
 _load_suite_watchdog: Optional[threading.Thread] = None
+_scenario_control_lock: threading.Lock = threading.Lock()
+_scenario_play_pending: dict[int, bool] = {}
 _LOAD_SUITE_SOFT_TIMEOUT_SEC           = 10.0
 _SIMULATOR_STATE_LABELS = {
     0: "UNSPECIFIED",
@@ -39,6 +41,20 @@ _SIMULATOR_STATE_LABELS = {
     2: "HOME",
     3: "LOADING",
     4: "READY",
+}
+_SIMULATOR_MODE_ITEMS = [
+    "SCENARIO (1)",
+    "REPLAY (2)",
+    "TRAFFIC (3)",
+    "MONITORING (4)",
+    "COMPETITION (5)",
+]
+_SIMULATOR_MODE_VALUES = {
+    "SCENARIO (1)": proto.SIMULATOR_MODE_SCENARIO,
+    "REPLAY (2)": proto.SIMULATOR_MODE_REPLAY,
+    "TRAFFIC (3)": proto.SIMULATOR_MODE_TRAFFIC,
+    "MONITORING (4)": proto.SIMULATOR_MODE_MONITORING,
+    "COMPETITION (5)": proto.SIMULATOR_MODE_COMPETITION,
 }
 
 def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
@@ -60,6 +76,16 @@ def build(parent: int | str) -> None:
                     proto.MSG_TYPE_GET_SIMULATOR_STATUS,
                     lambda rid: tcp.send_get_simulator_status(_tcp_sock, rid)))
             dpg.add_text("-", tag="simulator_status_text", color=(140, 140, 140, 255))
+        with dpg.group(horizontal=True):
+            dpg.add_text("Mode      :", color=(180, 180, 180, 255))
+            dpg.add_button(label="Get",
+                callback=lambda: _dispatch(
+                    proto.MSG_TYPE_GET_SIMULATOR_MODE,
+                    lambda rid: tcp.send_get_simulator_mode(_tcp_sock, rid)))
+            dpg.add_combo(tag="simulator_mode_combo", items=_SIMULATOR_MODE_ITEMS,
+                          default_value="SCENARIO (1)", width=145)
+            dpg.add_button(label="Set", callback=_on_set_simulator_mode)
+            dpg.add_text("-", tag="simulator_mode_text", color=(140, 140, 140, 255))
 
         _section("SUITE")
 
@@ -273,18 +299,38 @@ def _on_auto_toggle() -> None:
 
 def _on_sc_play() -> None:
     _save_state()
-    _timer_cancel.set()
     with _elapsed_lock:
         resume = (_elapsed_accum_sec > 0.0 and _elapsed_running_since is None)
-    if not resume:
-        _elapsed_cancel.set()
-    _start_elapsed_counter(resume=resume)
-    _start_sc_timer()
     _dispatch(
         proto.MSG_TYPE_SCENARIO_CONTROL,
         lambda rid: tcp.send_scenario_control(
             _tcp_sock, rid, command=1,
-            scenario_name=dpg.get_value("sc_name")))
+            scenario_name=dpg.get_value("sc_name")),
+        on_registered=lambda rid, should_resume=resume:
+            _register_scenario_play(rid, should_resume),
+    )
+
+
+def _register_scenario_play(request_id: int, resume: bool) -> None:
+    with _scenario_control_lock:
+        _scenario_play_pending[request_id] = resume
+
+
+def on_scenario_control_response(
+    request_id: int,
+    result_code: int,
+    detail_code: int,
+) -> None:
+    with _scenario_control_lock:
+        resume = _scenario_play_pending.pop(request_id, None)
+    if resume is None or result_code != 0:
+        return
+
+    _timer_cancel.set()
+    if not resume:
+        _elapsed_cancel.set()
+    _start_elapsed_counter(resume=resume)
+    _start_sc_timer()
 
 
 def _on_sc_stop() -> None:
@@ -436,6 +482,8 @@ def on_connection_lost() -> None:
     global _load_suite_pending_rid
     with _load_suite_lock:
         _load_suite_pending_rid = None
+    with _scenario_control_lock:
+        _scenario_play_pending.clear()
     ui_queue.post(
         lambda: _set_load_suite_status(
             "Disconnected",
@@ -486,6 +534,20 @@ def on_simulator_status(state: int) -> None:
             color = (100, 220, 100, 255)
         dpg.set_value("simulator_status_text", label)
         dpg.configure_item("simulator_status_text", color=color)
+    ui_queue.post(_apply)
+
+
+def on_simulator_mode(mode: int) -> None:
+    def _apply(m=mode) -> None:
+        if not dpg.does_item_exist("simulator_mode_text"):
+            return
+        label = proto.SIMULATOR_MODE_MAP.get(m, f"UNKNOWN({m})")
+        combo_label = _simulator_mode_label(m)
+        dpg.set_value("simulator_mode_text", label)
+        dpg.configure_item("simulator_mode_text", color=(100, 220, 100, 255))
+        if combo_label and dpg.does_item_exist("simulator_mode_combo"):
+            dpg.set_value("simulator_mode_combo", combo_label)
+            _save_state()
     ui_queue.post(_apply)
 
 
@@ -578,6 +640,25 @@ def _on_set_sim_mode() -> None:
     )
 
 
+def _on_set_simulator_mode() -> None:
+    _save_state()
+    mode = _SIMULATOR_MODE_VALUES.get(dpg.get_value("simulator_mode_combo"))
+    if mode is None:
+        log.append("[Simulator] invalid simulator mode selection", "WARN")
+        return
+    _dispatch(
+        proto.MSG_TYPE_SET_SIMULATOR_MODE,
+        lambda rid, m=mode: tcp.send_set_simulator_mode(_tcp_sock, rid, m),
+    )
+
+
+def _simulator_mode_label(mode: int) -> Optional[str]:
+    for label, value in _SIMULATOR_MODE_VALUES.items():
+        if value == mode:
+            return label
+    return None
+
+
 def _folder_btn(callback) -> None:
     """폴더 아이콘 버튼 — 텍스처가 없으면 텍스트 버튼으로 폴백."""
     import dearpygui.dearpygui as _dpg
@@ -592,6 +673,7 @@ def _save_state() -> None:
         os.makedirs(os.path.dirname(_STATE_FILE), exist_ok=True)
         data = {
             "suite_path":        dpg.get_value("suite_path"),
+            "simulator_mode_combo": dpg.get_value("simulator_mode_combo"),
             "sim_mode_combo":    dpg.get_value("sim_mode_combo"),
             "sim_target_fps":    dpg.get_value("sim_target_fps"),
             "sim_physics_dt":    dpg.get_value("sim_physics_dt"),
@@ -615,6 +697,10 @@ def _load_state() -> None:
             data = json.load(f)
         if data.get("suite_path") and dpg.does_item_exist("suite_path"):
             dpg.set_value("suite_path", data["suite_path"])
+        if dpg.does_item_exist("simulator_mode_combo"):
+            mode_label = data.get("simulator_mode_combo", "SCENARIO (1)")
+            if mode_label in _SIMULATOR_MODE_VALUES:
+                dpg.set_value("simulator_mode_combo", mode_label)
         if dpg.does_item_exist("sim_mode_combo"):
             dpg.set_value("sim_mode_combo", data.get("sim_mode_combo", "Fixed"))
             _on_sim_mode_combo(None, dpg.get_value("sim_mode_combo"))

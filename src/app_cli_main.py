@@ -91,6 +91,8 @@ def connect_and_start_receiver(pending: dict, lock: threading.Lock):
 def print_key_bindings():
     print("---- Simulation Time Mode ----")
     print("  [0] GetSimulatorStatus          (TCP 0x1001)")
+    print("  [e] GetSimulatorMode            (TCP 0x1002)")
+    print("  [f] SetSimulatorMode            (TCP 0x1003)")
     print("  [1] GetSimulationTimeStatus      (TCP 0x1101)")
     print("  [2] SetSimulationTimeModeCommand (TCP 0x1102)")
     print("---- Fixed Step Control ------")
@@ -182,6 +184,15 @@ def main():
                 if key == "0":
                     dispatch(MSG_TYPE_GET_SIMULATOR_STATUS,
                              lambda rid: tcp.send_get_simulator_status(tcp_sock, rid))
+
+                elif key in ("e", "E"):
+                    dispatch(MSG_TYPE_GET_SIMULATOR_MODE,
+                             lambda rid: tcp.send_get_simulator_mode(tcp_sock, rid))
+
+                elif key in ("f", "F"):
+                    params = prompt.prompt_set_simulator_mode()
+                    dispatch(MSG_TYPE_SET_SIMULATOR_MODE,
+                             lambda rid: tcp.send_set_simulator_mode(tcp_sock, rid, **params))
 
                 elif key == "1":
                     dispatch(MSG_TYPE_GET_SIMULATION_TIME_STATUS,

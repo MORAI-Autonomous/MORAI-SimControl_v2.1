@@ -24,6 +24,10 @@ def simulator_state_to_string(state: int):
     return proto.SIMULATOR_STATE_MAP.get(state, f"UNKNOWN({state})")
 
 
+def simulator_mode_to_string(mode: int):
+    return proto.SIMULATOR_MODE_MAP.get(mode, f"UNKNOWN({mode})")
+
+
 def _hex_dump(data: bytes):
     return " ".join(f"{b:02X}" for b in data) if data else "(empty)"
 
@@ -130,6 +134,41 @@ class Receiver(threading.Thread):
                         cmd_panel.on_simulator_status(state)
                 else:
                     log.append(f"GetSimulatorStatus parse_failed rid={request_id}", "WARN")
+
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_GET_SIMULATOR_MODE:
+                parsed = tcp.parse_get_simulator_mode_payload(payload)
+                if parsed:
+                    mode = parsed["mode"]
+                    result_code = parsed["result_code"]
+                    detail_code = parsed["detail_code"]
+                    level = "RECV" if result_code == 0 else "WARN"
+                    log.append(
+                        f"GetSimulatorMode rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code} "
+                        f"mode={mode}({simulator_mode_to_string(mode)})",
+                        level
+                    )
+                    if result_code == 0:
+                        cmd_panel.on_simulator_mode(mode)
+                else:
+                    log.append(f"GetSimulatorMode parse_failed rid={request_id}", "WARN")
+
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_SET_SIMULATOR_MODE:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "WARN"
+                    log.append(
+                        f"SetSimulatorMode rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level
+                    )
+                else:
+                    log.append(f"SetSimulatorMode parse_failed rid={request_id}", "WARN")
 
             elif msg_class == proto.MSG_CLASS_RESP \
                     and msg_type == proto.MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND:
@@ -265,6 +304,30 @@ class Receiver(threading.Thread):
                         cmd_panel.on_scenario_status(parsed["state"], parsed["name"])
                 else:
                     log.append(f"ScenarioStatus parse_failed rid={request_id}", "WARN")
+
+            # ScenarioControl (0x1505)
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_SCENARIO_CONTROL:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "ERROR"
+                    log.append(
+                        f"ScenarioControl rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level,
+                    )
+                    cmd_panel.on_scenario_control_response(
+                        request_id,
+                        result_code,
+                        detail_code,
+                    )
+                else:
+                    log.append(
+                        f"ScenarioControl parse_failed rid={request_id}",
+                        "WARN",
+                    )
 
             # General RESP — 오류만 로그
             elif msg_class == proto.MSG_CLASS_RESP:

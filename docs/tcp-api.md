@@ -24,6 +24,8 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | Msg Type | Name | Request Payload | Response Payload |
 |----------|------|-----------------|------------------|
 | [`0x1001`](#api-0x1001) | [`GetSimulatorStatus`](#api-0x1001) | `0 bytes` | `12 bytes` |
+| [`0x1002`](#api-0x1002) | [`GetSimulatorMode`](#api-0x1002) | `0 bytes` | `12 bytes` |
+| [`0x1003`](#api-0x1003) | [`SetSimulatorMode`](#api-0x1003) | `4 bytes` | `8 bytes` |
 | [`0x1101`](#api-0x1101) | [`GetSimulationTimeStatus`](#api-0x1101) | `0 bytes` | `48 bytes` |
 | [`0x1102`](#api-0x1102) | [`SetSimulationTimeModeCommand`](#api-0x1102) | `20 bytes` | `20 bytes` |
 | [`0x1201`](#api-0x1201) | [`FixedStep`](#api-0x1201) | `4 bytes` | `8 bytes` |
@@ -90,6 +92,68 @@ Notes:
 - Payload is protobuf-encoded datamodel::SimulatorStatus, not the raw 12-byte response layout.
 - Current parser expects minimal wire format: 0x08 <varint(state)>.
 
+<a id="api-0x1002"></a>
+## `0x1002` GetSimulatorMode
+
+### Req
+
+- Payload: `0 bytes`
+- Builder: `tcp.send_get_simulator_mode()`
+
+Query the current simulator functional mode.
+
+Wire layout: variant-specific
+
+This message has no payload.
+
+Notes:
+- No payload.
+
+### Resp
+
+- Payload: `12 bytes`
+- Parser: `tcp.parse_get_simulator_mode_payload()`
+
+Return result code and the current simulator mode.
+
+Wire layout: `I I I`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+| `mode` | `uint32` | 0=UNSPECIFIED, 1=SCENARIO, 2=REPLAY, 3=TRAFFIC, 4=MONITORING, 5=COMPETITION |
+
+<a id="api-0x1003"></a>
+## `0x1003` SetSimulatorMode
+
+### Req
+
+- Payload: `4 bytes`
+- Builder: `tcp.send_set_simulator_mode()`
+
+Request a transition to the specified simulator functional mode.
+
+Wire layout: `I`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `mode` | `uint32` | 1=SCENARIO, 2=REPLAY, 3=TRAFFIC, 4=MONITORING, 5=COMPETITION |
+
+### Resp
+
+- Payload: `8 bytes`
+- Parser: `tcp.parse_result_code()`
+
+Return result code for a set-simulator-mode request.
+
+Wire layout: `I I`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+
 <a id="api-0x1101"></a>
 ## `0x1101` GetSimulationTimeStatus
 
@@ -147,7 +211,7 @@ Wire layout: `i i i i i`
 | `target_fps` | `int32` | Target FPS (10~200) |
 | `physics_delta_time` | `int32` | Physics delta time in ms (5~100) |
 | `rtf` | `int32` | Fixed only. Variable mode must send 0 |
-| `user_control` | `int32` | Fixed only. Variable mode must send 0 |
+| `user_control` | `int32` | Fixed only. Variable mode sends 0 |
 
 ### Resp
 

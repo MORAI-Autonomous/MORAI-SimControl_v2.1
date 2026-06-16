@@ -173,6 +173,22 @@ def send_get_simulator_status(sock: socket.socket, request_id: int) -> None:
                  "GetSimulatorStatus(0x1001)")
 
 
+def send_get_simulator_mode(sock: socket.socket, request_id: int) -> None:
+    _send_packet(sock, request_id, proto.MSG_TYPE_GET_SIMULATOR_MODE, b"",
+                 "GetSimulatorMode(0x1002)")
+
+
+def send_set_simulator_mode(sock: socket.socket, request_id: int, mode: int) -> None:
+    if mode not in proto.SIMULATOR_MODE_MAP or mode == proto.SIMULATOR_MODE_UNSPECIFIED:
+        raise ValueError(f"Unsupported simulator mode: {mode}")
+    payload = pack_message_payload(
+        proto.MSG_TYPE_SET_SIMULATOR_MODE,
+        {"mode": int(mode)},
+    )
+    _send_packet(sock, request_id, proto.MSG_TYPE_SET_SIMULATOR_MODE, payload,
+                 f"SetSimulatorMode(0x1003) mode={mode}")
+
+
 def send_simulation_time_mode_command(
     sock: socket.socket,
     request_id: int,
@@ -408,6 +424,23 @@ def parse_get_simulator_status_notification_payload(payload: bytes) -> Optional[
     if state is None or state not in proto.SIMULATOR_STATE_MAP:
         return None
     return {"state": state}
+
+
+def parse_get_simulator_mode_payload(payload: bytes) -> Optional[Dict[str, Any]]:
+    if len(payload) != proto.GET_SIMULATOR_MODE_RESP_SIZE:
+        return None
+    try:
+        values, _, offset = unpack_message_payload(0x1002, payload, direction="response")
+    except ValueError:
+        return None
+    if offset != len(payload):
+        return None
+    if values.get("result_code") != 0:
+        return values
+    if values.get("mode") not in proto.SIMULATOR_MODE_MAP:
+        return None
+    return values
+
 
 def parse_result_code(payload: bytes) -> Optional[Tuple[int, int]]:
     if len(payload) != proto.RESULT_SIZE:

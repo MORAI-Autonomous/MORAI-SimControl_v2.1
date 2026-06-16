@@ -25,6 +25,36 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         )
         self.assertEqual(actual, b"")
 
+    def test_get_simulator_mode_request_has_no_payload(self) -> None:
+        actual = pack_message_payload(
+            proto.MSG_TYPE_GET_SIMULATOR_MODE,
+            {},
+        )
+        self.assertEqual(actual, b"")
+
+    def test_set_simulator_mode_payload(self) -> None:
+        actual = pack_message_payload(
+            proto.MSG_TYPE_SET_SIMULATOR_MODE,
+            {"mode": proto.SIMULATOR_MODE_TRAFFIC},
+        )
+        self.assertEqual(actual, struct.pack("<I", proto.SIMULATOR_MODE_TRAFFIC))
+
+    def test_parse_get_simulator_mode_payload(self) -> None:
+        payload = struct.pack("<III", 0, 0, proto.SIMULATOR_MODE_TRAFFIC)
+        parsed = tcp.parse_get_simulator_mode_payload(payload)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["result_code"], 0)
+        self.assertEqual(parsed["detail_code"], 0)
+        self.assertEqual(parsed["mode"], proto.SIMULATOR_MODE_TRAFFIC)
+
+    def test_parse_get_simulator_mode_error_payload(self) -> None:
+        payload = struct.pack("<III", 200, 10, proto.SIMULATOR_MODE_UNSPECIFIED)
+        parsed = tcp.parse_get_simulator_mode_payload(payload)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["result_code"], 200)
+        self.assertEqual(parsed["detail_code"], 10)
+        self.assertEqual(parsed["mode"], proto.SIMULATOR_MODE_UNSPECIFIED)
+
     def test_set_simulation_time_mode_variable_payload(self) -> None:
         expected = struct.pack("<iiiii", 1, 60, 10, 0, 0)
         actual = pack_message_payload(

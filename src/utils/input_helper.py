@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import transport.object_enums as object_enums
+import transport.protocol_defs as proto
 from utils import trajectory_samples
 
 
@@ -116,6 +117,22 @@ def prompt_create_object() -> dict:
             12,
         ),
     }
+
+
+def prompt_set_simulator_mode() -> dict:
+    print("\n-- Set Simulator Mode -------------------------")
+    mode = _ask_select(
+        "mode",
+        {
+            proto.SIMULATOR_MODE_SCENARIO: "SCENARIO",
+            proto.SIMULATOR_MODE_REPLAY: "REPLAY",
+            proto.SIMULATOR_MODE_TRAFFIC: "TRAFFIC",
+            proto.SIMULATOR_MODE_MONITORING: "MONITORING",
+            proto.SIMULATOR_MODE_COMPETITION: "COMPETITION",
+        },
+        proto.SIMULATOR_MODE_SCENARIO,
+    )
+    return {"mode": mode}
 
 
 def prompt_manual_control_by_id() -> dict:

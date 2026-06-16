@@ -197,7 +197,7 @@ class AppState:
             "INFO",
         )
 
-    def dispatch(self, msg_type: int, send_fn, on_sent=None):
+    def dispatch(self, msg_type: int, send_fn, on_sent=None, on_registered=None):
         if self.tcp_sock is None:
             log_panel.append("Not connected.", "WARN")
             return
@@ -205,6 +205,8 @@ class AppState:
             try:
                 rid = self.rid.next()
                 pending_add(self.pending, self.lock, rid, msg_type)
+                if on_registered is not None:
+                    on_registered(rid)
                 send_fn(rid)
                 if on_sent is not None:
                     on_sent(rid)
