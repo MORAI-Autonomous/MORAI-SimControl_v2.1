@@ -22,8 +22,9 @@ python app.py
 
 - `UDP Monitor`: Receive and inspect UDP payloads from `.tmpl` files.
 - `UDP Control`: Build and send UDP control payloads.
-- `Commands`: Control simulator mode/map, simulation time, suite/scenario, traffic scenario, and fixed-step commands.
+- `Commands`: Control simulator mode/map, simulation time, suite/scenario, and fixed-step commands.
 - `Object Control`: Create, delete, manually control, transform, and assign trajectories to simulator objects.
+- `Traffic Scenario`: Load `.anmroutes` files and trigger traffic generation.
 - `Camera Sensor`: Receive and visualize RGB, Depth, Semantic, Instance, and BBox camera streams.
 - `Lane Control`: Run camera-based lane following.
 - `Path Follow`: Run path-follow autonomous driving.
