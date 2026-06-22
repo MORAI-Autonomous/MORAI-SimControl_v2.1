@@ -1,4 +1,5 @@
 from __future__ import annotations
+from __future__ import annotations
 
 import sys
 import transport.object_enums as object_enums
@@ -133,6 +134,28 @@ def prompt_set_simulator_mode() -> dict:
         proto.SIMULATOR_MODE_SCENARIO,
     )
     return {"mode": mode}
+
+
+def prompt_load_map() -> dict:
+    print("\n-- Load Map -----------------------------------")
+    options = {idx + 1: name for idx, name in enumerate(proto.SIMULATOR_MAP_NAMES)}
+    selected = _ask_select("map", options, 1)
+    return {"map_name": options[selected]}
+
+
+def prompt_load_traffic_scenario() -> dict:
+    print("\n-- Load Traffic Scenario ----------------------")
+    return {
+        "file_path": _ask_str("file path", "C:/MORAI/traffic/example.anmroutes"),
+    }
+
+
+def prompt_traffic_generate() -> dict:
+    print("\n-- Traffic Generate ---------------------------")
+    return {
+        "autonomous": _ask_int("autonomous", 1),
+        "lc_rate": _ask_int("lc_rate", 0),
+    }
 
 
 def prompt_manual_control_by_id() -> dict:

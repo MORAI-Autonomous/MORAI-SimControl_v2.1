@@ -39,6 +39,15 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         )
         self.assertEqual(actual, struct.pack("<I", proto.SIMULATOR_MODE_TRAFFIC))
 
+    def test_load_map_payload(self) -> None:
+        map_name = "sangam_racing_track"
+        encoded = map_name.encode("utf-8")
+        actual = pack_message_payload(
+            proto.MSG_TYPE_LOAD_MAP,
+            {"map_name": map_name},
+        )
+        self.assertEqual(actual, struct.pack("<I", len(encoded)) + encoded)
+
     def test_parse_get_simulator_mode_payload(self) -> None:
         payload = struct.pack("<III", 0, 0, proto.SIMULATOR_MODE_TRAFFIC)
         parsed = tcp.parse_get_simulator_mode_payload(payload)
@@ -176,6 +185,25 @@ class TcpPayloadGoldenTests(unittest.TestCase):
             {"suite_path": suite_path},
         )
         self.assertEqual(actual, expected)
+
+    def test_load_traffic_scenario_payload(self) -> None:
+        file_path = "C:/Traffic/Test.anmroutes"
+        expected = struct.pack("<I", len(file_path.encode("utf-8"))) + file_path.encode("utf-8")
+        actual = pack_message_payload(
+            proto.MSG_TYPE_LOAD_TRAFFIC_SCENARIO,
+            {"file_path": file_path},
+        )
+        self.assertEqual(actual, expected)
+
+    def test_traffic_generate_payload(self) -> None:
+        actual = pack_message_payload(
+            proto.MSG_TYPE_TRAFFIC_GENERATE,
+            {
+                "autonomous": 1,
+                "lc_rate": 25,
+            },
+        )
+        self.assertEqual(actual, struct.pack("<ii", 1, 25))
 
     def test_scenario_control_payload(self) -> None:
         expected = struct.pack("<I", 3) + struct.pack("<I", 0)

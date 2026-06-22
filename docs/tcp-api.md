@@ -1,6 +1,8 @@
 # TCP API Reference
 
-> Auto-generated from `transport/message_schema.py`. Do not edit manually.
+> 이 문서는 자동 생성됩니다. Confluence에서 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.
+> 생성 시각: `2026-06-22 13:52 +0900`
+> 기준 브랜치: `origin/v1.0-Official-26.H1`
 
 ## Common Header
 
@@ -26,19 +28,22 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | [`0x1001`](#api-0x1001) | [`GetSimulatorStatus`](#api-0x1001) | `0 bytes` | `12 bytes` |
 | [`0x1002`](#api-0x1002) | [`GetSimulatorMode`](#api-0x1002) | `0 bytes` | `12 bytes` |
 | [`0x1003`](#api-0x1003) | [`SetSimulatorMode`](#api-0x1003) | `4 bytes` | `8 bytes` |
+| [`0x1004`](#api-0x1004) | [`LoadMap`](#api-0x1004) | `4 + N bytes (N = map_name UTF-8 byte length)` | `8 bytes` |
 | [`0x1101`](#api-0x1101) | [`GetSimulationTimeStatus`](#api-0x1101) | `0 bytes` | `48 bytes` |
 | [`0x1102`](#api-0x1102) | [`SetSimulationTimeModeCommand`](#api-0x1102) | `20 bytes` | `20 bytes` |
 | [`0x1201`](#api-0x1201) | [`FixedStep`](#api-0x1201) | `4 bytes` | `8 bytes` |
 | [`0x1202`](#api-0x1202) | [`SaveData`](#api-0x1202) | `0 bytes` | `8 bytes` |
-| [`0x1301`](#api-0x1301) | [`CreateObject`](#api-0x1301) | `36 bytes` | `>= 12 bytes` |
-| [`0x1302`](#api-0x1302) | [`ManualControlById`](#api-0x1302) | `>= 28 bytes` | `8 bytes` |
-| [`0x1303`](#api-0x1303) | [`TransformControlById`](#api-0x1303) | `>= 40 bytes` | `8 bytes` |
-| [`0x1304`](#api-0x1304) | [`SetTrajectory`](#api-0x1304) | `>= 16 bytes + 32 bytes * item_count` | `8 bytes` |
-| [`0x1305`](#api-0x1305) | [`DeleteObject`](#api-0x1305) | `>= 0 bytes` | `8 bytes` |
-| [`0x1401`](#api-0x1401) | [`ActiveSuiteStatus`](#api-0x1401) | `0 bytes` | `>= 20 bytes + variable bytes * item_count` |
-| [`0x1402`](#api-0x1402) | [`LoadSuite`](#api-0x1402) | `>= 4 bytes` | `8 bytes` |
-| [`0x1504`](#api-0x1504) | [`ScenarioStatus`](#api-0x1504) | `0 bytes` | `>= 16 bytes` |
-| [`0x1505`](#api-0x1505) | [`ScenarioControl`](#api-0x1505) | `>= 8 bytes` | `8 bytes` |
+| [`0x1301`](#api-0x1301) | [`CreateObject`](#api-0x1301) | `36 bytes` | `8 + 4 + N bytes (N = object_id UTF-8 byte length)` |
+| [`0x1302`](#api-0x1302) | [`ManualControlById`](#api-0x1302) | `4 + N + 24 bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
+| [`0x1303`](#api-0x1303) | [`TransformControlById`](#api-0x1303) | `4 + N + 36 bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
+| [`0x1304`](#api-0x1304) | [`SetTrajectory`](#api-0x1304) | `4 + N1 + 4 + 4 + N2 + 4 bytes (N1 = entity_id UTF-8 byte length, N2 = trajectory_name UTF-8 byte length) + 32 bytes * item_count` | `8 bytes` |
+| [`0x1305`](#api-0x1305) | [`DeleteObject`](#api-0x1305) | `N bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
+| [`0x1401`](#api-0x1401) | [`ActiveSuiteStatus`](#api-0x1401) | `0 bytes` | `8 + 4 + N1 + 4 + N2 + 4 bytes (N1 = active_suite_name UTF-8 byte length, N2 = active_scenario_name UTF-8 byte length) + variable bytes * item_count` |
+| [`0x1402`](#api-0x1402) | [`LoadSuite`](#api-0x1402) | `4 + N bytes (N = suite_path UTF-8 byte length)` | `8 bytes` |
+| [`0x1504`](#api-0x1504) | [`ScenarioStatus`](#api-0x1504) | `0 bytes` | `12 + 4 + N bytes (N = name UTF-8 byte length)` |
+| [`0x1505`](#api-0x1505) | [`ScenarioControl`](#api-0x1505) | `4 + 4 + N bytes (N = scenario_name UTF-8 byte length)` | `8 bytes` |
+| [`0x1601`](#api-0x1601) | [`LoadTrafficScenario`](#api-0x1601) | `4 + N bytes (N = file_path UTF-8 byte length)` | `8 bytes` |
+| [`0x1602`](#api-0x1602) | [`TrafficGenerate`](#api-0x1602) | `8 bytes` | `8 bytes` |
 
 ## APIs
 
@@ -66,7 +71,7 @@ Notes:
 
 Return the current simulator frontend lifecycle state.
 
-Wire layout: `I I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 state]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -81,7 +86,7 @@ Wire layout: `I I I`
 
 Push the current simulator frontend lifecycle state without a preceding request.
 
-Wire layout: `I`
+Wire layout: `[uint32 state]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -116,7 +121,7 @@ Notes:
 
 Return result code and the current simulator mode.
 
-Wire layout: `I I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 mode]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -134,7 +139,7 @@ Wire layout: `I I I`
 
 Request a transition to the specified simulator functional mode.
 
-Wire layout: `I`
+Wire layout: `[uint32 mode]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -147,7 +152,41 @@ Wire layout: `I`
 
 Return result code for a set-simulator-mode request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+
+<a id="api-0x1004"></a>
+## `0x1004` LoadMap
+
+### Req
+
+- Payload: `4 + N bytes (N = map_name UTF-8 byte length)`
+- Builder: `tcp.send_load_map()`
+
+Request the simulator to load the specified map by name.
+
+Wire layout: `[uint32 map_name_len][utf-8 * map_name_len]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `map_name_len` | `uint32` | map_name UTF-8 byte length |
+| `map_name` | `utf-8 bytes` | Map name string to look up in the map registry |
+
+Notes:
+- Returns InvalidParam if the map name is not found in the registry.
+
+### Resp
+
+- Payload: `8 bytes`
+- Parser: `tcp.parse_result_code()`
+
+Return result code for a load-map request.
+
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -178,7 +217,7 @@ Notes:
 
 Return result code plus current simulation time mode and simulation clock state.
 
-Wire layout: `I I I i i i i Q q i`
+Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 mode] [int32 target_fps] [int32 physics_delta_time] [int32 rtf] [int32 user_control] [uint64 step_index] [int64 seconds] [int32 nanos]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -203,7 +242,7 @@ Wire layout: `I I I i i i i Q q i`
 
 Set simulation time mode using a fixed 20-byte payload.
 
-Wire layout: `i i i i i`
+Wire layout: `[int32 mode] [int32 target_fps] [int32 physics_delta_time] [int32 rtf] [int32 user_control]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -220,7 +259,7 @@ Wire layout: `i i i i i`
 
 Return result code and the applied simulation time settings.
 
-Wire layout: `I I I f f`
+Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 mode] [float32 fixed_delta] [float32 simulation_speed]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -240,7 +279,7 @@ Wire layout: `I I I f f`
 
 Advance the simulator by a fixed number of steps.
 
-Wire layout: `I`
+Wire layout: `[uint32 step_count]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -253,7 +292,7 @@ Wire layout: `I`
 
 Return result code for a fixed-step request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -284,7 +323,7 @@ Notes:
 
 Return result code for a save-data request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -301,7 +340,7 @@ Wire layout: `I I`
 
 Create an entity with initial transform and vehicle configuration.
 
-Wire layout: `i f f f f f f i i`
+Wire layout: `[int32 entity_type] [float32 pos_x] [float32 pos_y] [float32 pos_z] [float32 rot_x] [float32 rot_y] [float32 rot_z] [int32 driving_mode] [int32 ground_vehicle_model]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -317,37 +356,39 @@ Wire layout: `i f f f f f f i i`
 
 ### Resp
 
-- Payload: `>= 12 bytes`
+- Payload: `8 + 4 + N bytes (N = object_id UTF-8 byte length)`
 - Parser: `tcp.parse_create_object_payload()`
 
 Return result code and the created object identifier.
 
-Wire layout: `I I [uint32 len][bytes]`
+Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 object_id_len][utf-8 * object_id_len]`
 
 | Field | Type | Description |
 |------|------|-------------|
 | `result_code` | `uint32` | - |
 | `detail_code` | `uint32` | - |
-| `object_id` | `uint32 length + utf-8 bytes` | - |
+| `object_id_len` | `uint32` | object_id UTF-8 byte length |
+| `object_id` | `utf-8 bytes` | - |
 
 <a id="api-0x1302"></a>
 ## `0x1302` ManualControlById
 
 ### Req
 
-- Payload: `>= 28 bytes`
+- Payload: `4 + N + 24 bytes (N = entity_id UTF-8 byte length)`
 - Builder: `tcp.send_manual_control_by_id()`
 
 Send manual throttle, brake, and steering-wheel angle to a target entity.
 
-Wire layout: `[uint32 len][bytes] d d d`
+Wire layout: `[uint32 entity_id_len][utf-8 * entity_id_len] [float64 throttle] [float64 brake] [float64 steer_angle]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `entity_id` | `uint32 length + utf-8 bytes` | - |
-| `throttle` | `float64` | - |
-| `brake` | `float64` | - |
-| `steer_angle` | `float64` | - |
+| `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
+| `entity_id` | `utf-8 bytes` | Control target Entity ID |
+| `throttle` | `float64` | Throttle input value |
+| `brake` | `float64` | Brake input value |
+| `steer_angle` | `float64` | Steering wheel angle value |
 
 ### Resp
 
@@ -356,7 +397,7 @@ Wire layout: `[uint32 len][bytes] d d d`
 
 Return result code for a manual-control request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -368,16 +409,17 @@ Wire layout: `I I`
 
 ### Req
 
-- Payload: `>= 40 bytes`
+- Payload: `4 + N + 36 bytes (N = entity_id UTF-8 byte length)`
 - Builder: `tcp.send_transform_control_by_id()`
 
 Set target transform, steer angle, and speed for a target entity.
 
-Wire layout: `[uint32 len][bytes] f f f f f f f d`
+Wire layout: `[uint32 entity_id_len][utf-8 * entity_id_len] [float32 pos_x] [float32 pos_y] [float32 pos_z] [float32 rot_x] [float32 rot_y] [float32 rot_z] [float32 steer_angle] [float64 speed]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `entity_id` | `uint32 length + utf-8 bytes` | - |
+| `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
+| `entity_id` | `utf-8 bytes` | - |
 | `pos_x` | `float32` | - |
 | `pos_y` | `float32` | - |
 | `pos_z` | `float32` | - |
@@ -394,7 +436,7 @@ Wire layout: `[uint32 len][bytes] f f f f f f f d`
 
 Return result code for a transform-control request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -406,18 +448,20 @@ Wire layout: `I I`
 
 ### Req
 
-- Payload: `>= 16 bytes + 32 bytes * item_count`
+- Payload: `4 + N1 + 4 + 4 + N2 + 4 bytes (N1 = entity_id UTF-8 byte length, N2 = trajectory_name UTF-8 byte length) + 32 bytes * item_count`
 - Builder: `tcp.send_set_trajectory()`
 
 Send a named trajectory and follow mode to a target entity.
 
-Wire layout: `[uint32 len][bytes] i [uint32 len][bytes] I`
+Wire layout: `[uint32 entity_id_len][utf-8 * entity_id_len] [int32 follow_mode] [uint32 trajectory_name_len][utf-8 * trajectory_name_len] [uint32 point_count]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `entity_id` | `uint32 length + utf-8 bytes` | - |
+| `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
+| `entity_id` | `utf-8 bytes` | - |
 | `follow_mode` | `int32` | 1 = POSITION, 2 = FOLLOW |
-| `trajectory_name` | `uint32 length + utf-8 bytes` | - |
+| `trajectory_name_len` | `uint32` | trajectory_name UTF-8 byte length |
+| `trajectory_name` | `utf-8 bytes` | - |
 | `point_count` | `uint32` | - |
 
 Repeat layout:
@@ -439,7 +483,7 @@ Notes:
 
 Return result code for a set-trajectory request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -451,12 +495,12 @@ Wire layout: `I I`
 
 ### Req
 
-- Payload: `>= 0 bytes`
+- Payload: `N bytes (N = entity_id UTF-8 byte length)`
 - Builder: `tcp.send_delete_object()`
 
 Delete a target entity by identifier.
 
-Wire layout: `[bytes]`
+Wire layout: `[utf-8 bytes entity_id]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -472,7 +516,7 @@ Notes:
 
 Return result code for a delete-object request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -498,42 +542,46 @@ Notes:
 
 ### Resp
 
-- Payload: `>= 20 bytes + variable bytes * item_count`
+- Payload: `8 + 4 + N1 + 4 + N2 + 4 bytes (N1 = active_suite_name UTF-8 byte length, N2 = active_scenario_name UTF-8 byte length) + variable bytes * item_count`
 - Parser: `tcp.parse_active_suite_status_payload()`
 
 Return the active suite, active scenario, and scenario name list.
 
-Wire layout: `I I [uint32 len][bytes] [uint32 len][bytes] I`
+Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 active_suite_name_len][utf-8 * active_suite_name_len] [uint32 active_scenario_name_len][utf-8 * active_scenario_name_len] [uint32 scenario_list_size]`
 
 | Field | Type | Description |
 |------|------|-------------|
 | `result_code` | `uint32` | - |
 | `detail_code` | `uint32` | - |
-| `active_suite_name` | `uint32 length + utf-8 bytes` | - |
-| `active_scenario_name` | `uint32 length + utf-8 bytes` | - |
+| `active_suite_name_len` | `uint32` | active_suite_name UTF-8 byte length |
+| `active_suite_name` | `utf-8 bytes` | - |
+| `active_scenario_name_len` | `uint32` | active_scenario_name UTF-8 byte length |
+| `active_scenario_name` | `utf-8 bytes` | - |
 | `scenario_list_size` | `uint32` | - |
 
 Repeat layout:
 
 | Field | Type | Description |
 |------|------|-------------|
-| `scenario_list[].name` | `uint32 length + utf-8 bytes` | - |
+| `scenario_list[].name_len` | `uint32` | scenario_list[].name UTF-8 byte length |
+| `scenario_list[].name` | `utf-8 bytes` | - |
 
 <a id="api-0x1402"></a>
 ## `0x1402` LoadSuite
 
 ### Req
 
-- Payload: `>= 4 bytes`
+- Payload: `4 + N bytes (N = suite_path UTF-8 byte length)`
 - Builder: `tcp.send_load_suite()`
 
 Load a MORAI suite from a path string.
 
-Wire layout: `[uint32 len][bytes]`
+Wire layout: `[uint32 suite_path_len][utf-8 * suite_path_len]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `suite_path` | `uint32 length + utf-8 bytes` | - |
+| `suite_path_len` | `uint32` | suite_path UTF-8 byte length |
+| `suite_path` | `utf-8 bytes` | - |
 
 ### Resp
 
@@ -542,7 +590,7 @@ Wire layout: `[uint32 len][bytes]`
 
 Return result code for a load-suite request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
@@ -568,19 +616,20 @@ Notes:
 
 ### Resp
 
-- Payload: `>= 16 bytes`
+- Payload: `12 + 4 + N bytes (N = name UTF-8 byte length)`
 - Parser: `tcp.parse_scenario_status_payload()`
 
 Return result code, current scenario execution state, and scenario name.
 
-Wire layout: `I I I [uint32 len][bytes]`
+Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 state] [uint32 name_len][utf-8 * name_len]`
 
 | Field | Type | Description |
 |------|------|-------------|
 | `result_code` | `uint32` | - |
 | `detail_code` | `uint32` | - |
 | `state` | `uint32` | 1=Play, 2=Pause, 3=Stop, 4=Completed |
-| `name` | `uint32 length + utf-8 bytes` | Current scenario name |
+| `name_len` | `uint32` | name UTF-8 byte length |
+| `name` | `utf-8 bytes` | Current scenario name |
 
 Notes:
 - Parser currently accepts both the new payload (result_code/detail_code/state/name) and the legacy 12-byte payload (result_code/detail_code/state).
@@ -588,17 +637,18 @@ Notes:
 
 ### Noti
 
-- Payload: `>= 8 bytes`
+- Payload: `4 + 4 + N bytes (N = name UTF-8 byte length)`
 - Parser: `tcp.parse_scenario_status_notification_payload()`
 
 Push the current scenario execution state and scenario name without a preceding request.
 
-Wire layout: `I [uint32 len][bytes]`
+Wire layout: `[uint32 state] [uint32 name_len][utf-8 * name_len]`
 
 | Field | Type | Description |
 |------|------|-------------|
 | `state` | `uint32` | Protobuf enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed |
-| `name` | `uint32 length + utf-8 bytes` | Current scenario name |
+| `name_len` | `uint32` | name UTF-8 byte length |
+| `name` | `utf-8 bytes` | Current scenario name |
 
 Notes:
 - Header uses msg_class = 0x03 (NOTI).
@@ -610,17 +660,18 @@ Notes:
 
 ### Req
 
-- Payload: `>= 8 bytes`
+- Payload: `4 + 4 + N bytes (N = scenario_name UTF-8 byte length)`
 - Builder: `tcp.send_scenario_control()`
 
 Control scenario playback state and optional target scenario name.
 
-Wire layout: `I [uint32 len][bytes]`
+Wire layout: `[uint32 command] [uint32 scenario_name_len][utf-8 * scenario_name_len]`
 
 | Field | Type | Description |
 |------|------|-------------|
 | `command` | `uint32` | 1=Play, 2=Pause, 3=Stop, 4=Prev, 5=Next |
-| `scenario_name` | `uint32 length + utf-8 bytes` | - |
+| `scenario_name_len` | `uint32` | scenario_name UTF-8 byte length |
+| `scenario_name` | `utf-8 bytes` | - |
 
 ### Resp
 
@@ -629,7 +680,69 @@ Wire layout: `I [uint32 len][bytes]`
 
 Return result code for a scenario-control request.
 
-Wire layout: `I I`
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+
+<a id="api-0x1601"></a>
+## `0x1601` LoadTrafficScenario
+
+### Req
+
+- Payload: `4 + N bytes (N = file_path UTF-8 byte length)`
+- Builder: `tcp.send_load_traffic_scenario()`
+
+Load a traffic scenario from an .anmroutes file path.
+
+Wire layout: `[uint32 file_path_len][utf-8 * file_path_len]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `file_path_len` | `uint32` | file_path UTF-8 byte length |
+| `file_path` | `utf-8 bytes` | .anmroutes file path encoded as UTF-8 |
+
+### Resp
+
+- Payload: `8 bytes`
+- Parser: `tcp.parse_result_code()`
+
+Return result code for a load-traffic-scenario request.
+
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+
+<a id="api-0x1602"></a>
+## `0x1602` TrafficGenerate
+
+### Req
+
+- Payload: `8 bytes`
+- Builder: `tcp.send_traffic_generate()`
+
+Generate traffic using the loaded traffic scenario.
+
+Wire layout: `[int32 autonomous] [int32 lc_rate]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `autonomous` | `int32` | Autonomous driving flag |
+| `lc_rate` | `int32` | Lane-change rate |
+
+### Resp
+
+- Payload: `8 bytes`
+- Parser: `tcp.parse_result_code()`
+
+Return result code for a traffic-generate request.
+
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|

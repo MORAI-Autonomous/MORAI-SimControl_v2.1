@@ -99,6 +99,17 @@ MESSAGES: tuple[MessageSpec, ...] = (
         ),
     ),
     MessageSpec(
+        msg_type=0x1004,
+        name="LoadMap",
+        direction="request",
+        summary="Request the simulator to load the specified map by name.",
+        handler="tcp.send_load_map()",
+        fields=(
+            FieldSpec("map_name", "string_u32", "Map name string to look up in the map registry"),
+        ),
+        notes=("Returns InvalidParam if the map name is not found in the registry.",),
+    ),
+    MessageSpec(
         msg_type=0x1101,
         name="GetSimulationTimeStatus",
         direction="request",
@@ -161,10 +172,10 @@ MESSAGES: tuple[MessageSpec, ...] = (
         summary="Send manual throttle, brake, and steering-wheel angle to a target entity.",
         handler="tcp.send_manual_control_by_id()",
         fields=(
-            FieldSpec("entity_id", "string_u32"),
-            FieldSpec("throttle", "float64"),
-            FieldSpec("brake", "float64"),
-            FieldSpec("steer_angle", "float64"),
+            FieldSpec("entity_id", "string_u32", "Control target Entity ID"),
+            FieldSpec("throttle", "float64", "Throttle input value"),
+            FieldSpec("brake", "float64", "Brake input value"),
+            FieldSpec("steer_angle", "float64", "Steering wheel angle value"),
         ),
     ),
     MessageSpec(
@@ -249,6 +260,25 @@ MESSAGES: tuple[MessageSpec, ...] = (
             FieldSpec("scenario_name", "string_u32"),
         ),
     ),
+    MessageSpec(
+        msg_type=0x1601,
+        name="LoadTrafficScenario",
+        direction="request",
+        summary="Load a traffic scenario from an .anmroutes file path.",
+        handler="tcp.send_load_traffic_scenario()",
+        fields=(FieldSpec("file_path", "string_u32", ".anmroutes file path encoded as UTF-8"),),
+    ),
+    MessageSpec(
+        msg_type=0x1602,
+        name="TrafficGenerate",
+        direction="request",
+        summary="Generate traffic using the loaded traffic scenario.",
+        handler="tcp.send_traffic_generate()",
+        fields=(
+            FieldSpec("autonomous", "int32", "Autonomous driving flag"),
+            FieldSpec("lc_rate", "int32", "Lane-change rate"),
+        ),
+    ),
 )
 
 
@@ -282,6 +312,17 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
         name="SetSimulatorMode",
         direction="response",
         summary="Return result code for a set-simulator-mode request.",
+        parser="tcp.parse_result_code()",
+        fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
+        ),
+    ),
+    MessageSpec(
+        msg_type=0x1004,
+        name="LoadMap",
+        direction="response",
+        summary="Return result code for a load-map request.",
         parser="tcp.parse_result_code()",
         fields=(
             FieldSpec("result_code", "uint32"),
@@ -453,6 +494,28 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
             FieldSpec("detail_code", "uint32"),
         ),
     ),
+    MessageSpec(
+        msg_type=0x1601,
+        name="LoadTrafficScenario",
+        direction="response",
+        summary="Return result code for a load-traffic-scenario request.",
+        parser="tcp.parse_result_code()",
+        fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
+        ),
+    ),
+    MessageSpec(
+        msg_type=0x1602,
+        name="TrafficGenerate",
+        direction="response",
+        summary="Return result code for a traffic-generate request.",
+        parser="tcp.parse_result_code()",
+        fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
+        ),
+    ),
 )
 
 
@@ -563,26 +626,65 @@ def get_min_payload_size(message: MessageSpec) -> int:
     return total
 
 
+def _string_length_label(index: int, total: int) -> str:
+    return "N" if total == 1 else f"N{index}"
+
+
+def _format_payload_size_for_fields(fields: Sequence[FieldSpec]) -> str:
+    string_fields = [field for field in fields if field.field_type in ("string_u32", "string_raw")]
+    string_count = len(string_fields)
+    string_index = 0
+    fixed_total = 0
+    terms: List[str] = []
+    notes: List[str] = []
+
+    def flush_fixed() -> None:
+        nonlocal fixed_total
+        if fixed_total:
+            terms.append(str(fixed_total))
+            fixed_total = 0
+
+    for field in fields:
+        size = TYPE_SIZES[field.field_type]
+        if field.field_type == "string_u32":
+            flush_fixed()
+            string_index += 1
+            length_label = _string_length_label(string_index, string_count)
+            terms.extend(("4", length_label))
+            notes.append(f"{length_label} = {field.name} UTF-8 byte length")
+        elif field.field_type == "string_raw":
+            flush_fixed()
+            string_index += 1
+            length_label = _string_length_label(string_index, string_count)
+            terms.append(length_label)
+            notes.append(f"{length_label} = {field.name} UTF-8 byte length")
+        elif size is not None:
+            fixed_total += size
+        else:
+            flush_fixed()
+            terms.append("?")
+
+    flush_fixed()
+    if not terms:
+        return "0 bytes"
+
+    size_text = " + ".join(terms) + " bytes"
+    if notes:
+        size_text += " (" + ", ".join(notes) + ")"
+    return size_text
+
+
 def describe_payload_size(message: MessageSpec) -> str:
     if message.variants:
         variant_desc = []
         for variant in message.variants:
-            total = 0
-            dynamic = False
-            for field in variant.fields:
-                size = TYPE_SIZES[field.field_type]
-                if size is None:
-                    total += 4
-                    dynamic = True
-                else:
-                    total += size
-            size_text = f">= {total} bytes" if dynamic else f"{total} bytes"
+            size_text = _format_payload_size_for_fields(variant.fields)
             variant_desc.append(f"{size_text} ({variant.summary or variant.name})")
         return " / ".join(variant_desc)
     static_size = get_static_payload_size(message)
     if static_size is not None:
         return f"{static_size} bytes"
-    base = f">= {get_min_payload_size(message)} bytes"
+    base = _format_payload_size_for_fields(message.fields)
     if message.repeat_fields:
         per_item_sizes = [TYPE_SIZES[field.field_type] for field in message.repeat_fields]
         if all(size is not None for size in per_item_sizes):
@@ -600,11 +702,11 @@ def render_struct_format(fields: Iterable[FieldSpec]) -> str:
     fmt_parts: List[str] = []
     for field in fields:
         if field.field_type == "string_u32":
-            fmt_parts.append("[uint32 len][bytes]")
+            fmt_parts.append(f"[uint32 {field.name}_len][utf-8 * {field.name}_len]")
         elif field.field_type == "string_raw":
-            fmt_parts.append("[bytes]")
+            fmt_parts.append(f"[utf-8 bytes {field.name}]")
         else:
-            fmt_parts.append(STRUCT_FORMAT_CHARS[field.field_type])
+            fmt_parts.append(f"[{render_wire_type(field.field_type)} {field.name}]")
     return " ".join(fmt_parts) if fmt_parts else "(no payload)"
 
 

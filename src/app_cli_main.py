@@ -93,6 +93,7 @@ def print_key_bindings():
     print("  [0] GetSimulatorStatus          (TCP 0x1001)")
     print("  [e] GetSimulatorMode            (TCP 0x1002)")
     print("  [f] SetSimulatorMode            (TCP 0x1003)")
+    print("  [g] LoadMap                     (TCP 0x1004)")
     print("  [1] GetSimulationTimeStatus      (TCP 0x1101)")
     print("  [2] SetSimulationTimeModeCommand (TCP 0x1102)")
     print("---- Fixed Step Control ------")
@@ -110,6 +111,8 @@ def print_key_bindings():
     print("---- Suite Control -----------")
     print("  [c] ActiveSuiteStatus            (TCP 0x1401)")
     print("  [d] LoadSuite                    (TCP 0x1402)")
+    print("  [h] LoadTrafficScenario          (TCP 0x1601)")
+    print("  [i] TrafficGenerate              (TCP 0x1602)")
     print("---- ETC ---------------------")
     print(f" [W] Toggle AutoCall (FixedStep <-> SaveData) x {MAX_CALL_NUM}")
     print("  [Q] Quit\n")
@@ -194,6 +197,11 @@ def main():
                     dispatch(MSG_TYPE_SET_SIMULATOR_MODE,
                              lambda rid: tcp.send_set_simulator_mode(tcp_sock, rid, **params))
 
+                elif key in ("g", "G"):
+                    params = prompt.prompt_load_map()
+                    dispatch(MSG_TYPE_LOAD_MAP,
+                             lambda rid: tcp.send_load_map(tcp_sock, rid, **params))
+
                 elif key == "1":
                     dispatch(MSG_TYPE_GET_SIMULATION_TIME_STATUS,
                              lambda rid: tcp.send_get_status(tcp_sock, rid))
@@ -262,6 +270,16 @@ def main():
                              lambda rid: tcp.send_load_suite(
                                  tcp_sock, rid,
                                  suite_path=r"C:\\Users\\user\\Desktop\\TotalTest\\TotalTest.msuite"))
+
+                elif key in ("h", "H"):
+                    params = prompt.prompt_load_traffic_scenario()
+                    dispatch(MSG_TYPE_LOAD_TRAFFIC_SCENARIO,
+                             lambda rid: tcp.send_load_traffic_scenario(tcp_sock, rid, **params))
+
+                elif key in ("i", "I"):
+                    params = prompt.prompt_traffic_generate()
+                    dispatch(MSG_TYPE_TRAFFIC_GENERATE,
+                             lambda rid: tcp.send_traffic_generate(tcp_sock, rid, **params))
 
                 elif key in ("w", "W"):
                     toggle_auto_caller()

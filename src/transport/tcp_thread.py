@@ -171,6 +171,21 @@ class Receiver(threading.Thread):
                     log.append(f"SetSimulatorMode parse_failed rid={request_id}", "WARN")
 
             elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_LOAD_MAP:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "WARN"
+                    log.append(
+                        f"LoadMap rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level
+                    )
+                else:
+                    log.append(f"LoadMap parse_failed rid={request_id}", "WARN")
+
+            elif msg_class == proto.MSG_CLASS_RESP \
                     and msg_type == proto.MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND:
                 parsed = tcp.parse_set_simulation_time_mode_payload(payload)
                 if parsed:
@@ -330,6 +345,42 @@ class Receiver(threading.Thread):
                     )
 
             # General RESP — 오류만 로그
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_LOAD_TRAFFIC_SCENARIO:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "ERROR"
+                    log.append(
+                        f"LoadTrafficScenario rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level,
+                    )
+                else:
+                    log.append(
+                        f"LoadTrafficScenario parse_failed rid={request_id}",
+                        "WARN",
+                    )
+
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_TRAFFIC_GENERATE:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "ERROR"
+                    log.append(
+                        f"TrafficGenerate rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level,
+                    )
+                else:
+                    log.append(
+                        f"TrafficGenerate parse_failed rid={request_id}",
+                        "WARN",
+                    )
+
             elif msg_class == proto.MSG_CLASS_RESP:
                 if payload_size >= proto.RESULT_SIZE:
                     parsed = tcp.parse_result_code(payload)

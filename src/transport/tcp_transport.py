@@ -189,6 +189,17 @@ def send_set_simulator_mode(sock: socket.socket, request_id: int, mode: int) -> 
                  f"SetSimulatorMode(0x1003) mode={mode}")
 
 
+def send_load_map(sock: socket.socket, request_id: int, map_name: str) -> None:
+    if not map_name:
+        raise ValueError("map_name is required")
+    payload = pack_message_payload(
+        proto.MSG_TYPE_LOAD_MAP,
+        {"map_name": map_name},
+    )
+    _send_packet(sock, request_id, proto.MSG_TYPE_LOAD_MAP, payload,
+                 f"LoadMap(0x1004) map={map_name}")
+
+
 def send_simulation_time_mode_command(
     sock: socket.socket,
     request_id: int,
@@ -355,6 +366,34 @@ def send_scenario_control(
     )
     _send_packet(sock, request_id, proto.MSG_TYPE_SCENARIO_CONTROL, payload,
                  f"ScenarioControl(0x1505) command={command} scenario_name={scenario_name!r}")
+
+
+def send_load_traffic_scenario(sock: socket.socket, request_id: int, file_path: str) -> None:
+    if not file_path:
+        raise ValueError("file_path is required")
+    payload = pack_message_payload(
+        proto.MSG_TYPE_LOAD_TRAFFIC_SCENARIO,
+        {"file_path": file_path},
+    )
+    _send_packet(sock, request_id, proto.MSG_TYPE_LOAD_TRAFFIC_SCENARIO, payload,
+                 f"LoadTrafficScenario(0x1601) file_path={file_path}")
+
+
+def send_traffic_generate(
+    sock: socket.socket,
+    request_id: int,
+    autonomous: int,
+    lc_rate: int,
+) -> None:
+    payload = pack_message_payload(
+        proto.MSG_TYPE_TRAFFIC_GENERATE,
+        {
+            "autonomous": int(autonomous),
+            "lc_rate": int(lc_rate),
+        },
+    )
+    _send_packet(sock, request_id, proto.MSG_TYPE_TRAFFIC_GENERATE, payload,
+                 f"TrafficGenerate(0x1602) autonomous={autonomous} lc_rate={lc_rate}")
 
 
 def send_active_suite_status(sock: socket.socket, request_id: int) -> None:

@@ -46,6 +46,7 @@ VALID_MSG_CLASSES = {MSG_CLASS_REQ, MSG_CLASS_RESP, MSG_CLASS_NOTI}
 MSG_TYPE_GET_SIMULATOR_STATUS         = 0x1001
 MSG_TYPE_GET_SIMULATOR_MODE           = 0x1002
 MSG_TYPE_SET_SIMULATOR_MODE           = 0x1003
+MSG_TYPE_LOAD_MAP                     = 0x1004
 MSG_TYPE_GET_SIMULATION_TIME_STATUS    = 0x1101
 MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND = 0x1102
 
@@ -65,11 +66,14 @@ MSG_TYPE_ACTIVE_SUITE_STATUS           = 0x1401
 MSG_TYPE_LOAD_SUITE                    = 0x1402
 MSG_TYPE_SCENARIO_STATUS               = 0x1504
 MSG_TYPE_SCENARIO_CONTROL              = 0x1505
+MSG_TYPE_LOAD_TRAFFIC_SCENARIO         = 0x1601
+MSG_TYPE_TRAFFIC_GENERATE              = 0x1602
 
 VALID_MSG_TYPES = {
     MSG_TYPE_GET_SIMULATOR_STATUS,
     MSG_TYPE_GET_SIMULATOR_MODE,
     MSG_TYPE_SET_SIMULATOR_MODE,
+    MSG_TYPE_LOAD_MAP,
     MSG_TYPE_GET_SIMULATION_TIME_STATUS,
     MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND,
     MSG_TYPE_FIXED_STEP,
@@ -83,6 +87,8 @@ VALID_MSG_TYPES = {
     MSG_TYPE_SCENARIO_STATUS,
     MSG_TYPE_SCENARIO_CONTROL,
     MSG_TYPE_ACTIVE_SUITE_STATUS,
+    MSG_TYPE_LOAD_TRAFFIC_SCENARIO,
+    MSG_TYPE_TRAFFIC_GENERATE,
 }
 
 
@@ -127,6 +133,32 @@ SIMULATOR_MODE_MAP = {
     SIMULATOR_MODE_MONITORING: "MONITORING",
     SIMULATOR_MODE_COMPETITION: "COMPETITION",
 }
+
+SIMULATOR_MAP_NAMES = (
+    "seoul",
+    "kcity_katri",
+    "hwaseong",
+    "pangyo",
+    "kiapi",
+    "gyeongbu_expressway",
+    "sangam_racing_track",
+    "dt_su_katech",
+    "dt_su_yongin_circuit",
+    "dt_gr_tymict",
+    "dt_su_kcity",
+    "testbed_01",
+    "hwaseong_e8",
+    "lv_woowa24",
+    "testfield_dynamics",
+    "testfield_sensor",
+    "nato_avt_408",
+    "vm_gr_off_road",
+    "vm_su_roka_trainingcenter_a",
+    "vm_su_roka_trainingcenter_b",
+    "vm_su_hanwha_turret",
+    "dt_region_06",
+    "vm_ub_morai_city",
+)
 
 # ============================================================
 # Packet Formats & Sizes

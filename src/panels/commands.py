@@ -56,6 +56,7 @@ _SIMULATOR_MODE_VALUES = {
     "MONITORING (4)": proto.SIMULATOR_MODE_MONITORING,
     "COMPETITION (5)": proto.SIMULATOR_MODE_COMPETITION,
 }
+_SIMULATOR_MAP_ITEMS = list(proto.SIMULATOR_MAP_NAMES)
 
 def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
     global _tcp_sock, _dispatch, _toggle_auto
@@ -86,6 +87,11 @@ def build(parent: int | str) -> None:
                           default_value="SCENARIO (1)", width=145)
             dpg.add_button(label="Set", callback=_on_set_simulator_mode)
             dpg.add_text("-", tag="simulator_mode_text", color=(140, 140, 140, 255))
+        with dpg.group(horizontal=True):
+            dpg.add_text("Map       :", color=(180, 180, 180, 255))
+            dpg.add_combo(tag="simulator_map_combo", items=_SIMULATOR_MAP_ITEMS,
+                          default_value=_SIMULATOR_MAP_ITEMS[0], width=210)
+            dpg.add_button(label="Load", callback=_on_load_map)
 
         _section("SUITE")
 
@@ -218,6 +224,25 @@ def build(parent: int | str) -> None:
         # ── Manual Control (collapsing) ────────────────────
         # ── Transform Control (collapsing) ─────────────────
         # ── Fixed Step ─────────────────────────────────────
+        _section("TRAFFIC SCENARIO")
+        with dpg.group(horizontal=True):
+            dpg.add_text("Browse    :", color=(180, 180, 180, 255))
+            _folder_btn(callback=_browse_traffic_scenario)
+        with dpg.group(horizontal=True):
+            dpg.add_text("Path      :", color=(180, 180, 180, 255))
+            dpg.add_input_text(tag="traffic_scenario_path", width=-1,
+                               hint=".anmroutes file path")
+        with dpg.group(horizontal=True):
+            dpg.add_text("Control   :", color=(180, 180, 180, 255))
+            dpg.add_text("Autonomous", color=(160, 160, 160, 255))
+            dpg.add_input_int(tag="traffic_autonomous", default_value=1, step=0, width=70)
+            dpg.add_text("LC Rate", color=(160, 160, 160, 255))
+            dpg.add_input_int(tag="traffic_lc_rate", default_value=0, step=0, width=70)
+        with dpg.group(horizontal=True):
+            dpg.add_text("Action    :", color=(180, 180, 180, 255))
+            dpg.add_button(label="Load", callback=_load_traffic_scenario)
+            dpg.add_button(label="Generate", callback=_traffic_generate)
+
         _section("FIXED STEP")
 
         # Step : count [input] [FixedStep]
@@ -429,6 +454,26 @@ def _browse_suite() -> None:
     threading.Thread(target=_open_dialog, daemon=True).start()
 
 
+def _browse_traffic_scenario() -> None:
+    def _open_dialog():
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askopenfilename(
+            title="Select Traffic Scenario File",
+            filetypes=[("MORAI Traffic Scenario", "*.anmroutes"), ("All files", "*.*")],
+        )
+        root.destroy()
+        if path:
+            ui_queue.post(lambda p=path: (
+                dpg.set_value("traffic_scenario_path", p),
+                _save_state(),
+            ))
+    threading.Thread(target=_open_dialog, daemon=True).start()
+
+
 def _load_suite() -> None:
     path = dpg.get_value("suite_path").strip()
     if not path:
@@ -439,6 +484,29 @@ def _load_suite() -> None:
         proto.MSG_TYPE_LOAD_SUITE,
         lambda rid: tcp.send_load_suite(_tcp_sock, rid, suite_path=path),
         on_sent=_on_load_suite_sent,
+    )
+
+
+def _load_traffic_scenario() -> None:
+    path = dpg.get_value("traffic_scenario_path").strip()
+    if not path:
+        log.append("[Traffic] .anmroutes file path is required.", level="WARN")
+        return
+    _save_state()
+    _dispatch(
+        proto.MSG_TYPE_LOAD_TRAFFIC_SCENARIO,
+        lambda rid: tcp.send_load_traffic_scenario(_tcp_sock, rid, file_path=path),
+    )
+
+
+def _traffic_generate() -> None:
+    autonomous = int(dpg.get_value("traffic_autonomous"))
+    lc_rate = int(dpg.get_value("traffic_lc_rate"))
+    _save_state()
+    _dispatch(
+        proto.MSG_TYPE_TRAFFIC_GENERATE,
+        lambda rid, auto=autonomous, rate=lc_rate:
+            tcp.send_traffic_generate(_tcp_sock, rid, autonomous=auto, lc_rate=rate),
     )
 
 
@@ -652,6 +720,18 @@ def _on_set_simulator_mode() -> None:
     )
 
 
+def _on_load_map() -> None:
+    _save_state()
+    map_name = dpg.get_value("simulator_map_combo")
+    if map_name not in _SIMULATOR_MAP_ITEMS:
+        log.append("[Simulator] invalid map selection", "WARN")
+        return
+    _dispatch(
+        proto.MSG_TYPE_LOAD_MAP,
+        lambda rid, name=map_name: tcp.send_load_map(_tcp_sock, rid, name),
+    )
+
+
 def _simulator_mode_label(mode: int) -> Optional[str]:
     for label, value in _SIMULATOR_MODE_VALUES.items():
         if value == mode:
@@ -673,7 +753,11 @@ def _save_state() -> None:
         os.makedirs(os.path.dirname(_STATE_FILE), exist_ok=True)
         data = {
             "suite_path":        dpg.get_value("suite_path"),
+            "traffic_scenario_path": dpg.get_value("traffic_scenario_path"),
+            "traffic_autonomous": dpg.get_value("traffic_autonomous"),
+            "traffic_lc_rate": dpg.get_value("traffic_lc_rate"),
             "simulator_mode_combo": dpg.get_value("simulator_mode_combo"),
+            "simulator_map_combo": dpg.get_value("simulator_map_combo"),
             "sim_mode_combo":    dpg.get_value("sim_mode_combo"),
             "sim_target_fps":    dpg.get_value("sim_target_fps"),
             "sim_physics_dt":    dpg.get_value("sim_physics_dt"),
@@ -697,10 +781,20 @@ def _load_state() -> None:
             data = json.load(f)
         if data.get("suite_path") and dpg.does_item_exist("suite_path"):
             dpg.set_value("suite_path", data["suite_path"])
+        if data.get("traffic_scenario_path") and dpg.does_item_exist("traffic_scenario_path"):
+            dpg.set_value("traffic_scenario_path", data["traffic_scenario_path"])
+        if dpg.does_item_exist("traffic_autonomous"):
+            dpg.set_value("traffic_autonomous", int(data.get("traffic_autonomous", 1)))
+        if dpg.does_item_exist("traffic_lc_rate"):
+            dpg.set_value("traffic_lc_rate", int(data.get("traffic_lc_rate", 0)))
         if dpg.does_item_exist("simulator_mode_combo"):
             mode_label = data.get("simulator_mode_combo", "SCENARIO (1)")
             if mode_label in _SIMULATOR_MODE_VALUES:
                 dpg.set_value("simulator_mode_combo", mode_label)
+        if dpg.does_item_exist("simulator_map_combo"):
+            map_name = data.get("simulator_map_combo", _SIMULATOR_MAP_ITEMS[0])
+            if map_name in _SIMULATOR_MAP_ITEMS:
+                dpg.set_value("simulator_map_combo", map_name)
         if dpg.does_item_exist("sim_mode_combo"):
             dpg.set_value("sim_mode_combo", data.get("sim_mode_combo", "Fixed"))
             _on_sim_mode_combo(None, dpg.get_value("sim_mode_combo"))
