@@ -1,10 +1,11 @@
 # MORAI Sim Control Example Code
 
-MORAI 시뮬레이터를 TCP/UDP로 제어하고, 주요 센서 데이터를 확인하기 위한 Python 예제 클라이언트입니다.
+Python GUI client for controlling MORAI Simulator through TCP/UDP APIs and
+checking key simulator, object, scenario, traffic, and sensor data.
 
 ## Requirements
 
-- Windows 10/11 또는 Linux
+- Windows 10/11 or Linux
 - Python 3.8+
 
 ```bash
@@ -13,44 +14,16 @@ pip install -r requirements.txt
 
 ## Run
 
-GUI:
-
 ```bash
 python app.py
 ```
-
-CLI:
-
-```bash
-python app_cli.py
-```
-
-## Project Structure
-
-```text
-app.py                 GUI entrypoint
-app_cli.py             CLI entrypoint
-src/                   Python source root
-src/transport/         TCP protocol, schema, sender/receiver thread
-src/receivers/         UDP receivers and template-based parsers
-src/panels/            DearPyGUI panels
-src/runners/           GUI runner wrappers for lane/path follow
-src/lane_control/      Camera-based lane follow logic
-src/autonomous_driving/ MGeo/path-follow autonomous driving logic
-templates/             UDP template files grouped by domain
-samples/               Sample playback inputs and suite examples
-docs/                  Architecture, API, and workflow notes
-tools/                 Utility scripts
-tests/                 Unit tests
-config/                Runtime state files, generated locally
-```
-
-Template files are grouped under `templates/camera`, `templates/control`, `templates/event`, `templates/sensor`, and `templates/vehicle`.
 
 ## GUI Tabs
 
 - `UDP Monitor`: Receive and inspect UDP payloads from `.tmpl` files.
 - `UDP Control`: Build and send UDP control payloads.
+- `Commands`: Control simulator mode/map, simulation time, suite/scenario, traffic scenario, and fixed-step commands.
+- `Object Control`: Create, delete, manually control, transform, and assign trajectories to simulator objects.
 - `Camera Sensor`: Receive and visualize RGB, Depth, Semantic, Instance, and BBox camera streams.
 - `Lane Control`: Run camera-based lane following.
 - `Path Follow`: Run path-follow autonomous driving.
@@ -75,9 +48,9 @@ The template discovery logic resolves templates by file name, so panels do not n
 ## Validation
 
 ```bash
-python -m compileall -q app.py app_cli.py sitecustomize.py src tools tests
 python tools/gen_tcp_docs.py --check
-python -m unittest tests.test_tcp_payloads
+python -m unittest tests.test_tcp_payloads tests.test_scenario_control
+python -m compileall -q app.py app_cli.py sitecustomize.py src tools tests
 ```
 
 Runtime state files under `config/`, debug captures under `debug/`, editor settings, and local AI/MCP tool files are intentionally ignored by git.

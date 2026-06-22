@@ -57,8 +57,9 @@ def render_generation_note(revision_root: Path = ROOT, revision_ref: str | None 
         revision = branch if branch != "unknown" else "unknown"
     return [
         "> \uc774 \ubb38\uc11c\ub294 \uc790\ub3d9 \uc0dd\uc131\ub429\ub2c8\ub2e4. Confluence\uc5d0\uc11c \uc9c1\uc811 \ud3b8\uc9d1\ud558\uc9c0 \ub9d0\uace0 \ucf54\ub4dc\uc640 \uc2a4\ud06c\ub9bd\ud2b8\uc5d0\uc11c \uc218\uc815\ud55c \ub4a4 \ub2e4\uc2dc \uc0dd\uc131\ud558\uc138\uc694.",
-        f"> \uc0dd\uc131 \uc2dc\uac01: `{generated_at}`",
-        f"> \uae30\uc900 \ube0c\ub79c\uce58: `{revision}`",
+        ">",
+        f"> - \uc0dd\uc131 \uc2dc\uac01: `{generated_at}`",
+        f"> - \uae30\uc900 \ube0c\ub79c\uce58: `{revision}`",
     ]
 
 
@@ -535,10 +536,10 @@ blockquote {
 
 
 def normalize_generated_at(text: str) -> str:
-    text = re.sub(r"> 생성 시각: `[^`]+`", "> 생성 시각: `<generated-at>`", text)
+    text = re.sub(r"> - 생성 시각: `[^`]+`", "> - 생성 시각: `<generated-at>`", text)
     return re.sub(
-        r"<blockquote>생성 시각: <code>[^<]+</code></blockquote>",
-        "<blockquote>생성 시각: <code>&lt;generated-at&gt;</code></blockquote>",
+        r"<blockquote>- 생성 시각: <code>[^<]+</code></blockquote>",
+        "<blockquote>- 생성 시각: <code>&lt;generated-at&gt;</code></blockquote>",
         text,
     )
 
