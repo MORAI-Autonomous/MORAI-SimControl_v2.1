@@ -70,6 +70,8 @@ class _VehicleCtx:
         self.trigger_kph = trigger_kph
         self.ad = AutonomousDriving(path_file, map_name=map_name, max_speed_kph=max_speed_kph)
         self.latest = None
+        self.last_vi_monotonic = None
+        self.last_vi_timeout_log_monotonic = None
         self.lock = threading.Lock()
         self.vi_event = threading.Event()
 
@@ -82,6 +84,8 @@ class _VehicleCtx:
 class StepAdRunner:
     _TIMING_INTERVAL = 100
     _STEP_DEBUG_INTERVAL = 20
+    _SLOW_WAIT_SEC = 0.5
+    _VI_STEP_WAIT_SEC = 0.5
 
     def __init__(
         self,
@@ -161,6 +165,7 @@ class StepAdRunner:
         threading.Thread(target=self._control_loop, daemon=True).start()
 
     def stop(self) -> None:
+        self._log("Stop requested", "INFO")
         self._running = False
         for ctx in self._ctxs:
             try:
@@ -172,23 +177,36 @@ class StepAdRunner:
         while self._running:
             try:
                 data, _ = ctx.sock.recvfrom(65535)
-                self._log(
-                    f"[VI][{ctx.entity_id}] UDP recv on "
-                    f"{ctx.sock.getsockname()[0]}:{ctx.sock.getsockname()[1]} bytes={len(data)}",
-                    "INFO",
-                )
+                # Verbose per-packet VehicleInfo receive log.
+                # Enable temporarily only when debugging raw UDP traffic volume.
+                # self._log(
+                #     f"[VI][{ctx.entity_id}] UDP recv on "
+                #     f"{ctx.sock.getsockname()[0]}:{ctx.sock.getsockname()[1]} bytes={len(data)}",
+                #     "INFO",
+                # )
                 parsed = parse_vehicle_info_payload(data)
                 if parsed:
                     with ctx.lock:
+                        prev_last_vi_monotonic = ctx.last_vi_monotonic
                         ctx.latest = parsed
+                        ctx.last_vi_monotonic = time.monotonic()
+                        ctx.last_vi_timeout_log_monotonic = None
                     ctx.vi_event.set()
-                    self._log(
-                        f"[VI][{ctx.entity_id}] parse ok "
-                        f"pos=({parsed['location']['x']:.3f}, {parsed['location']['y']:.3f}) "
-                        f"vel_x={parsed['local_velocity']['x']:.3f} "
-                        f"yaw_z={parsed['rotation']['z']:.3f}",
-                        "INFO",
-                    )
+                    if prev_last_vi_monotonic is not None:
+                        gap_sec = max(0.0, time.monotonic() - prev_last_vi_monotonic)
+                        if gap_sec >= 1.0:
+                            self._log(
+                                f"[VI][{ctx.entity_id}] resumed after {gap_sec:.3f}s",
+                                "WARN",
+                            )
+                    # Verbose per-packet VehicleInfo parse log.
+                    # self._log(
+                    #     f"[VI][{ctx.entity_id}] parse ok "
+                    #     f"pos=({parsed['location']['x']:.3f}, {parsed['location']['y']:.3f}) "
+                    #     f"vel_x={parsed['local_velocity']['x']:.3f} "
+                    #     f"yaw_z={parsed['rotation']['z']:.3f}",
+                    #     "INFO",
+                    # )
                 else:
                     preview = data[:16].hex(" ")
                     self._log(
@@ -197,7 +215,9 @@ class StepAdRunner:
                     )
             except socket.timeout:
                 continue
-            except OSError:
+            except OSError as exc:
+                if self._running:
+                    self._log(f"[VI][{ctx.entity_id}] UDP recv stopped: {exc}", "WARN")
                 break
 
     def _send_path_follow(self, ctx: _VehicleCtx, parsed: dict) -> None:
@@ -290,6 +310,7 @@ class StepAdRunner:
     def _control_loop(self) -> None:
         self._log("Driving started")
         step_index = 0
+        stop_reason = "loop exited"
 
         _t_ack = []
         _t_vi = []
@@ -299,9 +320,67 @@ class StepAdRunner:
         def _should_debug() -> bool:
             return self._save_data and (step_index < 5 or step_index % self._STEP_DEBUG_INTERVAL == 0)
 
-        def _send_all_cmds() -> None:
+        def _last_vi_age_text(ctx: _VehicleCtx) -> str:
+            with ctx.lock:
+                last_vi_monotonic = ctx.last_vi_monotonic
+            if last_vi_monotonic is None:
+                return "none"
+            return f"{max(0.0, time.monotonic() - last_vi_monotonic):.3f}s"
+
+        def _wait_for_vi(timeout_sec: float, phase: str, stop_on_timeout: bool) -> set[str]:
+            ready_ids = set()
+            deadline = time.perf_counter() + timeout_sec
+            for ctx in self._ctxs:
+                vi_wait_started = time.perf_counter()
+                remaining = max(0.0, deadline - vi_wait_started)
+                ready = ctx.vi_event.is_set()
+                if not ready and remaining > 0.0:
+                    ready = ctx.vi_event.wait(remaining)
+
+                if not ready:
+                    now = time.monotonic()
+                    should_log_timeout = False
+                    with ctx.lock:
+                        last_timeout_log = ctx.last_vi_timeout_log_monotonic
+                        if (
+                            last_timeout_log is None
+                            or now - last_timeout_log >= 5.0
+                        ):
+                            ctx.last_vi_timeout_log_monotonic = now
+                            should_log_timeout = True
+                    action = "stop" if stop_on_timeout else "skip control this step"
+                    if should_log_timeout:
+                        self._log(
+                            f"[{ctx.entity_id}] VI timeout ({timeout_sec:.3f}s total) - {action} "
+                            f"phase={phase} last_vi_age={_last_vi_age_text(ctx)}",
+                            "ERROR" if stop_on_timeout else "WARN",
+                        )
+                    if stop_on_timeout:
+                        return set()
+                    continue
+
+                ready_ids.add(ctx.entity_id)
+                vi_wait_sec = time.perf_counter() - vi_wait_started
+                if _should_debug() or vi_wait_sec >= self._SLOW_WAIT_SEC:
+                    self._log(
+                        f"[StepAD][{phase}] VI ready: {ctx.entity_id} "
+                        f"wait={vi_wait_sec:.3f}s last_vi_age={_last_vi_age_text(ctx)}",
+                        "WARN" if vi_wait_sec >= self._SLOW_WAIT_SEC else "INFO",
+                    )
+            return ready_ids
+
+        def _send_all_cmds(fresh_entity_ids: set[str] = None) -> None:
             sent_ids = []
             for ctx in self._ctxs:
+                if fresh_entity_ids is not None and ctx.entity_id not in fresh_entity_ids:
+                    if _should_debug():
+                        self._log(
+                            f"[StepAD][step={step_index}] skip cmd: "
+                            f"{ctx.entity_id} no fresh VI",
+                            "WARN",
+                        )
+                    continue
+
                 with ctx.lock:
                     parsed = ctx.latest
                 if parsed is None:
@@ -331,27 +410,35 @@ class StepAdRunner:
                 ctx.vi_event.clear()
 
             ev, rid = _presend_step()
+            ack_wait_started = time.perf_counter()
             if not ev.wait(self._timeout_sec):
                 self._pending_pop(self._pending, self._lock, rid, proto.MSG_TYPE_FIXED_STEP)
+                stop_reason = "initial FixedStep ACK timeout"
                 self._log("Initial FixedStep ACK timeout - stopping", "ERROR")
                 return
+            ack_wait_sec = time.perf_counter() - ack_wait_started
             self._pending_pop(self._pending, self._lock, rid, proto.MSG_TYPE_FIXED_STEP)
-            if _should_debug():
-                self._log(f"[StepAD][init] FixedStep ACK rid={rid}", "INFO")
+            if _should_debug() or ack_wait_sec >= self._SLOW_WAIT_SEC:
+                self._log(
+                    f"[StepAD][init] FixedStep ACK rid={rid} wait={ack_wait_sec:.3f}s",
+                    "WARN" if ack_wait_sec >= self._SLOW_WAIT_SEC else "INFO",
+                )
 
             if self._save_data:
                 save_rid = _next_rid()
                 if _should_debug():
                     self._log(f"[StepAD][init] SaveData send rid={save_rid}", "INFO")
                 tcp.send_save_data(self._tcp_sock, save_rid)
-                for ctx in self._ctxs:
-                    if not ctx.vi_event.wait(self._timeout_sec):
-                        self._log(f"[{ctx.entity_id}] initial VI timeout - stopping", "ERROR")
-                        return
-                    if _should_debug():
-                        self._log(f"[StepAD][init] VI ready: {ctx.entity_id}", "INFO")
+                ready_ids = _wait_for_vi(
+                    timeout_sec=self._timeout_sec,
+                    phase="init",
+                    stop_on_timeout=True,
+                )
+                if len(ready_ids) < len(self._ctxs):
+                    stop_reason = "initial VehicleInfo timeout"
+                    return
 
-            _send_all_cmds()
+            _send_all_cmds(ready_ids if self._save_data else None)
             for ctx in self._ctxs:
                 ctx.vi_event.clear()
             ev, rid = _presend_step()
@@ -363,15 +450,21 @@ class StepAdRunner:
 
                 if not ev.wait(self._timeout_sec):
                     self._pending_pop(self._pending, self._lock, rid, proto.MSG_TYPE_FIXED_STEP)
+                    stop_reason = "FixedStep ACK timeout"
                     self._log(
                         f"FixedStep ACK timeout ({self._timeout_sec}s) - stopping. "
                         "Check whether the scenario is running in Fixed Step mode.",
                         "ERROR",
                     )
                     break
+                ack_wait_sec = time.perf_counter() - t0
                 self._pending_pop(self._pending, self._lock, rid, proto.MSG_TYPE_FIXED_STEP)
-                if _should_debug():
-                    self._log(f"[StepAD][step={step_index}] ACK ok rid={rid}", "INFO")
+                if _should_debug() or ack_wait_sec >= self._SLOW_WAIT_SEC:
+                    self._log(
+                        f"[StepAD][step={step_index}] FixedStep ACK rid={rid} "
+                        f"wait={ack_wait_sec:.3f}s",
+                        "WARN" if ack_wait_sec >= self._SLOW_WAIT_SEC else "INFO",
+                    )
 
                 t1 = time.perf_counter()
 
@@ -382,6 +475,7 @@ class StepAdRunner:
                             self._log(f"[StepAD][step={step_index}] SaveData send rid={save_rid}", "INFO")
                         tcp.send_save_data(self._tcp_sock, save_rid)
                     except OSError as exc:
+                        stop_reason = f"SaveData send error: {exc}"
                         self._log(f"SaveData send error: {exc}", "ERROR")
                         break
 
@@ -390,23 +484,21 @@ class StepAdRunner:
                 try:
                     ev, rid = _presend_step()
                 except OSError as exc:
+                    stop_reason = f"FixedStep send error: {exc}"
                     self._log(f"FixedStep send error: {exc}", "ERROR")
                     break
 
                 t2 = time.perf_counter()
 
                 if self._save_data:
-                    for ctx in self._ctxs:
-                        if not ctx.vi_event.wait(self._timeout_sec):
-                            self._log(
-                                f"[{ctx.entity_id}] VI timeout ({self._timeout_sec}s) - keep previous state",
-                                "WARN",
-                            )
-                        elif _should_debug():
-                            self._log(f"[StepAD][step={step_index}] VI ready: {ctx.entity_id}", "INFO")
+                    ready_ids = _wait_for_vi(
+                        timeout_sec=self._VI_STEP_WAIT_SEC,
+                        phase=f"step={step_index}",
+                        stop_on_timeout=False,
+                    )
 
                 t3 = time.perf_counter()
-                _send_all_cmds()
+                _send_all_cmds(ready_ids if self._save_data else None)
                 t4 = time.perf_counter()
 
                 _t_ack.append((t1 - t0) * 1000)
@@ -437,7 +529,9 @@ class StepAdRunner:
                 step_index += 1
 
         finally:
+            if not self._running and stop_reason == "loop exited":
+                stop_reason = "stop requested"
             self._running = False
-            self._log("Driving stopped")
+            self._log(f"Driving stopped ({stop_reason})")
             if self._on_done:
                 self._on_done()

@@ -34,6 +34,7 @@ _load_suite_started_at: float          = 0.0
 _load_suite_watchdog: Optional[threading.Thread] = None
 _scenario_control_lock: threading.Lock = threading.Lock()
 _scenario_play_pending: dict[int, bool] = {}
+_scenario_control_pending: dict[int, dict] = {}
 _LOAD_SUITE_SOFT_TIMEOUT_SEC           = 10.0
 _SIMULATOR_STATE_LABELS = {
     0: "UNSPECIFIED",
@@ -57,6 +58,13 @@ _SIMULATOR_MODE_VALUES = {
     "COMPETITION (5)": proto.SIMULATOR_MODE_COMPETITION,
 }
 _SIMULATOR_MAP_ITEMS = list(proto.SIMULATOR_MAP_NAMES)
+_SCENARIO_COMMAND_NAMES = {
+    1: "Play",
+    2: "Pause",
+    3: "Stop",
+    4: "Prev",
+    5: "Next",
+}
 
 def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
     global _tcp_sock, _dispatch, _toggle_auto
@@ -315,19 +323,36 @@ def _on_sc_play() -> None:
     _save_state()
     with _elapsed_lock:
         resume = (_elapsed_accum_sec > 0.0 and _elapsed_running_since is None)
+    scenario_name = dpg.get_value("sc_name")
     _dispatch(
         proto.MSG_TYPE_SCENARIO_CONTROL,
         lambda rid: tcp.send_scenario_control(
-            _tcp_sock, rid, command=1,
-            scenario_name=dpg.get_value("sc_name")),
+            _tcp_sock, rid, command=1, scenario_name=scenario_name),
         on_registered=lambda rid, should_resume=resume:
-            _register_scenario_play(rid, should_resume),
+            _register_scenario_control(rid, 1, scenario_name, should_resume),
     )
 
 
-def _register_scenario_play(request_id: int, resume: bool) -> None:
+def _register_scenario_control(
+    request_id: int,
+    command: int,
+    scenario_name: str,
+    resume: bool = False,
+) -> None:
+    command_name = _SCENARIO_COMMAND_NAMES.get(command, f"Command({command})")
     with _scenario_control_lock:
-        _scenario_play_pending[request_id] = resume
+        if command == 1:
+            _scenario_play_pending[request_id] = resume
+        _scenario_control_pending[request_id] = {
+            "command": command,
+            "name": scenario_name,
+            "started_at": time.monotonic(),
+        }
+    log.append(
+        f"[Scenario] {command_name} requested rid={request_id} "
+        f"name={scenario_name!r} resume={resume}",
+        "INFO",
+    )
 
 
 def on_scenario_control_response(
@@ -337,6 +362,18 @@ def on_scenario_control_response(
 ) -> None:
     with _scenario_control_lock:
         resume = _scenario_play_pending.pop(request_id, None)
+        pending = _scenario_control_pending.pop(request_id, None)
+    if pending is not None:
+        elapsed = max(0.0, time.monotonic() - pending["started_at"])
+        command = pending["command"]
+        command_name = _SCENARIO_COMMAND_NAMES.get(command, f"Command({command})")
+        level = "INFO" if result_code == 0 else "WARN"
+        log.append(
+            f"[Scenario] {command_name} response rid={request_id} "
+            f"elapsed={elapsed:.3f}s result={result_code} detail={detail_code} "
+            f"name={pending['name']!r}",
+            level,
+        )
     if resume is None or result_code != 0:
         return
 
@@ -356,11 +393,14 @@ def _on_sc_stop() -> None:
         _elapsed_running_since = None
     ui_queue.post(lambda: dpg.does_item_exist("sc_elapsed_text") and
                   dpg.set_value("sc_elapsed_text", "0:00"))
+    scenario_name = dpg.get_value("sc_name")
     _dispatch(
         proto.MSG_TYPE_SCENARIO_CONTROL,
         lambda rid: tcp.send_scenario_control(
-            _tcp_sock, rid, command=3,
-            scenario_name=dpg.get_value("sc_name")))
+            _tcp_sock, rid, command=3, scenario_name=scenario_name),
+        on_registered=lambda rid:
+            _register_scenario_control(rid, 3, scenario_name),
+    )
 
 
 def _start_sc_timer() -> None:
@@ -498,6 +538,7 @@ def on_connection_lost() -> None:
         _load_suite_pending_rid = None
     with _scenario_control_lock:
         _scenario_play_pending.clear()
+        _scenario_control_pending.clear()
     ui_queue.post(
         lambda: _set_load_suite_status(
             "Disconnected",

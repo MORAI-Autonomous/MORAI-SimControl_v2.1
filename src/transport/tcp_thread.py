@@ -3,6 +3,7 @@ from __future__ import annotations
 # tcp_thread.py
 import socket
 import threading
+import time
 
 import transport.protocol_defs as proto
 import transport.tcp_transport as tcp
@@ -39,6 +40,14 @@ def scenario_state_to_string(state: int):
         3: "STOP",
         4: "COMPLETED",
     }.get(state, f"UNKNOWN({state})")
+
+
+def _msg_type_name(msg_type: int) -> str:
+    return {
+        proto.MSG_TYPE_FIXED_STEP: "FixedStep",
+        proto.MSG_TYPE_SAVE_DATA: "SaveData",
+        proto.MSG_TYPE_SCENARIO_CONTROL: "ScenarioControl",
+    }.get(msg_type, f"0x{msg_type:04X}")
 
 
 class Receiver(threading.Thread):
@@ -401,6 +410,19 @@ class Receiver(threading.Thread):
 
             # pending event set + cleanup
             if msg_class == proto.MSG_CLASS_RESP:
+                with self.lock:
+                    pending_item = self.pending.get((request_id, msg_type))
+                if (
+                    pending_item is not None
+                    and msg_type in (proto.MSG_TYPE_FIXED_STEP, proto.MSG_TYPE_SAVE_DATA)
+                ):
+                    elapsed = max(0.0, time.time() - pending_item["t"])
+                    if elapsed >= 0.5:
+                        log.append(
+                            f"[TCP][WAIT] {_msg_type_name(msg_type)} response delayed "
+                            f"rid={request_id} elapsed={elapsed:.3f}s",
+                            "WARN",
+                        )
                 if self.on_response:
                     try:
                         self.on_response(msg_type, request_id)
