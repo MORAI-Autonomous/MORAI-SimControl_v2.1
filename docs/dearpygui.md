@@ -48,6 +48,8 @@ with dpg.texture_registry():
 ui_queue.post(lambda d=rgba_f32: dpg.set_value("my_texture", d))
 ```
 
+Python 3.13에서는 `threading.Thread` 내부 속성과 충돌할 수 있으므로, Thread subclass에서 `_handle()` 같은 내부 이름을 메서드명으로 사용하지 않습니다.
+
 ---
 
 ## does_item_exist 방어

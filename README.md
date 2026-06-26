@@ -6,7 +6,7 @@ checking key simulator, object, scenario, traffic, and sensor data.
 ## Requirements
 
 - Windows 10/11 or Linux
-- Python 3.8+
+- Python 3.8+ (validated with Python 3.12 and 3.13)
 
 ```bash
 pip install -r requirements.txt
