@@ -123,7 +123,7 @@ class CameraSensorReceiver(threading.Thread):
                         key="recv",
                         interval_sec=2.0,
                     )
-                    self._handle(data)
+                    self._handle_datagram(data)
         finally:
             sock.close()
             print(f"[CameraSensorReceiver] Stopped ({self.ip}:{self.port})")
@@ -146,7 +146,7 @@ class CameraSensorReceiver(threading.Thread):
             return result
         raise ValueError("CameraSensorMessageTemplate.tmpl has no REPEAT segment")
 
-    def _handle(self, data: bytes) -> None:
+    def _handle_datagram(self, data: bytes) -> None:
         if self._is_chunked(data):
             self._handle_chunked(data)
         else:

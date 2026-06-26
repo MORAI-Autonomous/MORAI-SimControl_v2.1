@@ -117,7 +117,7 @@ class CameraReceiver(threading.Thread):
                             data, _ = sock.recvfrom(_RECV_BUF)
                         except BlockingIOError:
                             break
-                        self._handle(data)
+                        self._handle_datagram(data)
                 except Exception as e:
                     if self.running:
                         print(f"[CameraReceiver] recv error: {e}")
@@ -133,7 +133,7 @@ class CameraReceiver(threading.Thread):
                 cv2.destroyWindow(self.window_name)
             print(f"[CameraReceiver] Stopped ({self.ip}:{self.port})")
 
-    def _handle(self, data: bytes) -> None:
+    def _handle_datagram(self, data: bytes) -> None:
         if self._is_chunked(data):
             self._handle_chunked(data)
         else:

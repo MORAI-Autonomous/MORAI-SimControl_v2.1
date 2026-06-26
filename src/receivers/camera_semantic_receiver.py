@@ -88,12 +88,12 @@ class CameraSemanticReceiver(threading.Thread):
                         if self.running:
                             print(f"[CameraSemanticReceiver] recv error: {e}")
                         break
-                    self._handle(data)
+                    self._handle_datagram(data)
         finally:
             sock.close()
             print(f"[CameraSemanticReceiver] Stopped ({self.ip}:{self.port})")
 
-    def _handle(self, data: bytes) -> None:
+    def _handle_datagram(self, data: bytes) -> None:
         if self._is_chunked(data):
             self._handle_chunked(data)
         else:
