@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 # app.py
+import ipaddress
 import json
 import os
 import socket
 import threading
 import time
+from typing import Optional
 
 import dearpygui.dearpygui as dpg
 
@@ -70,6 +72,20 @@ def _save_app_state(state=None) -> None:
         height = int(dpg.get_viewport_height())
         if width < W_MIN or height < H_MIN:
             return
+        tcp_ip = TCP_SERVER_IP
+        tcp_port = TCP_SERVER_PORT
+        try:
+            if dpg.does_item_exist("tb_ip_input"):
+                value = str(dpg.get_value("tb_ip_input")).strip()
+                if value:
+                    tcp_ip = value
+            if dpg.does_item_exist("tb_port_input"):
+                tcp_port = int(dpg.get_value("tb_port_input"))
+            tcp_ip, tcp_port = _validate_tcp_endpoint(tcp_ip, tcp_port)
+        except Exception:
+            tcp_ip = TCP_SERVER_IP
+            tcp_port = TCP_SERVER_PORT
+            pass
 
         os.makedirs(os.path.dirname(_APP_STATE_FILE), exist_ok=True)
         with open(_APP_STATE_FILE, "w", encoding="utf-8") as f:
@@ -82,6 +98,10 @@ def _save_app_state(state=None) -> None:
                     "selected_tab": _normalize_tab(
                         getattr(state, "selected_tab", _DEFAULT_TAB)
                     ),
+                    "tcp": {
+                        "ip": tcp_ip,
+                        "port": tcp_port,
+                    },
                 },
                 f,
                 indent=2,
@@ -112,6 +132,44 @@ def _normalize_tab(tab_name: str) -> str:
 def _initial_selected_tab() -> str:
     state = _load_app_state()
     return _normalize_tab(str(state.get("selected_tab", _DEFAULT_TAB)))
+
+
+def _initial_tcp_endpoint() -> tuple:
+    state = _load_app_state()
+    tcp_state = state.get("tcp")
+    if not isinstance(tcp_state, dict):
+        return TCP_SERVER_IP, TCP_SERVER_PORT
+
+    try:
+        return _validate_tcp_endpoint(
+            tcp_state.get("ip", TCP_SERVER_IP),
+            tcp_state.get("port", TCP_SERVER_PORT),
+        )
+    except Exception:
+        return TCP_SERVER_IP, TCP_SERVER_PORT
+
+
+def _apply_initial_tcp_endpoint() -> None:
+    global TCP_SERVER_IP, TCP_SERVER_PORT
+    TCP_SERVER_IP, TCP_SERVER_PORT = _initial_tcp_endpoint()
+
+
+def _validate_tcp_endpoint(ip_value, port_value) -> tuple[str, int]:
+    ip = str(ip_value).strip()
+    try:
+        ip_obj = ipaddress.ip_address(ip)
+    except ValueError:
+        raise ValueError(f"Invalid TCP IP: {ip!r}")
+    if ip_obj.version != 4:
+        raise ValueError(f"TCP IP must be IPv4: {ip!r}")
+
+    try:
+        port = int(port_value)
+    except (TypeError, ValueError):
+        raise ValueError(f"Invalid TCP port: {port_value!r}")
+    if not (1 <= port <= 65535):
+        raise ValueError(f"TCP port out of range: {port}")
+    return str(ip_obj), port
 
 
 # ============================================================
@@ -157,13 +215,36 @@ def _close_socket(sock):
         try: fn()
         except Exception: pass
 
-def _set_conn_status(connected: bool):
-    ui_queue.post(lambda c=connected: (
+def _set_conn_status(connected: bool, editing_enabled: Optional[bool] = None):
+    if editing_enabled is None:
+        editing_enabled = not connected
+
+    def _apply():
+        tcp_ip = TCP_SERVER_IP
+        tcp_port = TCP_SERVER_PORT
+        try:
+            if dpg.does_item_exist("tb_ip_input"):
+                value = str(dpg.get_value("tb_ip_input")).strip()
+                if value:
+                    tcp_ip = value
+            if dpg.does_item_exist("tb_port_input"):
+                tcp_port = int(dpg.get_value("tb_port_input"))
+        except Exception:
+            pass
+
         dpg.configure_item("conn_label",
-            color=(100, 255, 100, 255) if c else (255, 80, 80, 255)),
-        dpg.set_value("conn_label", "Connected" if c else "Disconnected"),
-        dpg.configure_item("btn_reconnect", show=not c),
-    ))
+            color=(100, 255, 100, 255) if connected else (255, 80, 80, 255))
+        dpg.set_value("conn_label", "Connected" if connected else "Disconnected")
+        dpg.set_value("tb_ip_display", tcp_ip)
+        dpg.set_value("tb_port_display", str(tcp_port))
+        dpg.configure_item("tb_ip_input", show=editing_enabled, enabled=editing_enabled)
+        dpg.configure_item("tb_port_input", show=editing_enabled, enabled=editing_enabled)
+        dpg.configure_item("tb_ip_display", show=not editing_enabled, enabled=False)
+        dpg.configure_item("tb_port_display", show=not editing_enabled, enabled=False)
+        dpg.configure_item("btn_reconnect", show=not connected)
+        dpg.configure_item("btn_disconnect", show=connected)
+
+    ui_queue.post(_apply)
 
 
 # ============================================================
@@ -184,6 +265,7 @@ class AppState:
         self.lc_runner   = None
         self.selected_tab = _initial_selected_tab()
         self._connecting = False
+        self._disconnect_requested = False
         self._conn_lock  = threading.Lock()
 
     def send_udp_control(self, template_name: str, parser, ip: str, port: int, values: dict) -> None:
@@ -481,6 +563,8 @@ class AppState:
             if self._connecting:
                 return
             self._connecting = True
+            self._disconnect_requested = False
+        _set_conn_status(False, editing_enabled=False)
 
         def _run():
             if self.receiver:
@@ -492,9 +576,19 @@ class AppState:
 
             sock = _make_tcp_socket()
             while True:
+                with self._conn_lock:
+                    if self._disconnect_requested:
+                        _close_socket(sock)
+                        self._connecting = False
+                        return
                 try:
                     log_panel.append(f"Connecting {TCP_SERVER_IP}:{TCP_SERVER_PORT}...", "INFO")
                     sock.connect((TCP_SERVER_IP, TCP_SERVER_PORT))
+                    with self._conn_lock:
+                        if self._disconnect_requested:
+                            _close_socket(sock)
+                            self._connecting = False
+                            return
                     log_panel.append(f"Connected {TCP_SERVER_IP}:{TCP_SERVER_PORT}", "INFO")
                     self.tcp_sock = sock
                     _set_conn_status(True)
@@ -538,19 +632,35 @@ class AppState:
                     )
                     break
                 except Exception as e:
-                    log_panel.append(f"Connect failed: {e}; retry in 5s", "ERROR")
-                    _set_conn_status(False)
+                    log_panel.append(f"Connect failed: {e}", "ERROR")
                     _close_socket(sock)
-                    time.sleep(5)
-                    sock = _make_tcp_socket()
+                    _set_conn_status(False, editing_enabled=True)
+                    with self._conn_lock:
+                        self._connecting = False
+                    return
 
             with self._conn_lock:
                 self._connecting = False
 
         threading.Thread(target=_run, daemon=True).start()
 
-    def _on_disconnect(self):
+    def disconnect(self):
+        with self._conn_lock:
+            self._disconnect_requested = True
+
+        if self.receiver:
+            self.receiver.stop()
+            self.receiver = None
+        if self.tcp_sock:
+            _close_socket(self.tcp_sock)
+            self.tcp_sock = None
+        self._on_disconnect(manual=True)
+
+    def _on_disconnect(self, manual: bool = False):
+        if self._disconnect_requested:
+            manual = True
         self.tcp_sock = None                                    # Make dispatch hit the null guard immediately.
+        self.receiver = None
         # Release waiting ev.wait() calls so runners do not wait for timeout.
         with self.lock:
             for item in self.pending.values():
@@ -567,7 +677,10 @@ class AppState:
         self.step_ad_runners.clear()
         _set_conn_status(False)
         cmd_panel.on_connection_lost()
-        log_panel.append("Connection lost. Click Reconnect to retry.", "ERROR")
+        if manual:
+            log_panel.append("Disconnected.", "INFO")
+        else:
+            log_panel.append("Connection lost. Click Reconnect to retry.", "ERROR")
 
     def _on_tcp_response(self, msg_type: int, request_id: int) -> None:
         if msg_type == MSG_TYPE_LOAD_SUITE:
@@ -828,13 +941,31 @@ def build_ui(state: AppState):
                     no_scrollbar=True, no_scroll_with_mouse=True):
 
         # Title bar
+        tcp_input_values = {
+            "ip": TCP_SERVER_IP,
+            "port": str(TCP_SERVER_PORT),
+        }
+
+        def _on_tcp_ip_input(s=None, a=None):
+            tcp_input_values["ip"] = str(a if a is not None else dpg.get_value("tb_ip_input")).strip()
+
+        def _on_tcp_port_input(s=None, a=None):
+            tcp_input_values["port"] = str(a if a is not None else dpg.get_value("tb_port_input")).strip()
+
         def _apply_conn(s=None, a=None):
             global TCP_SERVER_IP, TCP_SERVER_PORT
-            new_ip   = dpg.get_value("tb_ip_input").strip()
-            new_port = dpg.get_value("tb_port_input")
-            if new_ip:
-                TCP_SERVER_IP   = new_ip
+            new_ip = tcp_input_values["ip"]
+            new_port = tcp_input_values["port"]
+            try:
+                new_ip, new_port = _validate_tcp_endpoint(new_ip, new_port)
+            except ValueError as exc:
+                log_panel.append(str(exc), "ERROR")
+                dpg.configure_item("conn_label", color=(255, 170, 80, 255))
+                dpg.set_value("conn_label", "Invalid IP/PORT")
+                return
+            TCP_SERVER_IP = new_ip
             TCP_SERVER_PORT = new_port
+            _save_app_state(state)
             state.connect()
 
         with dpg.menu_bar():
@@ -845,7 +976,11 @@ def build_ui(state: AppState):
                 )
                 dpg.add_menu_item(
                     label="Reconnect",
-                    callback=lambda: state.connect(),
+                    callback=_apply_conn,
+                )
+                dpg.add_menu_item(
+                    label="Disconnect",
+                    callback=lambda: state.disconnect(),
                 )
             with dpg.menu(label="Settings"):
                 dpg.add_menu_item(label="Preferences (Coming Soon)", enabled=False)
@@ -859,19 +994,31 @@ def build_ui(state: AppState):
             dpg.add_text("IP:", color=(160, 160, 170))
             dpg.add_input_text(tag="tb_ip_input",
                                default_value=TCP_SERVER_IP,
-                               width=120, on_enter=True,
-                               callback=_apply_conn)
+                               width=120,
+                               callback=_on_tcp_ip_input)
+            dpg.add_input_text(tag="tb_ip_display",
+                               default_value=TCP_SERVER_IP,
+                               width=120,
+                               readonly=True,
+                               enabled=False,
+                               show=False)
             dpg.add_text("PORT:", color=(160, 160, 170))
-            dpg.add_input_int(tag="tb_port_input",
-                              default_value=TCP_SERVER_PORT,
-                              width=100, on_enter=True,
-                              min_value=1, max_value=65535,
-                              step=0,
-                              callback=_apply_conn)
+            dpg.add_input_text(tag="tb_port_input",
+                               default_value=str(TCP_SERVER_PORT),
+                               width=100,
+                               callback=_on_tcp_port_input)
+            dpg.add_input_text(tag="tb_port_display",
+                               default_value=str(TCP_SERVER_PORT),
+                               width=100,
+                               readonly=True,
+                               enabled=False,
+                               show=False)
             dpg.add_text("Connected", tag="conn_label", color=(140, 200, 140))
             dpg.add_spacer(width=8)
             dpg.add_button(label="Reconnect", tag="btn_reconnect",
-                           callback=lambda: state.connect(), show=False)
+                           width=90, callback=_apply_conn, show=False)
+            dpg.add_button(label="Disconnect", tag="btn_disconnect",
+                           width=90, callback=lambda: state.disconnect(), show=False)
         dpg.add_separator()
 
         # Top area: command panel on the left, monitor panels on the right.
@@ -1014,6 +1161,7 @@ def main():
     )
 
     dpg.create_context()
+    _apply_initial_tcp_endpoint()
 
     # Load textures.
     global _logo_tag

@@ -147,8 +147,9 @@ def _busy_wait_quit(stop_event: threading.Event) -> None:
 
 
 class ThroughputCounter:
-    def __init__(self, window: float = 5.0):
+    def __init__(self, window: float = 5.0, avg_window: float = 60.0):
         self.window = window
+        self.avg_window = avg_window
         self._lock = threading.Lock()
         self._buf = collections.deque()
         self.total_pkts = 0
@@ -164,9 +165,10 @@ class ThroughputCounter:
             self.total_pkts += pkts
             self.total_payloads += payloads
             self.total_bytes += nbytes
-            if self.window > 0:
+            max_window = max(self.window, self.avg_window)
+            if max_window > 0:
                 self._buf.append((now, pkts, payloads, nbytes))
-                cutoff = now - self.window
+                cutoff = now - max_window
                 while self._buf and self._buf[0][0] < cutoff:
                     self._buf.popleft()
             if self._last_arrival is not None:
@@ -190,6 +192,32 @@ class ThroughputCounter:
                 sum(v[3] for v in valid) / span,
                 elapsed_total,
             )
+
+    def average_kbps(self, window: Optional[float] = None) -> float:
+        now = time.monotonic()
+        window = self.avg_window if window is None else window
+        with self._lock:
+            elapsed_total = now - self._start
+            if window <= 0 or not self._buf:
+                return 0.0
+            cutoff = now - window
+            valid = [v for v in self._buf if v[0] >= cutoff]
+        span = min(window, elapsed_total) or 1e-9
+        return sum(v[3] for v in valid) / (1024.0 * span)
+
+    def window_totals(self, window: Optional[float] = None) -> tuple[int, int, int]:
+        now = time.monotonic()
+        window = self.avg_window if window is None else window
+        with self._lock:
+            if window <= 0 or not self._buf:
+                return 0, 0, 0
+            cutoff = now - window
+            valid = [v for v in self._buf if v[0] >= cutoff]
+        return (
+            sum(v[1] for v in valid),
+            sum(v[2] for v in valid),
+            sum(v[3] for v in valid),
+        )
 
     def interval_stats(self) -> tuple[float, float, float, int]:
         with self._lock:
@@ -334,10 +362,14 @@ def stats_printer(stop_event: threading.Event, counter: ThroughputCounter, inter
             break
         pps, plps, bps, elapsed = counter.rates()
         kbps = (bps / 1024.0) + kbps_bias
+        avg_kbps = counter.average_kbps() + kbps_bias
+        recv_pkts, _, _ = counter.window_totals()
         imin, imax, iavg, samples = counter.interval_stats()
         print(
             f"\n[{label} Stats | elapsed {elapsed:>7.1f}s | window {counter.window:.1f}s] "
-            f"{pps:>8.1f} pkt/s  {plps:>9.1f} payload/s  {kbps:>8.2f} KB/s"
+            f"{pps:>8.1f} pkt/s  {plps:>9.1f} payload/s  {kbps:>8.2f} kB/s  "
+            f"avg{counter.avg_window:.0f}s={avg_kbps:>8.2f} kB/s  "
+            f"recv{counter.avg_window:.0f}s={recv_pkts} pkts"
         )
         if samples:
             print(f"  inter-arrival(last {samples}): avg={iavg:>7.2f}ms  min={imin:>7.2f}ms  max={imax:>7.2f}ms")
@@ -371,7 +403,7 @@ def run_parse(args: argparse.Namespace) -> int:
                 print(f"Parse error: {exc}")
                 continue
             _collect_vehicle_ids(packet, unique_vehicle_ids)
-            if _should_print_all_packets():
+            if not args.no_packet_print and _should_print_all_packets():
                 print_packet(packet)
             elif RSA_WATCH_VEHICLE_IDS:
                 _print_watched_vehicle(packet, RSA_WATCH_VEHICLE_IDS)
@@ -390,7 +422,7 @@ def run_record(args: argparse.Namespace) -> int:
     stop_event = threading.Event()
     unique_vehicle_ids: set[int] = set()
     started_at = time.monotonic()
-    counter = ThroughputCounter(window=args.stats_window)
+    counter = ThroughputCounter(window=args.stats_window, avg_window=args.avg_window)
     logger = FileLogger(mode=args.log_mode, directory=args.log_dir)
     print(f"Logging to: {logger.path}")
 
@@ -415,7 +447,8 @@ def run_record(args: argparse.Namespace) -> int:
                 continue
             except OSError:
                 break
-            print(f"\nReceived {len(data)} bytes from {addr[0]}:{addr[1]}")
+            if not args.no_packet_print:
+                print(f"\nReceived {len(data)} bytes from {addr[0]}:{addr[1]}")
             try:
                 packet = parse_packet(data)
             except Exception as exc:
@@ -423,7 +456,7 @@ def run_record(args: argparse.Namespace) -> int:
                 continue
             counter.record(1, packet.count, len(data))
             _collect_vehicle_ids(packet, unique_vehicle_ids)
-            if _should_print_all_packets():
+            if not args.no_packet_print and _should_print_all_packets():
                 print_packet(packet)
             elif RSA_WATCH_VEHICLE_IDS:
                 _print_watched_vehicle(packet, RSA_WATCH_VEHICLE_IDS)
@@ -461,6 +494,8 @@ def run_bypass(args: argparse.Namespace) -> int:
     running = {"running": True}
     recv_count = 0
     bytes_received = 0
+    byte_samples = collections.deque()
+    started_at = time.monotonic()
     targets = parse_targets(args.target)
     target_success = {target: 0 for target in targets}
     target_fail = {target: 0 for target in targets}
@@ -483,7 +518,24 @@ def run_bypass(args: argparse.Namespace) -> int:
             delta_bytes = bytes_received - last_bytes
             last_bytes = bytes_received
             kbps = (delta_bytes / (1024.0 * args.stats_interval)) + args.kbps_bias
-            logging.info("%s data rate (%.1fs): recv=%d (+%d) %.2f KB/s", args.label, args.stats_interval, recv_count, delta, kbps)
+            now = time.monotonic()
+            cutoff = now - args.avg_window
+            while byte_samples and byte_samples[0][0] < cutoff:
+                byte_samples.popleft()
+            avg_span = min(args.avg_window, now - started_at) or 1e-9
+            avg_kbps = (sum(sample[1] for sample in byte_samples) / (1024.0 * avg_span)) + args.kbps_bias
+            logging.info(
+                "%s data rate (%.1fs): recv=%d (+%d) %.2f kB/s avg%.0fs=%.2f kB/s recv%.0fs=%d pkts",
+                args.label,
+                args.stats_interval,
+                recv_count,
+                delta,
+                kbps,
+                args.avg_window,
+                avg_kbps,
+                args.avg_window,
+                len(byte_samples),
+            )
 
     threading.Thread(target=_stdin_quit_watcher, args=(running,), daemon=True).start()
     threading.Thread(target=print_stats, daemon=True).start()
@@ -501,6 +553,7 @@ def run_bypass(args: argparse.Namespace) -> int:
 
             recv_count += 1
             bytes_received += len(data)
+            byte_samples.append((time.monotonic(), len(data)))
             if send_sock is None:
                 send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             for target in targets:
@@ -530,6 +583,7 @@ def build_parser() -> argparse.ArgumentParser:
     parse_cmd.add_argument("--listen-ip", default=UDP_DEBUG_LISTEN_IP)
     parse_cmd.add_argument("--port", type=int, default=RSA_DEFAULT_PORT)
     parse_cmd.add_argument("--bufsize", type=int, default=DEFAULT_PARSE_BUFSIZE)
+    parse_cmd.add_argument("--no-packet-print", action="store_true", help="suppress per-packet detail output")
     parse_cmd.set_defaults(func=run_parse)
 
     record_cmd = sub.add_parser("record", help="Parse, print, and record RSA UDP packets")
@@ -540,6 +594,8 @@ def build_parser() -> argparse.ArgumentParser:
     record_cmd.add_argument("--log-dir", default=".")
     record_cmd.add_argument("--stats-interval", type=float, default=1.0)
     record_cmd.add_argument("--stats-window", type=float, default=5.0)
+    record_cmd.add_argument("--avg-window", type=float, default=60.0)
+    record_cmd.add_argument("--no-packet-print", action="store_true", help="suppress per-packet detail output")
     record_cmd.set_defaults(func=run_record)
 
     bypass_cmd = sub.add_parser("bypass", help="Forward RSA UDP packets to one or more targets")
@@ -547,6 +603,7 @@ def build_parser() -> argparse.ArgumentParser:
     bypass_cmd.add_argument("--port", type=int, default=RSA_DEFAULT_PORT)
     bypass_cmd.add_argument("--bufsize", type=int, default=DEFAULT_BYPASS_BUFSIZE)
     bypass_cmd.add_argument("--stats-interval", type=float, default=1.0)
+    bypass_cmd.add_argument("--avg-window", type=float, default=60.0)
     bypass_cmd.add_argument("--kbps-bias", type=float, default=0.0)
     bypass_cmd.add_argument("--label", default="RSA")
     bypass_cmd.add_argument("--target", action="append", required=True, help="host:port, repeatable")
