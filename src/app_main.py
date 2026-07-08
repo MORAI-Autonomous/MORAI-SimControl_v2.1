@@ -239,8 +239,8 @@ def _set_conn_status(connected: bool, editing_enabled: Optional[bool] = None):
         dpg.set_value("tb_port_display", str(tcp_port))
         dpg.configure_item("tb_ip_input", show=editing_enabled, enabled=editing_enabled)
         dpg.configure_item("tb_port_input", show=editing_enabled, enabled=editing_enabled)
-        dpg.configure_item("tb_ip_display", show=not editing_enabled, enabled=False)
-        dpg.configure_item("tb_port_display", show=not editing_enabled, enabled=False)
+        dpg.configure_item("tb_ip_display_box", show=not editing_enabled)
+        dpg.configure_item("tb_port_display_box", show=not editing_enabled)
         dpg.configure_item("btn_reconnect", show=not connected)
         dpg.configure_item("btn_disconnect", show=connected)
 
@@ -905,6 +905,12 @@ def build_ui(state: AppState):
             dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (55, 90, 140, 180))
             dpg.add_theme_color(dpg.mvThemeCol_ButtonActive,  (38, 38, 50, 255))
             dpg.add_theme_color(dpg.mvThemeCol_Text,          (180, 180, 185, 255))
+    with dpg.theme(tag="theme_tcp_editable"):
+        with dpg.theme_component(dpg.mvInputText):
+            dpg.add_theme_color(dpg.mvThemeCol_Text,          (245, 245, 248, 255))
+            dpg.add_theme_color(dpg.mvThemeCol_FrameBg,       (42, 42, 52, 255))
+            dpg.add_theme_color(dpg.mvThemeCol_FrameBgHovered,(54, 54, 66, 255))
+            dpg.add_theme_color(dpg.mvThemeCol_FrameBgActive, (58, 58, 72, 255))
 
     def _select_tab(name: str) -> None:
         name = _normalize_tab(name)
@@ -996,23 +1002,29 @@ def build_ui(state: AppState):
                                default_value=TCP_SERVER_IP,
                                width=120,
                                callback=_on_tcp_ip_input)
-            dpg.add_input_text(tag="tb_ip_display",
-                               default_value=TCP_SERVER_IP,
-                               width=120,
-                               readonly=True,
-                               enabled=False,
-                               show=False)
+            dpg.bind_item_theme("tb_ip_input", "theme_tcp_editable")
+            with dpg.child_window(tag="tb_ip_display_box",
+                                  width=120, height=24,
+                                  border=False,
+                                  no_scrollbar=True,
+                                  no_scroll_with_mouse=True,
+                                  show=False):
+                dpg.add_text(TCP_SERVER_IP, tag="tb_ip_display",
+                             color=(112, 112, 120))
             dpg.add_text("PORT:", color=(160, 160, 170))
             dpg.add_input_text(tag="tb_port_input",
                                default_value=str(TCP_SERVER_PORT),
                                width=100,
                                callback=_on_tcp_port_input)
-            dpg.add_input_text(tag="tb_port_display",
-                               default_value=str(TCP_SERVER_PORT),
-                               width=100,
-                               readonly=True,
-                               enabled=False,
-                               show=False)
+            dpg.bind_item_theme("tb_port_input", "theme_tcp_editable")
+            with dpg.child_window(tag="tb_port_display_box",
+                                  width=100, height=24,
+                                  border=False,
+                                  no_scrollbar=True,
+                                  no_scroll_with_mouse=True,
+                                  show=False):
+                dpg.add_text(str(TCP_SERVER_PORT), tag="tb_port_display",
+                             color=(112, 112, 120))
             dpg.add_text("Connected", tag="conn_label", color=(140, 200, 140))
             dpg.add_spacer(width=8)
             dpg.add_button(label="Reconnect", tag="btn_reconnect",
@@ -1118,16 +1130,22 @@ def build_ui(state: AppState):
     _layout_state = {
         "dirty": True,
         "last_size": (-1, -1),
+        "save_due_at": None,
     }
 
     def _mark_layout_dirty():
         _layout_state["dirty"] = True
+        _layout_state["save_due_at"] = time.monotonic() + 0.5
 
     def _apply_layout(force: bool = False) -> bool:
         vp_w = _vp_w()
         vp_h = _vp_h()
         size = (vp_w, vp_h)
         if not force and not _layout_state["dirty"] and size == _layout_state["last_size"]:
+            save_due_at = _layout_state["save_due_at"]
+            if save_due_at is not None and time.monotonic() >= save_due_at:
+                _layout_state["save_due_at"] = None
+                _save_app_state(state)
             return False
 
         _layout_state["dirty"] = False
@@ -1145,6 +1163,10 @@ def build_ui(state: AppState):
             dpg.configure_item("mon_window", width=mon_w, height=top_h)
         if dpg.does_item_exist("log_window"):
             dpg.configure_item("log_window", width=vp_w - PAD)
+        save_due_at = _layout_state["save_due_at"]
+        if save_due_at is not None and time.monotonic() >= save_due_at:
+            _layout_state["save_due_at"] = None
+            _save_app_state(state)
         return True
 
     dpg.set_viewport_resize_callback(_mark_layout_dirty)
