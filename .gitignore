@@ -7,6 +7,13 @@ config/fp_state.json
 config/*.json
 debug/
 .github/workflows/
+prototypes/flutter_ui/.dart_tool/
+prototypes/flutter_ui/build/
+prototypes/flutter_ui/.flutter-plugins
+prototypes/flutter_ui/.flutter-plugins-dependencies
+prototypes/flutter_ui/.metadata
+prototypes/flutter_ui/windows/
+prototypes/flutter_ui/linux/
 # Added by code-review-graph
 .code-review-graph/
 
