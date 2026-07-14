@@ -2,6 +2,8 @@
 # 차선 검출 전처리: ROI → BEV → 흰색/노란색 이진화 → 노이즈 제거
 # 실행: python -m lane_control.lane_preprocessor --image <file> | --port <port>
 
+from __future__ import annotations
+
 import cv2
 import numpy as np
 import argparse
@@ -39,6 +41,8 @@ class BEVParams:
     # 후처리 노이즈 제거
     bev_top_crop:  int = 80   # BEV 상단 N행 마스킹 (표지판/화살표 오검출 차단, 0=비활성)
     min_blob_area: int = 50   # CC 면적 필터: N픽셀 미만 blob 제거 (0=비활성)
+
+    shadow_filter_strength: int = 0  # wide sun/shadow boundary removal strength (0=off)
 
     def src_pts(self) -> np.ndarray:
         return np.float32([
@@ -81,6 +85,8 @@ class LanePreprocessor:
         roi    = self._apply_roi(frame, p)
         bev    = cv2.warpPerspective(roi, p.M(), (p.img_w, p.img_h))
         binary = self._white_threshold(bev, p)
+        if p.shadow_filter_strength > 0:
+            binary = self._remove_wide_bright_noise(binary, p.shadow_filter_strength)
         if p.bev_top_crop > 0:
             binary[:p.bev_top_crop, :] = 0
         if p.min_blob_area > 0:
@@ -172,6 +178,38 @@ class LanePreprocessor:
         for i in range(1, n_labels):          # 0 = 배경 스킵
             if stats[i, cv2.CC_STAT_AREA] >= min_area:
                 cleaned[labels == i] = 255
+        return cleaned
+
+    @staticmethod
+    def _remove_wide_bright_noise(mask: np.ndarray, strength: int) -> np.ndarray:
+        """Remove wide sun/shadow blobs while preserving thin lane components."""
+        strength = int(np.clip(strength, 0, 100))
+        if strength <= 0:
+            return mask
+
+        n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+            mask, connectivity=8)
+        cleaned = np.zeros_like(mask)
+        min_wide_area = int(np.interp(strength, [1, 100], [2200, 450]))
+        min_wide_width = int(np.interp(strength, [1, 100], [120, 45]))
+        min_fill = float(np.interp(strength, [1, 100], [0.18, 0.08]))
+
+        for i in range(1, n_labels):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            y = int(stats[i, cv2.CC_STAT_TOP])
+            w = int(stats[i, cv2.CC_STAT_WIDTH])
+            h = int(stats[i, cv2.CC_STAT_HEIGHT])
+            bbox_area = max(1, w * h)
+            fill = area / bbox_area
+            aspect = max(w, h) / max(1, min(w, h))
+
+            wide_blob = area >= min_wide_area and w >= min_wide_width and fill >= min_fill
+            broad_boundary = area >= min_wide_area and w > h * 2 and aspect < 12.0
+            upper_large = y < mask.shape[0] * 0.65 and area >= min_wide_area * 1.5 and fill >= min_fill
+
+            if wide_blob or broad_boundary or upper_large:
+                continue
+            cleaned[labels == i] = 255
         return cleaned
 
     @staticmethod

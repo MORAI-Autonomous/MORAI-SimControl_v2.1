@@ -469,16 +469,14 @@ def parse_get_simulator_mode_payload(payload: bytes) -> Optional[Dict[str, Any]]
     if len(payload) != proto.GET_SIMULATOR_MODE_RESP_SIZE:
         return None
     try:
-        values, _, offset = unpack_message_payload(0x1002, payload, direction="response")
-    except ValueError:
+        result_code, detail_code, mode = struct.unpack(proto.GET_SIMULATOR_MODE_RESP_FMT, payload)
+    except struct.error:
         return None
-    if offset != len(payload):
-        return None
-    if values.get("result_code") != 0:
-        return values
-    if values.get("mode") not in proto.SIMULATOR_MODE_MAP:
-        return None
-    return values
+    return {
+        "result_code": result_code,
+        "detail_code": detail_code,
+        "mode": mode,
+    }
 
 
 def parse_result_code(payload: bytes) -> Optional[Tuple[int, int]]:
@@ -532,6 +530,24 @@ def parse_create_object_payload(payload: bytes) -> Optional[Dict[str, Any]]:
 
 
 def parse_active_suite_status_payload(payload: bytes) -> Optional[Dict[str, Any]]:
+    if len(payload) < proto.RESULT_SIZE:
+        return None
+
+    try:
+        result_code, detail_code = struct.unpack_from(proto.RESULT_FMT, payload, 0)
+    except struct.error:
+        return None
+
+    if result_code != 0:
+        return {
+            "result_code": result_code,
+            "detail_code": detail_code,
+            "active_suite_name": "",
+            "active_scenario_name": "",
+            "scenario_list_size": 0,
+            "scenario_list": [],
+        }
+
     if len(payload) < proto.RESULT_SIZE + proto.ACTIVE_SUITE_STATUS_RESP_MIN_SIZE:
         return None
 
@@ -547,12 +563,6 @@ def parse_active_suite_status_payload(payload: bytes) -> Optional[Dict[str, Any]
         return None
 
     if offset != len(payload):
-        return None
-    if values["result_code"] != 0:
-        print(
-            f"[PARSE][ActiveSuiteStatus] Server error: "
-            f"result_code={values['result_code']} detail_code={values['detail_code']}"
-        )
         return None
 
     return {

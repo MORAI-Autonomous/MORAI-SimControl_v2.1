@@ -9,6 +9,7 @@ import time
 import threading
 import argparse
 import itertools
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -27,6 +28,43 @@ _rid_iter = itertools.count(1)
 
 def _next_rid() -> int:
     return next(_rid_iter)
+
+
+def _binary_quality_for_frame(binary: np.ndarray, dst_margin: int) -> dict:
+    h, w = binary.shape
+    left = max(0, min(w, int(dst_margin)))
+    right = max(left + 1, min(w, w - int(dst_margin)))
+    active = binary[:, left:right]
+    active_area = max(1, active.size)
+    white_total = int(cv2.countNonZero(active))
+    upper = active[: h // 2, :]
+    upper_white = int(cv2.countNonZero(upper)) if upper.size else 0
+    shadow_area = _wide_bright_candidate_area(active)
+    return {
+        "binary_white_ratio": white_total / active_area,
+        "binary_upper_white_share": upper_white / white_total if white_total > 0 else 0.0,
+        "shadow_boundary_score": shadow_area / active_area,
+    }
+
+
+def _wide_bright_candidate_area(mask: np.ndarray) -> int:
+    n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+        mask, connectivity=8)
+    area_total = 0
+    for i in range(1, n_labels):
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        y = int(stats[i, cv2.CC_STAT_TOP])
+        w = int(stats[i, cv2.CC_STAT_WIDTH])
+        h = int(stats[i, cv2.CC_STAT_HEIGHT])
+        bbox_area = max(1, w * h)
+        fill = area / bbox_area
+        aspect = max(w, h) / max(1, min(w, h))
+        wide_blob = area >= 900 and w >= 70 and fill >= 0.12
+        broad_boundary = area >= 900 and w > h * 2 and aspect < 12.0
+        upper_large = y < mask.shape[0] * 0.65 and area >= 1350 and fill >= 0.12
+        if wide_blob or broad_boundary or upper_large:
+            area_total += area
+    return area_total
 
 
 
@@ -64,6 +102,7 @@ class LaneController:
         vi_data_cb = None,
         # 디버그 합성 이미지 콜백 fn(frame: np.ndarray BGR 1280×480)
         debug_cb = None,
+        telemetry_cb = None,
     ):
         self._sock         = tcp_sock
         self._log          = log_fn or (lambda msg, level="INFO": print(f"[LC] {msg}"))
@@ -111,6 +150,7 @@ class LaneController:
         self._record_path  = record_path
         self._writer:      cv2.VideoWriter | None = None
         self._debug_cb     = debug_cb
+        self._telemetry_cb = telemetry_cb
 
     # ── 카메라 콜백 ──────────────────────────────────────────────
     def on_frame(self, frame: np.ndarray):
@@ -134,6 +174,8 @@ class LaneController:
             self._preprocessor.params.bev_top_crop  = int(kwargs['bev_top_crop'])
         if 'min_blob_area' in kwargs:
             self._preprocessor.params.min_blob_area = int(kwargs['min_blob_area'])
+        if 'shadow_filter_strength' in kwargs:
+            self._preprocessor.params.shadow_filter_strength = int(kwargs['shadow_filter_strength'])
         # ── 검출기 (LaneDetector) ───────────────────────────────
         if 'search_ratio' in kwargs:
             self._detector.search_ratio = float(kwargs['search_ratio'])
@@ -184,6 +226,10 @@ class LaneController:
     def _step(self, frame: np.ndarray):
         # 1. BEV 전처리
         pre    = self._preprocessor.preprocess(frame)
+        binary_quality = _binary_quality_for_frame(
+            pre["binary"],
+            self._preprocessor.params.dst_margin,
+        )
 
         # 2. Sliding Window 차선 검출
         result = self._detector.detect(pre["binary"])
@@ -192,6 +238,8 @@ class LaneController:
         lane_seen     = result.left_detected or result.right_detected
         detected      = lane_seen and not bad_offset
         prev_no_valid = self._no_valid_cnt
+        raw_off: Optional[float] = None
+        steer_raw: Optional[float] = None
 
         if lane_seen:
             self._det_streak += 1
@@ -277,6 +325,37 @@ class LaneController:
             return
 
         # 7. 터미널 출력 (per-frame — GUI 로그 패널에는 보내지 않음)
+        if self._telemetry_cb is not None:
+            try:
+                self._telemetry_cb({
+                    "timestamp_s": time.time(),
+                    "status": status,
+                    "ready": self._ready,
+                    "left_detected": result.left_detected,
+                    "right_detected": result.right_detected,
+                    "raw_offset_m": raw_off,
+                    "smooth_offset_m": smooth_off,
+                    "curve_radius_m": result.curve_radius_m,
+                    "steer_raw": steer_raw,
+                    "steer_limited": steer,
+                    "steer_out": steer_out,
+                    "throttle": throttle_cmd,
+                    "brake": brake_cmd,
+                    "speed_kmh": current_mps * 3.6,
+                    "target_kmh": (
+                        self._speed_pi.target_mps * 3.6
+                        if self._speed_pi is not None
+                        else None
+                    ),
+                    "binary_white_ratio": binary_quality["binary_white_ratio"],
+                    "binary_upper_white_share": binary_quality["binary_upper_white_share"],
+                    "shadow_boundary_score": binary_quality["shadow_boundary_score"],
+                    "no_det_count": self._no_det_cnt,
+                    "no_valid_count": self._no_valid_cnt,
+                })
+            except Exception as e:
+                self._log(f"[Record] telemetry error: {e}", "WARN")
+
         side    = "L" if smooth_off > 0 else "R"
         r_str   = f"{result.curve_radius_m:.0f}m" if result.curve_radius_m < 5000 else "STRAIGHT"
         spd_str = f"{current_mps*3.6:.1f}km/h" if self._speed_ctrl else f"thr={throttle_cmd:.2f}"

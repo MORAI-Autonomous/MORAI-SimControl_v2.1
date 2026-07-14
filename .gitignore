@@ -6,6 +6,7 @@ config/monitor_state.json
 config/fp_state.json
 config/*.json
 debug/
+runs/
 .github/workflows/
 # Added by code-review-graph
 .code-review-graph/
@@ -24,3 +25,4 @@ QODER.md
 AGENTS.md
 CLAUDE.md
 .github/code-review-graph.instruction.md
+prototypes

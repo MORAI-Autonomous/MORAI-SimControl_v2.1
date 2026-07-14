@@ -7,6 +7,9 @@
 # - 튜닝 슬라이더 (Kp, Kd, EMA, Steer Rate, Offset Clip, Target Speed)
 from __future__ import annotations
 
+import json
+import os
+import threading
 import time
 from typing import Callable, Optional
 
@@ -16,6 +19,11 @@ import dearpygui.dearpygui as dpg
 
 import utils.ui_queue as ui_queue
 import panels.log as log
+from lane_control.run_analyzer import analyze_latest_run
+from utils.project_paths import ROOT_DIR
+
+
+_STATE_FILE = os.path.join(str(ROOT_DIR), "config", "lane_control_panel_state.json")
 
 # ── 튜닝 기본값 (Reset 버튼용) ───────────────────────────────────
 _TUNING_DEFAULTS = {
@@ -27,8 +35,19 @@ _TUNING_DEFAULTS = {
     "lc_tune_speed":   15.0,
     "lc_bev_top_crop": 80,
     "lc_min_blob":     50,
+    "lc_shadow_filter": 0,
     "lc_search_ratio": 0.50,
     "lc_min_pixels":   30,
+}
+
+_NEXT_TEST_PARAMS = {
+    "lc_target_kmh":    15.0,
+    "lc_tune_speed":    15.0,
+    "lc_kp":            0.65,
+    "lc_steer_rate":    0.20,
+    "lc_shadow_filter": 20,
+    "lc_search_ratio":  0.70,
+    "lc_min_pixels":    15,
 }
 
 # ── 카메라/디버그 텍스처 해상도 ─────────────────────────────────
@@ -45,13 +64,22 @@ _suppress_raw_until = 0.0         # debug frame 수신 후 raw 억제 기간
 # ── 모듈 상태 ────────────────────────────────────────────────────
 _start_fn:  Optional[Callable] = None
 _stop_fn:   Optional[Callable] = None
+_scenario_control_fn: Optional[Callable] = None
+_auto_thread: Optional[threading.Thread] = None
+_auto_stop_event = threading.Event()
+_auto_iteration = 0
 _runner = None   # LaneRunner 참조 (start 후 set_runner() 로 주입)
 
 
-def init(start_lc_fn: Callable, stop_lc_fn: Callable) -> None:
-    global _start_fn, _stop_fn
+def init(
+    start_lc_fn: Callable,
+    stop_lc_fn: Callable,
+    scenario_control_fn: Optional[Callable] = None,
+) -> None:
+    global _start_fn, _stop_fn, _scenario_control_fn
     _start_fn = start_lc_fn
     _stop_fn  = stop_lc_fn
+    _scenario_control_fn = scenario_control_fn
 
 
 def set_runner(runner) -> None:
@@ -79,7 +107,61 @@ def build(parent: int | str) -> None:
             dpg.add_button(label="■ Stop",  tag="lc_btn_stop",
                            width=90, callback=_on_stop)
             dpg.add_spacer(width=8)
+            dpg.add_checkbox(tag="lc_record_run", label="Record Run", default_value=False)
+            dpg.add_spacer(width=8)
             dpg.add_text("○ Stopped", tag="lc_status", color=(180, 80, 80, 255))
+
+        with dpg.group(horizontal=True):
+            dpg.add_button(label="Auto Cycle Start", tag="lc_auto_start",
+                           width=130, callback=_on_auto_cycle_start)
+            dpg.add_button(label="Auto Cycle Stop", tag="lc_auto_stop",
+                           width=130, callback=_on_auto_cycle_stop)
+            dpg.add_spacer(width=8)
+            dpg.add_text("Auto Idle", tag="lc_auto_status", color=(150, 150, 150, 255))
+
+        with dpg.group(horizontal=True):
+            dpg.add_text("Iter :", color=(180, 180, 180, 255))
+            dpg.add_input_int(tag="lc_auto_iters", default_value=5,
+                              min_value=1, max_value=100, step=0, width=50,
+                              callback=_save_state_cb)
+            dpg.add_text("Max Sec :", color=(180, 180, 180, 255))
+            dpg.add_input_float(tag="lc_auto_max_sec", default_value=90.0,
+                                min_value=5.0, max_value=300.0,
+                                format="%.1f", step=0, width=60,
+                                callback=_save_state_cb)
+            dpg.add_text("No Launch :", color=(180, 180, 180, 255))
+            dpg.add_input_float(tag="lc_auto_no_launch_sec", default_value=4.0,
+                                min_value=1.0, max_value=30.0,
+                                format="%.1f", step=0, width=55,
+                                callback=_save_state_cb)
+            dpg.add_text("Stuck :", color=(180, 180, 180, 255))
+            dpg.add_input_float(tag="lc_auto_stuck_sec", default_value=3.0,
+                                min_value=1.0, max_value=30.0,
+                                format="%.1f", step=0, width=55,
+                                callback=_save_state_cb)
+            dpg.add_text("Lost :", color=(180, 180, 180, 255))
+            dpg.add_input_float(tag="lc_auto_lost_sec", default_value=3.0,
+                                min_value=1.0, max_value=30.0,
+                                format="%.1f", step=0, width=55,
+                                callback=_save_state_cb)
+
+        with dpg.group(horizontal=True):
+            dpg.add_text("Scenario :", color=(180, 180, 180, 255))
+            dpg.add_input_text(tag="lc_auto_scenario_name", default_value="",
+                               width=160, hint="blank = Commands name",
+                               callback=_save_state_cb)
+            dpg.add_text("Reset Wait :", color=(180, 180, 180, 255))
+            dpg.add_input_float(tag="lc_auto_scenario_reset_wait", default_value=1.0,
+                                min_value=0.0, max_value=30.0,
+                                format="%.1f", step=0, width=55,
+                                callback=_save_state_cb)
+            dpg.add_text("Play Wait :", color=(180, 180, 180, 255))
+            dpg.add_input_float(tag="lc_auto_scenario_play_wait", default_value=1.0,
+                                min_value=0.0, max_value=30.0,
+                                format="%.1f", step=0, width=55,
+                                callback=_save_state_cb)
+
+        _load_state()
 
         # ── TARGET VEHICLE (1줄) ───────────────────────────────
         _section("TARGET VEHICLE")
@@ -145,14 +227,21 @@ def build(parent: int | str) -> None:
                                 tooltip="BEV 바이너리 상단 N행 마스킹 (터널 천장/원경 노이즈 제거)")
                     _slider_int("Min Blob",  "lc_min_blob",      50,  0, 500, _on_min_blob,
                                 tooltip="N픽셀 미만 blob 제거 (산점 노이즈 제거)")
+                    _slider_int("Shadow Flt", "lc_shadow_filter", 0,   0, 100, _on_shadow_filter,
+                                tooltip="Wide sun/shadow boundary removal strength")
                     _slider("Srch Ratio",    "lc_search_ratio",  0.50, 0.1, 1.0, "%.2f", _on_search_ratio,
                             tooltip="히스토그램 피크 탐색 범위 (이미지 하단 비율)")
                     _slider_int("Min Pix",   "lc_min_pixels",    30,  1,  200, _on_min_pixels,
                                 tooltip="슬라이딩 윈도우 최소 픽셀 수")
 
         dpg.add_spacer(height=6)
-        dpg.add_button(label="Reset Defaults", tag="lc_btn_reset",
-                       width=130, callback=_on_reset_tuning)
+        with dpg.group(horizontal=True):
+            dpg.add_button(label="Analyze Last Run", tag="lc_btn_analyze_last",
+                           width=140, callback=_on_analyze_last_run)
+            dpg.add_button(label="Apply Next Test", tag="lc_btn_apply_next",
+                           width=130, callback=_on_apply_next_test)
+            dpg.add_button(label="Reset Defaults", tag="lc_btn_reset",
+                           width=130, callback=_on_reset_tuning)
 
         # ── LIVE VIEW ──────────────────────────────────────────
         _section("LIVE VIEW")
@@ -185,6 +274,55 @@ def _section(label: str) -> None:
     dpg.add_text(label, color=(200, 200, 100, 255))
     dpg.add_separator()
     dpg.add_spacer(height=2)
+
+
+_STATE_TAGS = {
+    "lc_auto_iters": int,
+    "lc_auto_max_sec": float,
+    "lc_auto_no_launch_sec": float,
+    "lc_auto_stuck_sec": float,
+    "lc_auto_lost_sec": float,
+    "lc_auto_scenario_name": str,
+    "lc_auto_scenario_reset_wait": float,
+    "lc_auto_scenario_play_wait": float,
+}
+
+
+def _save_state_cb(sender=None, app_data=None, user_data=None) -> None:
+    _save_state()
+
+
+def _save_state() -> None:
+    data = {}
+    for tag in _STATE_TAGS:
+        if dpg.does_item_exist(tag):
+            data[tag] = dpg.get_value(tag)
+    try:
+        os.makedirs(os.path.dirname(_STATE_FILE), exist_ok=True)
+        with open(_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        log.append(f"[LC] failed to save panel state: {exc}", level="WARN")
+
+
+def _load_state() -> None:
+    if not os.path.exists(_STATE_FILE):
+        return
+    try:
+        with open(_STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        log.append(f"[LC] failed to load panel state: {exc}", level="WARN")
+        return
+    if not isinstance(data, dict):
+        return
+    for tag, caster in _STATE_TAGS.items():
+        if tag not in data or not dpg.does_item_exist(tag):
+            continue
+        try:
+            dpg.set_value(tag, caster(data[tag]))
+        except (TypeError, ValueError):
+            continue
 
 
 def _slider(label: str, tag: str, default: float,
@@ -271,6 +409,9 @@ def _on_bev_top_crop(sender, app_data) -> None:
 def _on_min_blob(sender, app_data) -> None:
     if _runner: _runner.update_params(min_blob_area=app_data)
 
+def _on_shadow_filter(sender, app_data) -> None:
+    if _runner: _runner.update_params(shadow_filter_strength=app_data)
+
 def _on_search_ratio(sender, app_data) -> None:
     if _runner: _runner.update_params(search_ratio=app_data)
 
@@ -293,9 +434,364 @@ def _on_reset_tuning() -> None:
             target_kmh   = _TUNING_DEFAULTS["lc_tune_speed"],
             bev_top_crop = _TUNING_DEFAULTS["lc_bev_top_crop"],
             min_blob_area= _TUNING_DEFAULTS["lc_min_blob"],
+            shadow_filter_strength= _TUNING_DEFAULTS["lc_shadow_filter"],
             search_ratio = _TUNING_DEFAULTS["lc_search_ratio"],
             min_pixels   = _TUNING_DEFAULTS["lc_min_pixels"],
         )
+
+
+def _apply_param_tags(params: dict) -> None:
+    for tag, val in params.items():
+        if dpg.does_item_exist(tag):
+            dpg.set_value(tag, val)
+    if dpg.does_item_exist("lc_speed_ctrl"):
+        dpg.set_value("lc_speed_ctrl", True)
+        _on_speed_ctrl_toggle("lc_speed_ctrl", True)
+
+
+def _apply_runner_params(params: dict) -> None:
+    if not _runner:
+        return
+    update = {}
+    mapping = {
+        "lc_kp": "kp",
+        "lc_kd": "kd",
+        "lc_ema": "ema_alpha",
+        "lc_steer_rate": "steer_rate",
+        "lc_offset_clip": "offset_clip",
+        "lc_tune_speed": "target_kmh",
+        "lc_bev_top_crop": "bev_top_crop",
+        "lc_min_blob": "min_blob_area",
+        "lc_shadow_filter": "shadow_filter_strength",
+        "lc_search_ratio": "search_ratio",
+        "lc_min_pixels": "min_pixels",
+    }
+    for tag, key in mapping.items():
+        if tag in params:
+            update[key] = params[tag]
+    if update:
+        _runner.update_params(**update)
+
+
+def _get_tune_params() -> dict:
+    return {
+        "kp":            dpg.get_value("lc_kp"),
+        "kd":            dpg.get_value("lc_kd"),
+        "ema_alpha":     dpg.get_value("lc_ema"),
+        "steer_rate":    dpg.get_value("lc_steer_rate"),
+        "offset_clip":   dpg.get_value("lc_offset_clip"),
+        "target_kmh":    dpg.get_value("lc_tune_speed"),
+        "bev_top_crop":  dpg.get_value("lc_bev_top_crop"),
+        "min_blob_area": dpg.get_value("lc_min_blob"),
+        "shadow_filter_strength": dpg.get_value("lc_shadow_filter"),
+        "search_ratio":  dpg.get_value("lc_search_ratio"),
+        "min_pixels":    dpg.get_value("lc_min_pixels"),
+    }
+
+
+def _start_current_run(force_record: bool = False) -> bool:
+    if _start_fn is None:
+        log.append("[LC] start_fn is not initialized.", level="ERROR")
+        return False
+    if _runner is not None:
+        log.append("[LC] already running.", level="WARN")
+        return False
+
+    cam_port     = dpg.get_value("lc_cam_port")
+    vi_port      = dpg.get_value("lc_vi_port")
+    entity_id    = dpg.get_value("lc_entity_id").strip() or "Car_1"
+    speed_ctrl   = dpg.get_value("lc_speed_ctrl")
+    target_kmh   = dpg.get_value("lc_target_kmh")
+    throttle     = dpg.get_value("lc_throttle")
+    invert_steer = dpg.get_value("lc_invert_steer")
+    record_run   = bool(dpg.get_value("lc_record_run") or force_record)
+
+    dpg.configure_item("lc_btn_start", enabled=False)
+    dpg.set_value("lc_status", "● Running")
+    dpg.configure_item("lc_status", color=(100, 220, 100, 255))
+
+    _start_fn(
+        cam_port,
+        vi_port,
+        entity_id,
+        speed_ctrl,
+        target_kmh,
+        throttle,
+        invert_steer,
+        record_run,
+        _get_tune_params(),
+    )
+    return True
+
+
+def _run_on_ui_thread(fn: Callable, timeout_sec: float = 5.0):
+    done = threading.Event()
+    box = {"value": None, "error": None}
+
+    def _wrapped():
+        try:
+            box["value"] = fn()
+        except Exception as exc:
+            box["error"] = exc
+        finally:
+            done.set()
+
+    ui_queue.post(_wrapped)
+    if not done.wait(timeout_sec):
+        raise TimeoutError("UI operation timed out")
+    if box["error"] is not None:
+        raise box["error"]
+    return box["value"]
+
+
+def _get_auto_config() -> dict:
+    _save_state()
+    scenario_name = ""
+    if dpg.does_item_exist("lc_auto_scenario_name"):
+        scenario_name = (dpg.get_value("lc_auto_scenario_name") or "").strip()
+    if not scenario_name and dpg.does_item_exist("sc_name"):
+        scenario_name = (dpg.get_value("sc_name") or "").strip()
+    no_launch_sec = max(1.0, float(dpg.get_value("lc_auto_no_launch_sec")))
+    return {
+        "max_iters": max(1, int(dpg.get_value("lc_auto_iters"))),
+        "max_sec": max(5.0, float(dpg.get_value("lc_auto_max_sec"))),
+        "no_launch_sec": no_launch_sec,
+        "no_telemetry_sec": max(3.0, no_launch_sec * 1.5),
+        "stuck_sec": max(1.0, float(dpg.get_value("lc_auto_stuck_sec"))),
+        "lost_sec": max(1.0, float(dpg.get_value("lc_auto_lost_sec"))),
+        "offset_limit": 1.20,
+        "offset_sec": 1.0,
+        "scenario_name": scenario_name,
+        "scenario_reset_wait": (
+            max(0.0, float(dpg.get_value("lc_auto_scenario_reset_wait")))
+            if dpg.does_item_exist("lc_auto_scenario_reset_wait")
+            else 1.0
+        ),
+        "scenario_play_wait": (
+            max(0.0, float(dpg.get_value("lc_auto_scenario_play_wait")))
+            if dpg.does_item_exist("lc_auto_scenario_play_wait")
+            else 1.0
+        ),
+    }
+
+
+def _set_auto_status(text: str, color=(150, 150, 150, 255)) -> None:
+    def _apply():
+        if dpg.does_item_exist("lc_auto_status"):
+            dpg.set_value("lc_auto_status", text)
+            dpg.configure_item("lc_auto_status", color=color)
+    ui_queue.post(_apply)
+
+
+def _status_family(status: str) -> str:
+    if status.startswith("NO_DET"):
+        return "NO_DET"
+    if status.startswith("BAD_W"):
+        return "BAD_W"
+    if status.startswith("WAIT"):
+        return "WAIT"
+    return status.split("(", 1)[0]
+
+
+def _send_auto_scenario_control(command: int, cfg: dict) -> None:
+    if _scenario_control_fn is None:
+        raise RuntimeError("scenario control callback is not initialized")
+    scenario_name = str(cfg.get("scenario_name") or "")
+    command_name = {
+        1: "Play",
+        2: "Pause",
+        3: "Stop",
+        4: "Prev",
+        5: "Next",
+    }.get(command, f"Command({command})")
+    _scenario_control_fn(command, scenario_name)
+    log.append(
+        f"[LC][Auto] scenario {command_name} sent name={scenario_name!r}",
+        level="INFO",
+    )
+
+
+def _auto_stop_reason(start_t: float, cfg: dict, state: dict) -> Optional[str]:
+    runner = _runner
+    row = runner.get_last_telemetry() if runner and hasattr(runner, "get_last_telemetry") else None
+    now = time.monotonic()
+    if row is None:
+        if state.get("no_telemetry_t") is None:
+            state["no_telemetry_t"] = now
+        elif now - state["no_telemetry_t"] >= cfg["no_telemetry_sec"]:
+            return "no_telemetry"
+        return "max_duration_no_telemetry" if now - start_t >= cfg["max_sec"] else None
+    state["no_telemetry_t"] = None
+
+    speed = float(row.get("speed_kmh") or 0.0)
+    throttle = float(row.get("throttle") or 0.0)
+    offset = abs(float(row.get("smooth_offset_m") or 0.0))
+    ready = bool(row.get("ready"))
+    status = _status_family(str(row.get("status") or ""))
+
+    if speed > 0.5:
+        state["moved"] = True
+        state["last_moving_t"] = now
+
+    if not ready and not state["moved"] and status == "WAIT":
+        if state.get("wait_ready_t") is None:
+            state["wait_ready_t"] = now
+        elif now - state["wait_ready_t"] >= cfg["no_launch_sec"]:
+            return "no_ready"
+    else:
+        state["wait_ready_t"] = None
+
+    if ready and not state["moved"] and throttle >= 0.25:
+        if state.get("launch_wait_t") is None:
+            state["launch_wait_t"] = now
+        elif now - state["launch_wait_t"] >= cfg["no_launch_sec"]:
+            return "no_launch"
+    else:
+        state["launch_wait_t"] = None
+
+    if state["moved"] and speed < 0.5:
+        if state.get("stuck_t") is None:
+            state["stuck_t"] = now
+        elif now - state["stuck_t"] >= cfg["stuck_sec"]:
+            return "stuck"
+    else:
+        state["stuck_t"] = None
+
+    if status == "NO_DET":
+        if state.get("lost_t") is None:
+            state["lost_t"] = now
+        elif now - state["lost_t"] >= cfg["lost_sec"]:
+            return "lane_lost"
+    else:
+        state["lost_t"] = None
+
+    if offset >= cfg["offset_limit"]:
+        if state.get("offset_t") is None:
+            state["offset_t"] = now
+        elif now - state["offset_t"] >= cfg["offset_sec"]:
+            return "out_of_lane"
+    else:
+        state["offset_t"] = None
+
+    return "max_duration" if now - start_t >= cfg["max_sec"] else None
+
+
+def _auto_cycle_loop(cfg: dict) -> None:
+    global _auto_iteration
+    for i in range(1, cfg["max_iters"] + 1):
+        if _auto_stop_event.is_set():
+            break
+        _auto_iteration = i
+        _set_auto_status(f"Auto {i}/{cfg['max_iters']} starting", (100, 200, 255, 255))
+        try:
+            _set_auto_status(f"Auto {i} scenario reset", (100, 200, 255, 255))
+            _run_on_ui_thread(lambda: _send_auto_scenario_control(3, cfg), 5.0)
+            if _auto_stop_event.wait(cfg["scenario_reset_wait"]):
+                break
+            _set_auto_status(f"Auto {i} scenario play", (100, 200, 255, 255))
+            _run_on_ui_thread(lambda: _send_auto_scenario_control(1, cfg), 5.0)
+            if _auto_stop_event.wait(cfg["scenario_play_wait"]):
+                break
+        except Exception as exc:
+            log.append(f"[LC] auto scenario control failed: {exc}", level="ERROR")
+            _set_auto_status("Auto scenario failed", (220, 80, 80, 255))
+            break
+        try:
+            started = _run_on_ui_thread(lambda: _start_current_run(force_record=True), 10.0)
+        except Exception as exc:
+            log.append(f"[LC] auto cycle start failed: {exc}", level="ERROR")
+            _set_auto_status("Auto start failed", (220, 80, 80, 255))
+            break
+        if not started:
+            _set_auto_status("Auto start skipped", (220, 160, 80, 255))
+            break
+
+        start_t = time.monotonic()
+        state = {
+            "moved": False,
+            "last_moving_t": None,
+            "no_telemetry_t": None,
+            "wait_ready_t": None,
+            "launch_wait_t": None,
+            "stuck_t": None,
+            "lost_t": None,
+            "offset_t": None,
+        }
+        stop_reason = "manual_stop"
+        while not _auto_stop_event.wait(0.2):
+            reason = _auto_stop_reason(start_t, cfg, state)
+            elapsed = time.monotonic() - start_t
+            _set_auto_status(f"Auto {i}/{cfg['max_iters']} {elapsed:.0f}s", (100, 220, 100, 255))
+            if reason:
+                stop_reason = reason
+                break
+
+        _set_auto_status(f"Auto {i} stopping: {stop_reason}", (220, 190, 80, 255))
+        try:
+            runner = _runner
+            if runner is not None and hasattr(runner, "set_stop_reason"):
+                runner.set_stop_reason(stop_reason)
+            _run_on_ui_thread(_on_stop, 10.0)
+            _run_on_ui_thread(lambda: _send_auto_scenario_control(3, cfg), 5.0)
+            time.sleep(0.5)
+            _run_on_ui_thread(_on_analyze_last_run, 10.0)
+        except Exception as exc:
+            log.append(f"[LC] auto cycle analyze failed: {exc}", level="ERROR")
+            _set_auto_status("Auto analyze failed", (220, 80, 80, 255))
+            break
+
+        if _auto_stop_event.is_set():
+            break
+        time.sleep(1.0)
+
+    _set_auto_status("Auto Idle", (150, 150, 150, 255))
+
+
+def _on_auto_cycle_start() -> None:
+    global _auto_thread
+    if _auto_thread is not None and _auto_thread.is_alive():
+        log.append("[LC] auto cycle already running", level="WARN")
+        return
+    cfg = _get_auto_config()
+    _auto_stop_event.clear()
+    if dpg.does_item_exist("lc_record_run"):
+        dpg.set_value("lc_record_run", True)
+    _auto_thread = threading.Thread(target=_auto_cycle_loop, args=(cfg,), daemon=True)
+    _auto_thread.start()
+    log.append(f"[LC] auto cycle started ({cfg['max_iters']} iterations)", level="INFO")
+
+
+def _on_auto_cycle_stop() -> None:
+    _auto_stop_event.set()
+    _set_auto_status("Auto stopping...", (220, 190, 80, 255))
+    log.append("[LC] auto cycle stop requested", level="INFO")
+
+
+def _on_apply_next_test() -> None:
+    """Apply the next recommended Lane Control experiment values."""
+    _apply_param_tags(_NEXT_TEST_PARAMS)
+    _apply_runner_params(_NEXT_TEST_PARAMS)
+    log.append("[LC] Next test params applied", level="INFO")
+
+
+def _on_analyze_last_run() -> None:
+    run_dir, result = analyze_latest_run()
+    if run_dir is None:
+        log.append(f"[LC] analysis failed: {result.get('error')}", level="WARN")
+        return
+    params = result.get("suggestion", {})
+    _apply_param_tags(params)
+    _apply_runner_params(params)
+    score = result.get("score")
+    stats = result.get("telemetry_stats", {})
+    note = "; ".join(result.get("notes", [])[:2])
+    log.append(
+        f"[LC] analyzed last run -> applied suggestion "
+        f"(score={score:.3f}, max_speed={stats.get('max_speed_kmh', 0.0):.1f}km/h)",
+        level="INFO",
+    )
+    if note:
+        log.append(f"[LC] suggestion: {note}", level="INFO")
 
 
 def _on_start() -> None:
@@ -309,12 +805,36 @@ def _on_start() -> None:
     target_kmh  = dpg.get_value("lc_target_kmh")
     throttle    = dpg.get_value("lc_throttle")
     invert_steer= dpg.get_value("lc_invert_steer")
+    record_run  = dpg.get_value("lc_record_run")
+    tune_params = {
+        "kp":            dpg.get_value("lc_kp"),
+        "kd":            dpg.get_value("lc_kd"),
+        "ema_alpha":     dpg.get_value("lc_ema"),
+        "steer_rate":    dpg.get_value("lc_steer_rate"),
+        "offset_clip":   dpg.get_value("lc_offset_clip"),
+        "target_kmh":    dpg.get_value("lc_tune_speed"),
+        "bev_top_crop":  dpg.get_value("lc_bev_top_crop"),
+        "min_blob_area": dpg.get_value("lc_min_blob"),
+        "shadow_filter_strength": dpg.get_value("lc_shadow_filter"),
+        "search_ratio":  dpg.get_value("lc_search_ratio"),
+        "min_pixels":    dpg.get_value("lc_min_pixels"),
+    }
 
     dpg.configure_item("lc_btn_start", enabled=False)
     dpg.set_value("lc_status", "● Running")
     dpg.configure_item("lc_status", color=(100, 220, 100, 255))
 
-    _start_fn(cam_port, vi_port, entity_id, speed_ctrl, target_kmh, throttle, invert_steer)
+    _start_fn(
+        cam_port,
+        vi_port,
+        entity_id,
+        speed_ctrl,
+        target_kmh,
+        throttle,
+        invert_steer,
+        record_run,
+        tune_params,
+    )
 
 
 def _on_stop() -> None:

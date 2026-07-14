@@ -66,6 +66,14 @@ _SCENARIO_COMMAND_NAMES = {
     5: "Next",
 }
 
+
+def _time_mode_label(mode: int) -> str:
+    if mode == proto.TIME_MODE_VARIABLE:
+        return "Variable"
+    if mode == proto.TIME_MODE_FIXED:
+        return "Fixed"
+    return f"UNKNOWN({mode})"
+
 def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
     global _tcp_sock, _dispatch, _toggle_auto
     _tcp_sock    = tcp_sock
@@ -79,24 +87,23 @@ def build(parent: int | str) -> None:
         # ── Suite ──────────────────────────────────────────
         _section("SIMULATOR")
         with dpg.group(horizontal=True):
-            dpg.add_text("Status    :", color=(180, 180, 180, 255))
+            dpg.add_text("GetSimulatorStatus :", color=(180, 180, 180, 255))
             dpg.add_button(label="Get",
                 callback=lambda: _dispatch(
                     proto.MSG_TYPE_GET_SIMULATOR_STATUS,
                     lambda rid: tcp.send_get_simulator_status(_tcp_sock, rid)))
             dpg.add_text("-", tag="simulator_status_text", color=(140, 140, 140, 255))
         with dpg.group(horizontal=True):
-            dpg.add_text("Mode      :", color=(180, 180, 180, 255))
-            dpg.add_button(label="Get",
-                callback=lambda: _dispatch(
-                    proto.MSG_TYPE_GET_SIMULATOR_MODE,
-                    lambda rid: tcp.send_get_simulator_mode(_tcp_sock, rid)))
+            dpg.add_text("GetSimulatorMode   :", color=(180, 180, 180, 255))
+            dpg.add_button(label="Get", callback=_on_get_simulator_mode)
+            dpg.add_text("-", tag="simulator_mode_text", color=(140, 140, 140, 255))
+        with dpg.group(horizontal=True):
+            dpg.add_text("SetSimulatorMode   :", color=(180, 180, 180, 255))
             dpg.add_combo(tag="simulator_mode_combo", items=_SIMULATOR_MODE_ITEMS,
                           default_value="SCENARIO (1)", width=145)
             dpg.add_button(label="Set", callback=_on_set_simulator_mode)
-            dpg.add_text("-", tag="simulator_mode_text", color=(140, 140, 140, 255))
         with dpg.group(horizontal=True):
-            dpg.add_text("Map       :", color=(180, 180, 180, 255))
+            dpg.add_text("LoadMap            :", color=(180, 180, 180, 255))
             dpg.add_combo(tag="simulator_map_combo", items=_SIMULATOR_MAP_ITEMS,
                           default_value=_SIMULATOR_MAP_ITEMS[0], width=210)
             dpg.add_button(label="Load", callback=_on_load_map)
@@ -110,6 +117,7 @@ def build(parent: int | str) -> None:
                 callback=lambda: _dispatch(
                     proto.MSG_TYPE_ACTIVE_SUITE_STATUS,
                     lambda rid: tcp.send_active_suite_status(_tcp_sock, rid)))
+            dpg.add_text("-", tag="suite_status_text", color=(140, 140, 140, 255))
 
         # Browse : [파일 선택]
         # Path   : [경로 표시]
@@ -135,6 +143,7 @@ def build(parent: int | str) -> None:
                 callback=lambda: _dispatch(
                     proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS,
                     lambda rid: tcp.send_get_status(_tcp_sock, rid)))
+            dpg.add_text("-", tag="sim_time_status_text", color=(140, 140, 140, 255))
 
         # Mode : [combo] [Hz / speed input] [Set]
         _MODE_ITEMS = ["Variable", "Fixed"]
@@ -592,17 +601,62 @@ def on_simulator_status(state: int) -> None:
     ui_queue.post(_apply)
 
 
-def on_simulator_mode(mode: int) -> None:
-    def _apply(m=mode) -> None:
+def on_simulator_mode(mode: int, result_code: int = 0) -> None:
+    def _apply(m=mode, result=result_code) -> None:
         if not dpg.does_item_exist("simulator_mode_text"):
             return
         label = proto.SIMULATOR_MODE_MAP.get(m, f"UNKNOWN({m})")
         combo_label = _simulator_mode_label(m)
+        color = (100, 220, 100, 255)
+        if result != 0:
+            label = f"ERROR({result})"
+            color = (255, 190, 90, 255)
         dpg.set_value("simulator_mode_text", label)
-        dpg.configure_item("simulator_mode_text", color=(100, 220, 100, 255))
-        if combo_label and dpg.does_item_exist("simulator_mode_combo"):
+        dpg.configure_item("simulator_mode_text", color=color)
+        if result == 0 and combo_label and dpg.does_item_exist("simulator_mode_combo"):
             dpg.set_value("simulator_mode_combo", combo_label)
             _save_state()
+    ui_queue.post(_apply)
+
+
+def _set_simulator_mode_status(label: str, color=(140, 140, 140, 255)) -> None:
+    def _apply() -> None:
+        if not dpg.does_item_exist("simulator_mode_text"):
+            return
+        dpg.set_value("simulator_mode_text", label)
+        dpg.configure_item("simulator_mode_text", color=color)
+    ui_queue.post(_apply)
+
+
+def on_active_suite_status(
+    active_suite_name: str,
+    active_scenario_name: str,
+    scenario_count: int,
+    result_code: int = 0,
+) -> None:
+    def _apply(suite=active_suite_name, scenario=active_scenario_name, count=scenario_count, result=result_code) -> None:
+        if not dpg.does_item_exist("suite_status_text"):
+            return
+        if result != 0:
+            dpg.set_value("suite_status_text", f"ERROR({result})")
+            dpg.configure_item("suite_status_text", color=(255, 190, 90, 255))
+            return
+        suite_label = suite or "(none)"
+        scenario_label = scenario or "(none)"
+        dpg.set_value("suite_status_text", f"{suite_label} / {scenario_label} ({count})")
+        dpg.configure_item("suite_status_text", color=(100, 220, 100, 255))
+    ui_queue.post(_apply)
+
+
+def on_simulation_time_status(mode: int, result_code: int) -> None:
+    def _apply(m=mode, result=result_code) -> None:
+        if not dpg.does_item_exist("sim_time_status_text"):
+            return
+        mode_label = _time_mode_label(m)
+        label = mode_label if result == 0 else f"{mode_label} / ERROR({result})"
+        color = (100, 220, 100, 255) if result == 0 else (255, 190, 90, 255)
+        dpg.set_value("sim_time_status_text", label)
+        dpg.configure_item("sim_time_status_text", color=color)
     ui_queue.post(_apply)
 
 
@@ -704,6 +758,15 @@ def _on_set_simulator_mode() -> None:
     _dispatch(
         proto.MSG_TYPE_SET_SIMULATOR_MODE,
         lambda rid, m=mode: tcp.send_set_simulator_mode(_tcp_sock, rid, m),
+    )
+
+
+def _on_get_simulator_mode() -> None:
+    _set_simulator_mode_status("...", (180, 180, 180, 255))
+    _dispatch(
+        proto.MSG_TYPE_GET_SIMULATOR_MODE,
+        lambda rid: tcp.send_get_simulator_mode(_tcp_sock, rid),
+        on_registered=lambda rid: log.append(f"[Simulator] GetSimulatorMode requested rid={rid}", "INFO"),
     )
 
 

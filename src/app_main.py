@@ -295,6 +295,8 @@ class AppState:
                     on_sent(rid)
             except OSError as e:
                 log_panel.append(f"Send error: {e}", "ERROR")
+            except Exception as e:
+                log_panel.append(f"Send error: {type(e).__name__}: {e}", "ERROR")
         threading.Thread(target=_send, daemon=True).start()
 
     def toggle_auto(self, max_calls: int = MAX_CALL_NUM) -> bool:
@@ -523,6 +525,8 @@ class AppState:
         target_kmh:  float,
         throttle:    float,
         invert_steer: bool = True,
+        record_run: bool = False,
+        tune_params: Optional[dict] = None,
     ) -> None:
         if self.lc_runner is not None:
             log_panel.append("[LC] already running.", "WARN")
@@ -543,6 +547,8 @@ class AppState:
                 frame_cb     = lc_panel.update_frame,
                 vi_cb        = lc_panel.update_vehicle_info,
                 debug_cb     = lc_panel.update_debug_frame,
+                record_run   = record_run,
+                tune_params  = tune_params,
             )
             self.lc_runner.start()
             lc_panel.set_runner(self.lc_runner)
@@ -557,6 +563,28 @@ class AppState:
             self.lc_runner.stop()
             self.lc_runner = None
         lc_panel.reset_ui()
+
+    def send_lc_scenario_control(self, command: int, scenario_name: str = "") -> None:
+        command_name = {
+            1: "Play",
+            2: "Pause",
+            3: "Stop",
+            4: "Prev",
+            5: "Next",
+        }.get(command, f"Command({command})")
+        log_panel.append(
+            f"[LC][Scenario] {command_name} requested name={scenario_name!r}",
+            "INFO",
+        )
+        self.dispatch(
+            MSG_TYPE_SCENARIO_CONTROL,
+            lambda rid: tcp.send_scenario_control(
+                self.tcp_sock,
+                rid,
+                command=command,
+                scenario_name=scenario_name,
+            ),
+        )
 
     def connect(self):
         with self._conn_lock:
@@ -614,6 +642,7 @@ class AppState:
                     lc_panel.init(
                         start_lc_fn=self.start_lc,
                         stop_lc_fn=self.stop_lc,
+                        scenario_control_fn=self.send_lc_scenario_control,
                     )
                     fp_panel.init(
                         start_fp_fn=self.start_fp,

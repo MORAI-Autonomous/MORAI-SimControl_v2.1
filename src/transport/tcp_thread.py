@@ -159,10 +159,14 @@ class Receiver(threading.Thread):
                         f"mode={mode}({simulator_mode_to_string(mode)})",
                         level
                     )
-                    if result_code == 0:
-                        cmd_panel.on_simulator_mode(mode)
+                    cmd_panel.on_simulator_mode(mode, result_code)
                 else:
-                    log.append(f"GetSimulatorMode parse_failed rid={request_id}", "WARN")
+                    log.append(
+                        f"GetSimulatorMode parse_failed rid={request_id} "
+                        f"payload_size={payload_size} payload_len={len(payload)} "
+                        f"expected={proto.GET_SIMULATOR_MODE_RESP_SIZE}",
+                        "WARN",
+                    )
 
             elif msg_class == proto.MSG_CLASS_RESP \
                     and msg_type == proto.MSG_TYPE_SET_SIMULATOR_MODE:
@@ -229,6 +233,7 @@ class Receiver(threading.Thread):
                         f"sim={parsed['seconds']}s {parsed['nanos']}ns",
                         level
                     )
+                    cmd_panel.on_simulation_time_status(parsed["mode"], parsed["result_code"])
                 else:
                     log.append(f"GetStatus parse_failed rid={request_id}", "WARN")
 
@@ -283,17 +288,33 @@ class Receiver(threading.Thread):
                     and msg_type == proto.MSG_TYPE_ACTIVE_SUITE_STATUS:
                 parsed = tcp.parse_active_suite_status_payload(payload)
                 if parsed:
-                    prompt.update_scenario_list(parsed["scenario_list"])
+                    result_code = parsed["result_code"]
+                    detail_code = parsed["detail_code"]
+                    level = "RECV" if result_code == 0 else "WARN"
+                    if result_code == 0:
+                        prompt.update_scenario_list(parsed["scenario_list"])
                     scenarios = ", ".join(parsed["scenario_list"]) or "(empty)"
                     log.append(
                         f"ActiveSuiteStatus rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code} "
                         f"suite={parsed['active_suite_name']!r} "
                         f"scenario={parsed['active_scenario_name']!r} "
                         f"list=[{scenarios}]",
-                        "RECV"
+                        level
+                    )
+                    cmd_panel.on_active_suite_status(
+                        parsed["active_suite_name"],
+                        parsed["active_scenario_name"],
+                        len(parsed["scenario_list"]),
+                        result_code,
                     )
                 else:
-                    log.append(f"ActiveSuiteStatus parse_failed rid={request_id}", "WARN")
+                    log.append(
+                        f"ActiveSuiteStatus parse_failed rid={request_id} "
+                        f"payload_size={payload_size} payload_len={len(payload)}",
+                        "WARN",
+                    )
 
             # LoadSuite (0x1402)
             elif msg_class == proto.MSG_CLASS_RESP \
