@@ -21,6 +21,30 @@ def _next_rid() -> int:
     return next(_rid_iter)
 
 
+def _next_run_prefix(root_dir: str) -> str:
+    max_index = 0
+    if os.path.isdir(root_dir):
+        for name in os.listdir(root_dir):
+            prefix = name.split("_", 1)[0]
+            if len(prefix) == 3 and prefix.isdigit():
+                max_index = max(max_index, int(prefix))
+    return f"{max_index + 1:03d}"
+
+
+def _build_run_dir(root_dir: str, entity_id: str) -> str:
+    safe_entity = "".join(
+        c if c.isalnum() or c in ("-", "_") else "_" for c in entity_id
+    )
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    run_name = f"{_next_run_prefix(root_dir)}_{timestamp}_{safe_entity}"
+    run_dir = os.path.join(root_dir, run_name)
+    suffix = 2
+    while os.path.exists(run_dir):
+        run_dir = os.path.join(root_dir, f"{run_name}_{suffix}")
+        suffix += 1
+    return run_dir
+
+
 class LaneRunner:
     """
     Manage LaneController and CameraReceiver as one GUI-facing runner.
@@ -74,10 +98,7 @@ class LaneRunner:
             root_dir = os.path.abspath(os.path.join(
                 os.path.dirname(__file__), "..", "..", "runs", "lane_control"
             ))
-            safe_entity = "".join(
-                c if c.isalnum() or c in ("-", "_") else "_" for c in entity_id
-            )
-            run_dir = os.path.join(root_dir, f"{time.strftime('%Y%m%d-%H%M%S')}_{safe_entity}")
+            run_dir = _build_run_dir(root_dir, entity_id)
             config = {
                 "entity_id": entity_id,
                 "cam_ip": cam_ip,

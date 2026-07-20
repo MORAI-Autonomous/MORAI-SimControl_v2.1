@@ -36,6 +36,7 @@ _TUNING_DEFAULTS = {
     "lc_bev_top_crop": 80,
     "lc_min_blob":     50,
     "lc_shadow_filter": 0,
+    "lc_preprocess_mode": "legacy",
     "lc_search_ratio": 0.50,
     "lc_min_pixels":   30,
 }
@@ -223,6 +224,15 @@ def build(parent: int | str) -> None:
 
                 # ── 오른쪽: 노이즈 필터 슬라이더 ─────────────
                 with dpg.group():
+                    with dpg.group(horizontal=True):
+                        dpg.add_text("Preprocess  :", color=(180, 180, 180, 255))
+                        dpg.add_combo(
+                            ("legacy", "structure"),
+                            tag="lc_preprocess_mode",
+                            default_value="legacy",
+                            width=160,
+                            callback=_on_preprocess_mode,
+                        )
                     _slider_int("BEV Crop",  "lc_bev_top_crop", 80,  0, 240, _on_bev_top_crop,
                                 tooltip="BEV 바이너리 상단 N행 마스킹 (터널 천장/원경 노이즈 제거)")
                     _slider_int("Min Blob",  "lc_min_blob",      50,  0, 500, _on_min_blob,
@@ -412,6 +422,9 @@ def _on_min_blob(sender, app_data) -> None:
 def _on_shadow_filter(sender, app_data) -> None:
     if _runner: _runner.update_params(shadow_filter_strength=app_data)
 
+def _on_preprocess_mode(sender, app_data) -> None:
+    if _runner: _runner.update_params(preprocess_mode=app_data)
+
 def _on_search_ratio(sender, app_data) -> None:
     if _runner: _runner.update_params(search_ratio=app_data)
 
@@ -435,6 +448,7 @@ def _on_reset_tuning() -> None:
             bev_top_crop = _TUNING_DEFAULTS["lc_bev_top_crop"],
             min_blob_area= _TUNING_DEFAULTS["lc_min_blob"],
             shadow_filter_strength= _TUNING_DEFAULTS["lc_shadow_filter"],
+            preprocess_mode= _TUNING_DEFAULTS["lc_preprocess_mode"],
             search_ratio = _TUNING_DEFAULTS["lc_search_ratio"],
             min_pixels   = _TUNING_DEFAULTS["lc_min_pixels"],
         )
@@ -463,6 +477,7 @@ def _apply_runner_params(params: dict) -> None:
         "lc_bev_top_crop": "bev_top_crop",
         "lc_min_blob": "min_blob_area",
         "lc_shadow_filter": "shadow_filter_strength",
+        "lc_preprocess_mode": "preprocess_mode",
         "lc_search_ratio": "search_ratio",
         "lc_min_pixels": "min_pixels",
     }
@@ -484,6 +499,7 @@ def _get_tune_params() -> dict:
         "bev_top_crop":  dpg.get_value("lc_bev_top_crop"),
         "min_blob_area": dpg.get_value("lc_min_blob"),
         "shadow_filter_strength": dpg.get_value("lc_shadow_filter"),
+        "preprocess_mode": dpg.get_value("lc_preprocess_mode"),
         "search_ratio":  dpg.get_value("lc_search_ratio"),
         "min_pixels":    dpg.get_value("lc_min_pixels"),
     }
@@ -632,6 +648,8 @@ def _auto_stop_reason(start_t: float, cfg: dict, state: dict) -> Optional[str]:
     if speed > 0.5:
         state["moved"] = True
         state["last_moving_t"] = now
+    if speed > 3.0:
+        state["last_progress_t"] = now
 
     if not ready and not state["moved"] and status == "WAIT":
         if state.get("wait_ready_t") is None:
@@ -657,7 +675,12 @@ def _auto_stop_reason(start_t: float, cfg: dict, state: dict) -> Optional[str]:
     else:
         state["stuck_t"] = None
 
-    if status == "NO_DET":
+    progress_grace = (
+        state.get("last_progress_t") is not None
+        and now - state["last_progress_t"] < max(4.0, cfg["lost_sec"])
+    )
+
+    if status == "NO_DET" and not progress_grace:
         if state.get("lost_t") is None:
             state["lost_t"] = now
         elif now - state["lost_t"] >= cfg["lost_sec"]:
@@ -665,7 +688,7 @@ def _auto_stop_reason(start_t: float, cfg: dict, state: dict) -> Optional[str]:
     else:
         state["lost_t"] = None
 
-    if offset >= cfg["offset_limit"]:
+    if offset >= cfg["offset_limit"] and not progress_grace:
         if state.get("offset_t") is None:
             state["offset_t"] = now
         elif now - state["offset_t"] >= cfg["offset_sec"]:
@@ -710,6 +733,7 @@ def _auto_cycle_loop(cfg: dict) -> None:
         state = {
             "moved": False,
             "last_moving_t": None,
+            "last_progress_t": None,
             "no_telemetry_t": None,
             "wait_ready_t": None,
             "launch_wait_t": None,
@@ -816,6 +840,7 @@ def _on_start() -> None:
         "bev_top_crop":  dpg.get_value("lc_bev_top_crop"),
         "min_blob_area": dpg.get_value("lc_min_blob"),
         "shadow_filter_strength": dpg.get_value("lc_shadow_filter"),
+        "preprocess_mode": dpg.get_value("lc_preprocess_mode"),
         "search_ratio":  dpg.get_value("lc_search_ratio"),
         "min_pixels":    dpg.get_value("lc_min_pixels"),
     }

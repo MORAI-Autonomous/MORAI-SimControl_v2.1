@@ -43,6 +43,7 @@ class BEVParams:
     min_blob_area: int = 50   # CC 면적 필터: N픽셀 미만 blob 제거 (0=비활성)
 
     shadow_filter_strength: int = 0  # wide sun/shadow boundary removal strength (0=off)
+    preprocess_mode: str = "legacy"
 
     def src_pts(self) -> np.ndarray:
         return np.float32([
@@ -84,11 +85,15 @@ class LanePreprocessor:
         p      = self.params
         roi    = self._apply_roi(frame, p)
         bev    = cv2.warpPerspective(roi, p.M(), (p.img_w, p.img_h))
-        binary = self._white_threshold(bev, p)
+        if p.preprocess_mode == "structure":
+            binary = self._structure_threshold(bev, p)
+        else:
+            binary = self._white_threshold(bev, p)
         if p.shadow_filter_strength > 0:
             binary = self._remove_wide_bright_noise(binary, p.shadow_filter_strength)
         if p.bev_top_crop > 0:
             binary[:p.bev_top_crop, :] = 0
+        binary = self._remove_outer_vertical_artifacts(binary, p)
         if p.min_blob_area > 0:
             binary = self._remove_small_blobs(binary, p.min_blob_area)
         debug = self._make_debug(frame, bev, binary, p)
@@ -102,6 +107,82 @@ class LanePreprocessor:
         pts  = p.src_pts().astype(np.int32)
         cv2.fillPoly(mask, [pts], (255, 255, 255))
         return cv2.bitwise_and(frame, mask)
+
+    @staticmethod
+    def _structure_threshold(bev: np.ndarray, p: BEVParams) -> np.ndarray:
+        hsv = cv2.cvtColor(bev, cv2.COLOR_BGR2HSV)
+        gray = cv2.cvtColor(bev, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        gray_eq = clahe.apply(gray)
+
+        bg = cv2.GaussianBlur(gray_eq, (31, 31), 0)
+        local = cv2.subtract(gray_eq, bg)
+        _, local_mask = cv2.threshold(
+            local, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        k_tophat = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 31))
+        top_hat = cv2.morphologyEx(gray_eq, cv2.MORPH_TOPHAT, k_tophat)
+        _, top_hat_mask = cv2.threshold(
+            top_hat, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        s_channel = hsv[:, :, 1]
+        v_channel = hsv[:, :, 2]
+        low_sat = cv2.inRange(s_channel, 0, min(95, max(72, p.white_s_max + 20)))
+        bright = cv2.inRange(v_channel, max(40, p.white_v_min), 255)
+        contrast_structure = cv2.bitwise_and(
+            cv2.bitwise_or(local_mask, top_hat_mask),
+            cv2.bitwise_and(low_sat, bright),
+        )
+
+        edges = cv2.Canny(gray_eq, 60, 150)
+        k_edge = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 13))
+        edge_structure = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, k_edge)
+        edge_structure = cv2.bitwise_and(edge_structure, low_sat)
+
+        mask = cv2.bitwise_or(contrast_structure, edge_structure)
+        if p.yellow_enable:
+            lower_y = np.array([p.yellow_h_min, p.yellow_s_min, p.yellow_v_min])
+            upper_y = np.array([p.yellow_h_max, p.yellow_s_max, p.white_v_max])
+            mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lower_y, upper_y))
+
+        m = p.dst_margin
+        if m > 0:
+            mask[:, :m] = 0
+            mask[:, p.img_w - m:] = 0
+
+        k_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        k_close = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 17))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k_open, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k_close, iterations=1)
+        return LanePreprocessor._keep_lane_like_components(mask)
+
+    @staticmethod
+    def _keep_lane_like_components(mask: np.ndarray) -> np.ndarray:
+        n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+            mask, connectivity=8)
+        cleaned = np.zeros_like(mask)
+        h_img, w_img = mask.shape[:2]
+        for i in range(1, n_labels):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            x = int(stats[i, cv2.CC_STAT_LEFT])
+            y = int(stats[i, cv2.CC_STAT_TOP])
+            w = int(stats[i, cv2.CC_STAT_WIDTH])
+            h = int(stats[i, cv2.CC_STAT_HEIGHT])
+            if area < 18 or h < 12 or w <= 0:
+                continue
+            density = area / max(1, w * h)
+            aspect = h / max(1, w)
+            lower_half = y + h > h_img * 0.55
+            thin_or_tall = w <= 34 or aspect >= 1.15
+            not_wide_patch = not (w > 70 and h > 24)
+            not_solid_panel = not (w > 22 and h > 40 and density > 0.55)
+            not_top_noise = y > h_img * 0.22 or h > 50
+            near_center = x + w > w_img * 0.25 and x < w_img * 0.75
+            center_reaches_road = near_center and y + h > h_img * 0.42
+            if (lower_half or center_reaches_road) and thin_or_tall and not_wide_patch and not_solid_panel:
+                if not_top_noise or near_center:
+                    cleaned[labels == i] = 255
+        return cleaned
 
     @staticmethod
     def _white_threshold(bev: np.ndarray, p: BEVParams) -> np.ndarray:
@@ -138,6 +219,7 @@ class LanePreprocessor:
         lower = np.array([p.white_h_min, p.white_s_min, adapt_vmin])
         upper = np.array([p.white_h_max, p.white_s_max, p.white_v_max])
         mask  = cv2.inRange(hsv, lower, upper)
+        mask = cv2.bitwise_or(mask, LanePreprocessor._local_contrast_lane_mask(bev, hsv, p))
 
         # 노란색 차선 마스크 (터널 중앙선, yellow_enable=True 시 활성)
         if p.yellow_enable:
@@ -170,6 +252,47 @@ class LanePreprocessor:
         return mask
 
     @staticmethod
+    def _local_contrast_lane_mask(bev: np.ndarray, hsv: np.ndarray, p: BEVParams) -> np.ndarray:
+        gray = cv2.cvtColor(bev, cv2.COLOR_BGR2GRAY)
+        s_channel = hsv[:, :, 1]
+
+        # Normalize local illumination so a white line remains visible across shadow/sun boundaries.
+        bg = cv2.GaussianBlur(gray, (0, 0), sigmaX=13, sigmaY=13)
+        local = cv2.subtract(gray, bg)
+        local = cv2.normalize(local, None, 0, 255, cv2.NORM_MINMAX)
+        low_sat = (s_channel <= min(95, p.white_s_max + 28)).astype(np.uint8) * 255
+        _, contrast = cv2.threshold(local, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        contrast = cv2.bitwise_and(contrast, low_sat)
+
+        # Keep thin vertical lane-like structures and reject broad bright patches.
+        k_vert = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 15))
+        k_open = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        contrast = cv2.morphologyEx(contrast, cv2.MORPH_OPEN, k_open)
+        contrast = cv2.morphologyEx(contrast, cv2.MORPH_CLOSE, k_vert)
+
+        n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+            contrast, connectivity=8)
+        cleaned = np.zeros_like(contrast)
+        for i in range(1, n_labels):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            y = int(stats[i, cv2.CC_STAT_TOP])
+            w = int(stats[i, cv2.CC_STAT_WIDTH])
+            h = int(stats[i, cv2.CC_STAT_HEIGHT])
+            if area < 18 or h < 12:
+                continue
+            if w > 42 and h < w * 1.2:
+                continue
+            if y < p.bev_top_crop * 0.45:
+                continue
+            cleaned[labels == i] = 255
+
+        m = p.dst_margin
+        if m > 0:
+            cleaned[:, :m] = 0
+            cleaned[:, p.img_w - m:] = 0
+        return cleaned
+
+    @staticmethod
     def _remove_small_blobs(mask: np.ndarray, min_area: int) -> np.ndarray:
         """Connected-component 면적 필터 — min_area 픽셀 미만 blob 제거."""
         n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
@@ -181,17 +304,72 @@ class LanePreprocessor:
         return cleaned
 
     @staticmethod
+    def _remove_outer_vertical_artifacts(mask: np.ndarray, p: BEVParams) -> np.ndarray:
+        n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+            mask, connectivity=8)
+        cleaned = mask.copy()
+        left_guard = p.dst_margin + 28
+        right_guard = p.img_w - p.dst_margin - 28
+
+        for i in range(1, n_labels):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            x = int(stats[i, cv2.CC_STAT_LEFT])
+            y = int(stats[i, cv2.CC_STAT_TOP])
+            w = int(stats[i, cv2.CC_STAT_WIDTH])
+            h = int(stats[i, cv2.CC_STAT_HEIGHT])
+            if area < 45 or h < 32 or w <= 0:
+                continue
+
+            x_center = x + w * 0.5
+            vertical = h >= w * 2.2
+            outer = x_center <= left_guard or x_center >= right_guard
+            starts_high = y < mask.shape[0] * 0.72
+            too_solid = area / max(1, w * h) > 0.32
+
+            if outer and vertical and starts_high and too_solid:
+                cleaned[labels == i] = 0
+        return cleaned
+
+    @staticmethod
     def _remove_wide_bright_noise(mask: np.ndarray, strength: int) -> np.ndarray:
         """Remove wide sun/shadow blobs while preserving thin lane components."""
         strength = int(np.clip(strength, 0, 100))
         if strength <= 0:
             return mask
 
+        group_w = int(np.interp(strength, [1, 100], [21, 65]))
+        group_h = int(np.interp(strength, [1, 100], [3, 9]))
+        k_group = cv2.getStructuringElement(cv2.MORPH_RECT, (group_w, group_h))
+        grouped = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k_group)
+        remove = np.zeros_like(mask)
+
+        n_groups, group_labels, group_stats, _ = cv2.connectedComponentsWithStats(
+            grouped, connectivity=8)
+        min_group_area = int(np.interp(strength, [1, 100], [2400, 500]))
+        min_group_width = int(np.interp(strength, [1, 100], [90, 32]))
+        min_group_fill = float(np.interp(strength, [1, 100], [0.20, 0.07]))
+
+        for i in range(1, n_groups):
+            area = int(group_stats[i, cv2.CC_STAT_AREA])
+            y = int(group_stats[i, cv2.CC_STAT_TOP])
+            w = int(group_stats[i, cv2.CC_STAT_WIDTH])
+            h = int(group_stats[i, cv2.CC_STAT_HEIGHT])
+            bbox_area = max(1, w * h)
+            fill = area / bbox_area
+            upper_mid = y < mask.shape[0] * 0.72
+            broad = w >= min_group_width and area >= min_group_area and fill >= min_group_fill
+            band_like = w >= h * 1.8 and area >= min_group_area * 0.75
+            chunky = w >= 28 and h >= 10 and fill >= min_group_fill and upper_mid
+
+            if upper_mid and (broad or band_like or chunky):
+                remove[group_labels == i] = 255
+
+        cleaned_input = cv2.bitwise_and(mask, cv2.bitwise_not(remove))
         n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
-            mask, connectivity=8)
+            cleaned_input, connectivity=8)
         cleaned = np.zeros_like(mask)
         min_wide_area = int(np.interp(strength, [1, 100], [2200, 450]))
-        min_wide_width = int(np.interp(strength, [1, 100], [120, 45]))
+        min_wide_width = int(np.interp(strength, [1, 100], [90, 30]))
         min_fill = float(np.interp(strength, [1, 100], [0.18, 0.08]))
 
         for i in range(1, n_labels):
@@ -202,12 +380,14 @@ class LanePreprocessor:
             bbox_area = max(1, w * h)
             fill = area / bbox_area
             aspect = max(w, h) / max(1, min(w, h))
+            lane_like = h >= w * 1.4 and w <= 34
 
             wide_blob = area >= min_wide_area and w >= min_wide_width and fill >= min_fill
             broad_boundary = area >= min_wide_area and w > h * 2 and aspect < 12.0
             upper_large = y < mask.shape[0] * 0.65 and area >= min_wide_area * 1.5 and fill >= min_fill
+            chunky_upper = y < mask.shape[0] * 0.72 and w >= 28 and h >= 10 and fill >= min_fill
 
-            if wide_blob or broad_boundary or upper_large:
+            if not lane_like and (wide_blob or broad_boundary or upper_large or chunky_upper):
                 continue
             cleaned[labels == i] = 255
         return cleaned

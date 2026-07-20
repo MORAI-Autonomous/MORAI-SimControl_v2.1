@@ -1,6 +1,8 @@
 # lane_detector.py
 # Sliding Window 차선 검출: 히스토그램 기준점 → 폴리핏 → 오프셋/곡률 계산
 
+from __future__ import annotations
+
 import cv2
 import numpy as np
 from dataclasses import dataclass
@@ -82,10 +84,16 @@ class LaneDetector:
         """
         if self._prev_left is None or self._prev_right is None:
             # 처음 or 놓친 후 → 전체 히스토그램 탐색
-            return self._sliding_window(binary)
+            result = self._sliding_window(binary)
         else:
             # 이전 결과 기반 빠른 탐색
-            return self._search_around_poly(binary)
+            result = self._search_around_poly(binary)
+
+        if self._needs_sparse_recovery(result):
+            recovered = self._sparse_line_recovery(binary, result.viz)
+            if recovered is not None:
+                return recovered
+        return result
 
     def reset(self):
         self._prev_left      = None
@@ -113,14 +121,22 @@ class LaneDetector:
         left_cands  = _peaks(histogram[:mid], offset=0)
         right_cands = _peaks(histogram[mid:], offset=mid)
 
-        best_pair, best_dist = None, float("inf")
+        best_pair, best_score = None, -1e9
         for lc in left_cands:
             for rc in right_cands:
                 lane_w = rc - lc
                 if LANE_W_MIN <= lane_w <= LANE_W_MAX:
-                    d = abs((lc + rc) / 2.0 - mid)
-                    if d < best_dist:
-                        best_dist, best_pair = d, (lc, rc)
+                    lane_w_m = lane_w * XM_PER_PIX
+                    center = (lc + rc) * 0.5
+                    left_strength = float(histogram[int(lc)])
+                    right_strength = float(histogram[int(rc)])
+                    score = left_strength + right_strength
+                    score -= abs(lane_w_m - 3.5) * 80.0
+                    score -= abs(center - mid) * 0.35
+                    if lc < mid < rc:
+                        score += 80.0
+                    if score > best_score:
+                        best_score, best_pair = score, (lc, rc)
         if best_pair:
             return best_pair
         return int(np.argmax(histogram[:mid])), int(np.argmax(histogram[mid:])) + mid
@@ -231,7 +247,7 @@ class LaneDetector:
             degree = 2 if len(lx) >= 80 else 1
             fit = np.polyfit(ly, lx, degree)
             fit = fit if degree == 2 else np.array([0.0, fit[0], fit[1]])
-            if self._is_fit_sane(fit, h):
+            if self._is_fit_sane(fit, h) and self._has_lane_support(lx, ly, h):
                 result.left_fit      = fit
                 result.left_detected = True
                 self._prev_left      = fit
@@ -258,7 +274,7 @@ class LaneDetector:
             degree = 2 if len(rx) >= 80 else 1
             fit = np.polyfit(ry, rx, degree)
             fit = fit if degree == 2 else np.array([0.0, fit[0], fit[1]])
-            if self._is_fit_sane(fit, h):
+            if self._is_fit_sane(fit, h) and self._has_lane_support(rx, ry, h):
                 result.right_fit      = fit
                 result.right_detected = True
                 self._prev_right      = fit
@@ -316,6 +332,13 @@ class LaneDetector:
             raw_r = float(np.median(r_bot)) if len(r_bot) > 0 else rf[0]*y_eval**2+rf[1]*y_eval+rf[2]
             left_x_bot  = float(np.clip(raw_l, 0, w))
             right_x_bot = float(np.clip(raw_r, 0, w))
+
+            if not self._lane_pair_is_sane(lf, rf, h, w):
+                cv2.putText(viz, "PAIR GEOM ERR", (10, viz.shape[0] - 50),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 80, 255), 2)
+                result.offset_m = float("nan")
+                result.viz = viz
+                return result
 
             # BEV 경계 유효성: dst_margin 바깥이면 배리어/합류선 오검출 → 캐시 초기화
             _margin = BEV_DST_MARGIN
@@ -399,6 +422,302 @@ class LaneDetector:
 
     # ── 폴리핏 물리적 타당성 검사 ────────────────────────────────
     @staticmethod
+    def _needs_sparse_recovery(result: LaneResult) -> bool:
+        if result.left_detected and result.right_detected and np.isfinite(result.offset_m):
+            return False
+        if result.left_detected or result.right_detected:
+            return not np.isfinite(result.offset_m)
+        return True
+
+    def _sparse_line_recovery(self, binary: np.ndarray, viz: Optional[np.ndarray]) -> Optional[LaneResult]:
+        h, w = binary.shape
+        if cv2.countNonZero(binary) < 12:
+            return None
+
+        if viz is None:
+            viz = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+        else:
+            viz = viz.copy()
+
+        k_close = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 17))
+        work = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, k_close)
+        lines = cv2.HoughLinesP(
+            work,
+            rho=1,
+            theta=np.pi / 180.0,
+            threshold=10,
+            minLineLength=max(22, int(h * 0.05)),
+            maxLineGap=30,
+        )
+        if lines is None:
+            return None
+
+        left: list[dict] = []
+        right: list[dict] = []
+        mid = w * 0.5
+        for item in lines.reshape(-1, 4):
+            x1, y1, x2, y2 = (int(v) for v in item)
+            dx = float(x2 - x1)
+            dy = float(y2 - y1)
+            y_span = abs(dy)
+            x_span = abs(dx)
+            if y_span < h * 0.07 or y_span < x_span * 0.75:
+                continue
+
+            y_max = max(y1, y2)
+            y_min = min(y1, y2)
+            if y_max < h * 0.50:
+                continue
+
+            fit_1d = np.polyfit(np.array([y1, y2]), np.array([x1, x2]), 1)
+            fit = np.array([0.0, float(fit_1d[0]), float(fit_1d[1])])
+            if not self._is_fit_sane(fit, h):
+                continue
+
+            x_bot = float(fit[0] * (h - 1) ** 2 + fit[1] * (h - 1) + fit[2])
+            if x_bot < BEV_DST_MARGIN * 0.65 or x_bot > w - BEV_DST_MARGIN * 0.65:
+                continue
+
+            length = float((dx * dx + dy * dy) ** 0.5)
+            score = length + y_max * 0.05 - abs(x_bot - mid) * 0.015
+            road_support = y_max >= h * 0.68
+            upper_origin = y_min < h * 0.38 and y_max < h * 0.78
+            outer_right = x_bot > w * 0.78
+            outer_left = x_bot < w * 0.22
+            candidate = {
+                "fit": fit,
+                "x_bot": x_bot,
+                "length": length,
+                "score": score,
+                "pts": (x1, y1, x2, y2),
+                "road_support": road_support,
+                "upper_origin": upper_origin,
+                "outer_edge": outer_right or outer_left,
+            }
+            if x_bot < mid:
+                left.append(candidate)
+            else:
+                right.append(candidate)
+
+        result = self._recover_sparse_pair(left, right, h, w, viz)
+        if result is not None:
+            return result
+        return self._recover_sparse_with_cache(left, right, h, w, viz)
+
+    def _recover_sparse_pair(
+        self,
+        left: list[dict],
+        right: list[dict],
+        h: int,
+        w: int,
+        viz: np.ndarray,
+    ) -> Optional[LaneResult]:
+        best = None
+        best_score = -1e9
+        for l in left:
+            for r in right:
+                lf = l["fit"]
+                rf = r["fit"]
+                if not self._lane_pair_is_sane(lf, rf, h, w):
+                    continue
+                width_m = (float(r["x_bot"]) - float(l["x_bot"])) * XM_PER_PIX
+                if not (2.4 <= width_m <= 4.8):
+                    continue
+                if self._looks_like_outer_object_pair(l, r):
+                    continue
+                score = self._score_ego_lane_pair(lf, rf, h, w)
+                score += self._score_sparse_candidate_quality(l, side="left")
+                score += self._score_sparse_candidate_quality(r, side="right")
+                score += float(l["score"]) + float(r["score"])
+                if score > best_score:
+                    best_score = score
+                    best = (l, r)
+
+        if best is None:
+            return None
+        return self._make_sparse_result(best[0], best[1], h, w, viz, both_detected=True)
+
+    def _recover_sparse_with_cache(
+        self,
+        left: list[dict],
+        right: list[dict],
+        h: int,
+        w: int,
+        viz: np.ndarray,
+    ) -> Optional[LaneResult]:
+        cached_pairs = []
+        if left and self._prev_right is not None:
+            for l in left:
+                cached_pairs.append((l, {"fit": self._prev_right, "x_bot": None, "pts": None}, False))
+        if right and self._prev_left is not None:
+            for r in right:
+                cached_pairs.append(({"fit": self._prev_left, "x_bot": None, "pts": None}, r, False))
+
+        best = None
+        best_score = -1e9
+        for l, r, both_detected in cached_pairs:
+            lf = l["fit"]
+            rf = r["fit"]
+            if not self._lane_pair_is_sane(lf, rf, h, w):
+                continue
+            y_eval = h - 1.0
+            left_bot = float(lf[0] * y_eval**2 + lf[1] * y_eval + lf[2])
+            right_bot = float(rf[0] * y_eval**2 + rf[1] * y_eval + rf[2])
+            width_m = (right_bot - left_bot) * XM_PER_PIX
+            if not (2.4 <= width_m <= 4.8):
+                continue
+            detected = l if l.get("pts") is not None else r
+            if self._looks_like_outer_object_pair(l, r):
+                continue
+            score = self._score_ego_lane_pair(lf, rf, h, w)
+            if detected is l:
+                score += self._score_sparse_candidate_quality(detected, side="left")
+            else:
+                score += self._score_sparse_candidate_quality(detected, side="right")
+            score += float(detected.get("score", 0.0))
+            if score > best_score:
+                best_score = score
+                best = (l, r, both_detected)
+
+        if best is None:
+            return None
+        return self._make_sparse_result(best[0], best[1], h, w, viz, both_detected=best[2])
+
+    def _make_sparse_result(
+        self,
+        left: dict,
+        right: dict,
+        h: int,
+        w: int,
+        viz: np.ndarray,
+        both_detected: bool,
+    ) -> LaneResult:
+        lf = left["fit"]
+        rf = right["fit"]
+        y_eval = h - 1.0
+        left_x_bot = float(lf[0] * y_eval**2 + lf[1] * y_eval + lf[2])
+        right_x_bot = float(rf[0] * y_eval**2 + rf[1] * y_eval + rf[2])
+        lane_center = (left_x_bot + right_x_bot) * 0.5
+
+        result = LaneResult()
+        result.left_fit = lf
+        result.right_fit = rf
+        result.left_detected = bool(left.get("pts") is not None)
+        result.right_detected = bool(right.get("pts") is not None)
+        if both_detected:
+            result.left_detected = True
+            result.right_detected = True
+        result.offset_m = (lane_center - w * 0.5) * XM_PER_PIX
+        result.curve_radius_m = 9999.0
+
+        self._prev_left = lf
+        self._prev_right = rf
+        self._left_miss_cnt = 0 if result.left_detected else self._left_miss_cnt
+        self._right_miss_cnt = 0 if result.right_detected else self._right_miss_cnt
+
+        plot_y = np.linspace(max(0, int(h * 0.35)), h - 1, h - int(h * 0.35))
+        left_x = lf[0] * plot_y**2 + lf[1] * plot_y + lf[2]
+        right_x = rf[0] * plot_y**2 + rf[1] * plot_y + rf[2]
+        pts_left = np.array([np.transpose(np.vstack([left_x, plot_y]))], dtype=np.int32)
+        pts_right = np.array([np.transpose(np.vstack([right_x, plot_y]))], dtype=np.int32)
+        cv2.polylines(viz, pts_left, False, (255, 200, 0), 3)
+        cv2.polylines(viz, pts_right, False, (0, 220, 255), 3)
+        for item, color in ((left, (255, 80, 80)), (right, (80, 80, 255))):
+            pts = item.get("pts")
+            if pts is not None:
+                cv2.line(viz, (pts[0], pts[1]), (pts[2], pts[3]), color, 2)
+        cv2.putText(viz, "SPARSE LINE", (10, 110),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 220, 255), 2)
+        _put_hud(viz, result.offset_m, result.curve_radius_m,
+                 result.left_detected, result.right_detected)
+        result.viz = viz
+        return result
+
+    def _previous_lane_center_bot(self, img_h: int) -> Optional[float]:
+        if self._prev_left is None or self._prev_right is None:
+            return None
+        y_eval = img_h - 1.0
+        left_x = float(self._prev_left[0] * y_eval**2 + self._prev_left[1] * y_eval + self._prev_left[2])
+        right_x = float(self._prev_right[0] * y_eval**2 + self._prev_right[1] * y_eval + self._prev_right[2])
+        return (left_x + right_x) * 0.5
+
+    @staticmethod
+    def _score_sparse_candidate_quality(candidate: dict, side: str) -> float:
+        score = 0.0
+        if candidate.get("road_support"):
+            score += 90.0
+        else:
+            score -= 140.0
+
+        if candidate.get("upper_origin"):
+            score -= 80.0
+        if candidate.get("outer_edge"):
+            score -= 80.0
+
+        # Right-side panels/barriers are the dominant false positive in the current scenario.
+        if side == "right" and candidate.get("outer_edge") and not candidate.get("road_support"):
+            score -= 240.0
+        return score
+
+    @staticmethod
+    def _looks_like_outer_object_pair(left: dict, right: dict) -> bool:
+        right_object = (
+            right.get("pts") is not None
+            and right.get("outer_edge")
+            and right.get("upper_origin")
+            and not right.get("road_support")
+        )
+        left_object = (
+            left.get("pts") is not None
+            and left.get("outer_edge")
+            and left.get("upper_origin")
+            and not left.get("road_support")
+        )
+        return bool(right_object or left_object)
+
+    def _score_ego_lane_pair(
+        self,
+        left_fit: np.ndarray,
+        right_fit: np.ndarray,
+        img_h: int,
+        img_w: int,
+    ) -> float:
+        sample_y = np.array([img_h * 0.45, img_h * 0.65, img_h - 1.0], dtype=np.float32)
+        left_x = left_fit[0] * sample_y**2 + left_fit[1] * sample_y + left_fit[2]
+        right_x = right_fit[0] * sample_y**2 + right_fit[1] * sample_y + right_fit[2]
+        widths_m = (right_x - left_x) * XM_PER_PIX
+        centers = (left_x + right_x) * 0.5
+
+        bottom_center = float(centers[-1])
+        bottom_width_m = float(widths_m[-1])
+        ego_x = img_w * 0.5
+        score = 0.0
+
+        # Prefer the lane that contains the ego vehicle in near and mid BEV.
+        for lx, rx in zip(left_x[1:], right_x[1:]):
+            if float(lx) < ego_x < float(rx):
+                score += 120.0
+            else:
+                outside_px = min(abs(ego_x - float(lx)), abs(ego_x - float(rx)))
+                score -= outside_px * 0.7
+
+        # Lane width around a normal 3.5m lane is more likely than adjacent/noise pairs.
+        score -= abs(bottom_width_m - 3.5) * 65.0
+        score -= float(np.std(widths_m)) * 45.0
+
+        # Keep continuity with the previous ego lane to avoid jumping to adjacent lanes.
+        prev_center = self._previous_lane_center_bot(img_h)
+        if prev_center is not None:
+            score -= abs(bottom_center - prev_center) * 0.9
+        else:
+            score -= abs(bottom_center - ego_x) * 0.35
+
+        # Similar left/right slopes are more lane-like than a road edge plus object pair.
+        slope_delta = abs(float(left_fit[1]) - float(right_fit[1]))
+        score -= slope_delta * 60.0
+        return score
+
+    @staticmethod
     def _is_fit_sane(fit: np.ndarray, img_h: int) -> bool:
         """x=Ay²+By+C 물리적 타당성: sweep≤65%h, |B|≤0.80, |A|≤0.004"""
         if fit is None or len(fit) < 3:
@@ -406,6 +725,37 @@ class LaneDetector:
         A, B, _ = float(fit[0]), float(fit[1]), float(fit[2])
         sweep    = abs(A * img_h**2 + B * img_h)
         return sweep <= img_h * 0.65 and abs(B) <= 0.80 and abs(A) <= 0.004
+
+    @staticmethod
+    def _has_lane_support(xs: np.ndarray, ys: np.ndarray, img_h: int) -> bool:
+        if len(xs) < 8 or len(ys) < 8:
+            return False
+
+        y_span = float(np.max(ys) - np.min(ys))
+        if y_span < img_h * 0.18:
+            return False
+
+        bottom = ys >= int(img_h * 0.62)
+        bottom_count = int(np.count_nonzero(bottom))
+        return bottom_count >= max(6, int(len(ys) * 0.12))
+
+    @staticmethod
+    def _lane_pair_is_sane(left_fit: np.ndarray, right_fit: np.ndarray, img_h: int, img_w: int) -> bool:
+        sample_y = np.array([img_h * 0.45, img_h * 0.65, img_h - 1.0], dtype=np.float32)
+        left_x = left_fit[0] * sample_y**2 + left_fit[1] * sample_y + left_fit[2]
+        right_x = right_fit[0] * sample_y**2 + right_fit[1] * sample_y + right_fit[2]
+
+        widths_m = (right_x - left_x) * XM_PER_PIX
+        if np.any(widths_m < 2.0) or np.any(widths_m > 5.2):
+            return False
+        if float(np.max(widths_m) - np.min(widths_m)) > 1.8:
+            return False
+
+        centers = (left_x + right_x) * 0.5
+        if np.any(centers < BEV_DST_MARGIN * 0.7) or np.any(centers > img_w - BEV_DST_MARGIN * 0.7):
+            return False
+
+        return True
 
     # ── 한쪽 차선만 검출된 경우 ──────────────────────────────────
     @staticmethod
@@ -447,6 +797,13 @@ class LaneDetector:
             left_x_bot = right_x_bot - LANE_WIDTH_PX
 
         lane_center     = (left_x_bot + right_x_bot) / 2.0
+        inferred_offset_m = (lane_center - w / 2.0) * XM_PER_PIX
+        if abs(inferred_offset_m) > 1.25:
+            result.offset_m = float("nan")
+            cv2.putText(viz, "SINGLE OFFSET ERR", (10, 85),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 80, 255), 2)
+            return result
+
         result.offset_m = (lane_center - w / 2.0) * XM_PER_PIX
 
         _put_hud(viz, result.offset_m, result.curve_radius_m,

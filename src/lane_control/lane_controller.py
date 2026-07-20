@@ -176,6 +176,11 @@ class LaneController:
             self._preprocessor.params.min_blob_area = int(kwargs['min_blob_area'])
         if 'shadow_filter_strength' in kwargs:
             self._preprocessor.params.shadow_filter_strength = int(kwargs['shadow_filter_strength'])
+        if 'preprocess_mode' in kwargs:
+            mode = str(kwargs['preprocess_mode'])
+            self._preprocessor.params.preprocess_mode = (
+                mode if mode in ("legacy", "structure") else "legacy"
+            )
         # ── 검출기 (LaneDetector) ───────────────────────────────
         if 'search_ratio' in kwargs:
             self._detector.search_ratio = float(kwargs['search_ratio'])
