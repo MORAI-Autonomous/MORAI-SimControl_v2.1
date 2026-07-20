@@ -6,6 +6,7 @@ config/monitor_state.json
 config/fp_state.json
 config/*.json
 debug/
+runs/
 .github/workflows/
 prototypes/flutter_ui/.dart_tool/
 prototypes/flutter_ui/build/
