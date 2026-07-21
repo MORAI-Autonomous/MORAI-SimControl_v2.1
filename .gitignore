@@ -1,11 +1,8 @@
 __pycache__
 .claude
-config/monitor_state.json
+config/
 .vscode/settings.json
 .vscode/launch.json
-config/fp_state.json
-config/*.json
-!config/batch_simulation.json
 debug/
 runs/
 .github/workflows/
