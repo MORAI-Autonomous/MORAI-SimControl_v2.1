@@ -5,6 +5,7 @@ config/monitor_state.json
 .vscode/launch.json
 config/fp_state.json
 config/*.json
+!config/batch_simulation.json
 debug/
 runs/
 .github/workflows/

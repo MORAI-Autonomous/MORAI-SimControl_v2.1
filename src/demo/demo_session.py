@@ -189,6 +189,13 @@ class DemoSession:
             timeout,
         )
 
+    def get_time_status(self, timeout: Optional[float] = None) -> Dict[str, Any]:
+        return self._request_result(
+            proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS,
+            lambda sock, rid: tcp.send_get_status(sock, rid),
+            timeout,
+        )
+
     def get_scenario_status(self, timeout: Optional[float] = None) -> ScenarioStatus:
         response = self._request_result(
             proto.MSG_TYPE_SCENARIO_STATUS,
@@ -351,6 +358,8 @@ class DemoSession:
                 "result_code": result[0],
                 "detail_code": result[1],
             }
+        elif msg_type == proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS:
+            parsed = tcp.parse_get_status_payload(payload)
         elif msg_type == proto.MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND:
             parsed = tcp.parse_set_simulation_time_mode_payload(payload)
         elif msg_type == proto.MSG_TYPE_SCENARIO_STATUS:

@@ -65,6 +65,11 @@ _SCENARIO_COMMAND_NAMES = {
     4: "Prev",
     5: "Next",
 }
+_RTF_ITEMS = ["Real-Time", "Unlimited"]
+_RTF_VALUES = {
+    "Real-Time": 1,
+    "Unlimited": 2,
+}
 
 def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
     global _tcp_sock, _dispatch, _toggle_auto
@@ -163,9 +168,8 @@ def build(parent: int | str) -> None:
         with dpg.group(tag="sim_fixed_group", show=True):
             with dpg.group(horizontal=True):
                 dpg.add_text("RTF        :", color=(180, 180, 180, 255))
-                dpg.add_input_int(tag="sim_rtf", default_value=1,
-                                  min_value=1, max_value=20,
-                                  step=0, width=80)
+                dpg.add_combo(tag="sim_rtf", items=_RTF_ITEMS,
+                              default_value="Real-Time", width=105)
                 dpg.add_spacer(width=12)
                 dpg.add_checkbox(tag="sim_user_control", label="User Control", default_value=False)
 
@@ -684,7 +688,7 @@ def _on_set_sim_mode() -> None:
             "mode": mode,
             "target_fps": int(dpg.get_value("sim_target_fps")),
             "physics_delta_time": int(dpg.get_value("sim_physics_dt")),
-            "rtf": int(dpg.get_value("sim_rtf")),
+            "rtf": _RTF_VALUES.get(dpg.get_value("sim_rtf"), 1),
             "user_control": 1 if dpg.get_value("sim_user_control") else 0,
         }
 
@@ -781,7 +785,12 @@ def _load_state() -> None:
         if dpg.does_item_exist("sim_physics_dt"):
             dpg.set_value("sim_physics_dt", data.get("sim_physics_dt", data.get("sim_physics_dt_fixed", data.get("sim_physics_dt_var", 10))))
         if dpg.does_item_exist("sim_rtf"):
-            dpg.set_value("sim_rtf", data.get("sim_rtf", 1))
+            saved_rtf = data.get("sim_rtf", "Real-Time")
+            if saved_rtf in (2, "2", "Unlimited"):
+                saved_rtf = "Unlimited"
+            else:
+                saved_rtf = "Real-Time"
+            dpg.set_value("sim_rtf", saved_rtf)
         if dpg.does_item_exist("sim_user_control"):
             dpg.set_value("sim_user_control", bool(data.get("sim_user_control", False)))
         if dpg.does_item_exist("sc_timer_enabled"):

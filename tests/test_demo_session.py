@@ -48,6 +48,33 @@ def _send_packet(conn: socket.socket, msg_class: int, msg_type: int, request_id:
 
 
 class DemoSessionTests(unittest.TestCase):
+    def test_get_time_status_returns_parsed_response(self) -> None:
+        def handler(conn: socket.socket) -> None:
+            _, msg_type, _, request_id, _, _ = tcp.recv_packet(conn)
+            self.assertEqual(msg_type, proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS)
+            payload = struct.pack(
+                proto.GET_STATUS_FMT,
+                0,
+                0,
+                proto.TIME_MODE_FIXED,
+                60,
+                10,
+                1,
+                0,
+                42,
+                3,
+                500,
+            )
+            _send_packet(conn, proto.MSG_CLASS_RESP, msg_type, request_id, payload)
+
+        server = _TestServer(handler)
+        with DemoSession(server.host, server.port, request_timeout=1.0) as session:
+            response = session.get_time_status()
+        server.join()
+        self.assertEqual(response["mode"], proto.TIME_MODE_FIXED)
+        self.assertEqual(response["target_fps"], 60)
+        self.assertEqual(response["step_index"], 42)
+
     def test_load_suite_waits_for_matching_success_response(self) -> None:
         def handler(conn: socket.socket) -> None:
             msg_class, msg_type, _, request_id, _, _ = tcp.recv_packet(conn)
