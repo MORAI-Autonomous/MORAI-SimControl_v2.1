@@ -51,7 +51,8 @@ def _msg_type_name(msg_type: int) -> str:
 
 
 class Receiver(threading.Thread):
-    def __init__(self, sock, pending: dict, lock: threading.Lock, on_disconnect=None, on_response=None):
+    def __init__(self, sock, pending: dict, lock: threading.Lock, on_disconnect=None,
+                 on_response=None, on_vehicle_info=None):
         super().__init__(daemon=True)
         self.sock          = sock
         self.pending       = pending
@@ -59,6 +60,7 @@ class Receiver(threading.Thread):
         self.running       = True
         self.on_disconnect = on_disconnect
         self.on_response   = on_response
+        self.on_vehicle_info = on_vehicle_info
 
     def stop(self):
         self.running = False
@@ -277,6 +279,28 @@ class Receiver(threading.Thread):
                     )
                 else:
                     log.append(f"DeleteObject parse_failed rid={request_id}", "WARN")
+
+            # GetVehicleInfo (0x1306)
+            elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_GET_VEHICLE_INFO:
+                parsed = tcp.parse_get_vehicle_info_payload(payload)
+                if parsed and self.on_vehicle_info:
+                    try:
+                        self.on_vehicle_info(request_id, parsed)
+                    except Exception as e:
+                        log.append(f"vehicle info callback error: {e}", "WARN")
+                if parsed:
+                    result_code = parsed["result_code"]
+                    detail_code = parsed["detail_code"]
+                    if result_code != 0:
+                        log.append(
+                            f"GetVehicleInfo rid={request_id} "
+                            f"result={result_code}({result_to_string(result_code)}) "
+                            f"detail={detail_code}",
+                            "WARN",
+                        )
+                else:
+                    log.append(f"GetVehicleInfo parse_failed rid={request_id}", "WARN")
 
             # ActiveSuiteStatus (0x1401)
             elif msg_class == proto.MSG_CLASS_RESP \

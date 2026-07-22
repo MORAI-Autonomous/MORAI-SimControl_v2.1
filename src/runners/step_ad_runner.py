@@ -62,6 +62,7 @@ class _VehicleCtx:
         speed_kph: float = 60.0,
         trigger_kph: float = 5.0,
         max_speed_kph: float = None,
+        vehicle_info_source: str = "UDP",
     ):
         self.entity_id = entity_id
         self.is_chaser = is_chaser
@@ -74,11 +75,14 @@ class _VehicleCtx:
         self.last_vi_timeout_log_monotonic = None
         self.lock = threading.Lock()
         self.vi_event = threading.Event()
+        self.vehicle_info_source = vehicle_info_source.upper()
 
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.settimeout(2.0)
-        self.sock.bind((vi_ip, vi_port))
+        self.sock = None
+        if self.vehicle_info_source == "UDP":
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.settimeout(2.0)
+            self.sock.bind((vi_ip, vi_port))
 
 
 class StepAdRunner:
@@ -118,6 +122,8 @@ class StepAdRunner:
         self._collision_cfg = collision_cfg
         self._save_data = save_data
         self._ctxs: list[_VehicleCtx] = []
+        self._tcp_vi_requests: dict[int, _VehicleCtx] = {}
+        self._tcp_vi_lock = threading.Lock()
 
         chaser_id = (collision_cfg or {}).get("chaser_entity_id")
         target_id = (collision_cfg or {}).get("target_entity_id")
@@ -137,6 +143,9 @@ class StepAdRunner:
                 speed_kph=speed_kph,
                 trigger_kph=(collision_cfg or {}).get("trigger_kph", 5.0),
                 max_speed_kph=vehicle.get("max_speed_kph"),
+                vehicle_info_source=(
+                    "TCP" if vehicle.get("interface") == "TCP" else "UDP"
+                ),
             )
             self._ctxs.append(ctx)
 
@@ -146,10 +155,17 @@ class StepAdRunner:
                 role = f"Target ({speed_kph:.0f} km/h)"
             else:
                 role = f"PathFollow (max={vehicle.get('max_speed_kph', 0):.0f} km/h)"
-            self._log(
-                f"[{ctx.entity_id}] waiting for VI on "
-                f"{vehicle.get('vi_ip', '0.0.0.0')}:{vehicle['vi_port']} ({role})"
-            )
+            if ctx.vehicle_info_source == "TCP":
+                self._log(f"[{ctx.entity_id}] Vehicle Info via TCP 0x1306 ({role})")
+            else:
+                self._log(
+                    f"[{ctx.entity_id}] waiting for VI on "
+                    f"{vehicle.get('vi_ip', '0.0.0.0')}:{vehicle['vi_port']} ({role})"
+                )
+
+        self._tcp_external = bool(self._ctxs) and all(
+            ctx.vehicle_info_source == "TCP" for ctx in self._ctxs
+        )
 
     def update_max_speed_kph(self, entity_id: str, max_speed_kph: float) -> bool:
         for ctx in self._ctxs:
@@ -161,17 +177,65 @@ class StepAdRunner:
     def start(self) -> None:
         self._running = True
         for ctx in self._ctxs:
-            threading.Thread(target=self._recv_loop, args=(ctx,), daemon=True).start()
+            if ctx.sock is not None:
+                threading.Thread(target=self._recv_loop, args=(ctx,), daemon=True).start()
         threading.Thread(target=self._control_loop, daemon=True).start()
 
     def stop(self) -> None:
         self._log("Stop requested", "INFO")
         self._running = False
         for ctx in self._ctxs:
-            try:
-                ctx.sock.close()
-            except Exception:
-                pass
+            if ctx.sock is not None:
+                try:
+                    ctx.sock.close()
+                except Exception:
+                    pass
+            ctx.vi_event.set()
+
+    def handle_vehicle_info_response(self, request_id: int, parsed: dict) -> bool:
+        with self._tcp_vi_lock:
+            ctx = self._tcp_vi_requests.pop(request_id, None)
+        if ctx is None:
+            return False
+        if parsed.get("result_code") == 0:
+            with ctx.lock:
+                ctx.latest = parsed
+                ctx.last_vi_monotonic = time.monotonic()
+                ctx.last_vi_timeout_log_monotonic = None
+        else:
+            self._log(
+                f"[{ctx.entity_id}] GetVehicleInfo failed: "
+                f"result={parsed.get('result_code')} detail={parsed.get('detail_code')}",
+                "WARN",
+            )
+        ctx.vi_event.set()
+        return True
+
+    def _request_tcp_vehicle_info(self) -> set[str]:
+        requests = []
+        for ctx in self._ctxs:
+            if ctx.vehicle_info_source != "TCP":
+                continue
+            ctx.vi_event.clear()
+            rid = self._rid.next()
+            with self._tcp_vi_lock:
+                self._tcp_vi_requests[rid] = ctx
+            tcp.send_get_vehicle_info(self._tcp_sock, rid, ctx.entity_id)
+            requests.append((rid, ctx))
+
+        ready_ids = set()
+        deadline = time.perf_counter() + self._VI_STEP_WAIT_SEC
+        for rid, ctx in requests:
+            remaining = max(0.0, deadline - time.perf_counter())
+            if ctx.vi_event.wait(remaining):
+                with ctx.lock:
+                    if ctx.latest is not None:
+                        ready_ids.add(ctx.entity_id)
+            else:
+                self._log(f"[{ctx.entity_id}] GetVehicleInfo timeout", "WARN")
+            with self._tcp_vi_lock:
+                self._tcp_vi_requests.pop(rid, None)
+        return ready_ids
 
     def _recv_loop(self, ctx: _VehicleCtx) -> None:
         while self._running:
@@ -240,7 +304,7 @@ class StepAdRunner:
 
             tcp.send_manual_control_by_id(
                 self._tcp_sock,
-                _next_rid(),
+                self._rid.next(),
                 entity_id=ctx.entity_id,
                 throttle=throttle,
                 brake=brake,
@@ -273,7 +337,7 @@ class StepAdRunner:
         if target_kph < ctx.trigger_kph:
             tcp.send_manual_control_by_id(
                 self._tcp_sock,
-                _next_rid(),
+                self._rid.next(),
                 entity_id=ctx.entity_id,
                 throttle=0.0,
                 brake=0.5,
@@ -291,7 +355,7 @@ class StepAdRunner:
         )
         tcp.send_manual_control_by_id(
             self._tcp_sock,
-            _next_rid(),
+            self._rid.next(),
             entity_id=ctx.entity_id,
             throttle=throttle,
             brake=brake,
@@ -424,21 +488,24 @@ class StepAdRunner:
                     "WARN" if ack_wait_sec >= self._SLOW_WAIT_SEC else "INFO",
                 )
 
+            tcp_ready_ids = self._request_tcp_vehicle_info()
             if self._save_data:
-                save_rid = _next_rid()
+                save_rid = self._rid.next()
                 if _should_debug():
                     self._log(f"[StepAD][init] SaveData send rid={save_rid}", "INFO")
                 tcp.send_save_data(self._tcp_sock, save_rid)
-                ready_ids = _wait_for_vi(
-                    timeout_sec=self._timeout_sec,
-                    phase="init",
-                    stop_on_timeout=True,
-                )
-                if len(ready_ids) < len(self._ctxs):
-                    stop_reason = "initial VehicleInfo timeout"
-                    return
+                if not self._tcp_external:
+                    ready_ids = _wait_for_vi(
+                        timeout_sec=self._timeout_sec,
+                        phase="init",
+                        stop_on_timeout=True,
+                    )
+                    if len(ready_ids) < len(self._ctxs):
+                        stop_reason = "initial VehicleInfo timeout"
+                        return
 
-            _send_all_cmds(ready_ids if self._save_data else None)
+            initial_ready_ids = tcp_ready_ids if self._tcp_external else (ready_ids if self._save_data else None)
+            _send_all_cmds(initial_ready_ids)
             for ctx in self._ctxs:
                 ctx.vi_event.clear()
             ev, rid = _presend_step()
@@ -468,9 +535,11 @@ class StepAdRunner:
 
                 t1 = time.perf_counter()
 
+                tcp_ready_ids = self._request_tcp_vehicle_info()
+
                 if self._save_data:
                     try:
-                        save_rid = _next_rid()
+                        save_rid = self._rid.next()
                         if _should_debug():
                             self._log(f"[StepAD][step={step_index}] SaveData send rid={save_rid}", "INFO")
                         tcp.send_save_data(self._tcp_sock, save_rid)
@@ -478,6 +547,9 @@ class StepAdRunner:
                         stop_reason = f"SaveData send error: {exc}"
                         self._log(f"SaveData send error: {exc}", "ERROR")
                         break
+
+                if self._tcp_external:
+                    _send_all_cmds(tcp_ready_ids)
 
                 for ctx in self._ctxs:
                     ctx.vi_event.clear()
@@ -490,7 +562,7 @@ class StepAdRunner:
 
                 t2 = time.perf_counter()
 
-                if self._save_data:
+                if self._save_data and not self._tcp_external:
                     ready_ids = _wait_for_vi(
                         timeout_sec=self._VI_STEP_WAIT_SEC,
                         phase=f"step={step_index}",
@@ -498,7 +570,8 @@ class StepAdRunner:
                     )
 
                 t3 = time.perf_counter()
-                _send_all_cmds(ready_ids if self._save_data else None)
+                if not self._tcp_external:
+                    _send_all_cmds(ready_ids if self._save_data else None)
                 t4 = time.perf_counter()
 
                 _t_ack.append((t1 - t0) * 1000)

@@ -102,6 +102,72 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         actual = tcp.build_manual_control_by_id_payload(entity_id, 0.4, 0.0, 12.5)
         self.assertEqual(actual, expected)
 
+    def test_get_vehicle_info_request_uses_utf8_byte_length(self) -> None:
+        entity_id = "차량_1"
+        encoded = entity_id.encode("utf-8")
+        self.assertEqual(
+            tcp.build_get_vehicle_info_payload(entity_id),
+            struct.pack("<I", len(encoded)) + encoded,
+        )
+
+    def test_get_vehicle_info_rejects_empty_id(self) -> None:
+        with self.assertRaises(ValueError):
+            tcp.build_get_vehicle_info_payload("")
+
+    def test_get_vehicle_info_packet_header_matches_payload(self) -> None:
+        sent = []
+
+        class FakeSocket:
+            def sendall(self, data: bytes) -> None:
+                sent.append(data)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            tcp.send_get_vehicle_info(FakeSocket(), 17, "Car_1")
+        packet = sent[0]
+        _, msg_class, msg_type, payload_size, request_id, flag = struct.unpack(
+            proto.HEADER_FMT,
+            packet[:proto.HEADER_SIZE],
+        )
+        self.assertEqual(msg_class, proto.MSG_CLASS_REQ)
+        self.assertEqual(msg_type, proto.MSG_TYPE_GET_VEHICLE_INFO)
+        self.assertEqual(payload_size, len(packet) - proto.HEADER_SIZE)
+        self.assertEqual(request_id, 17)
+        self.assertEqual(flag, proto.FLAG)
+
+    def test_parse_get_vehicle_info_success_payload(self) -> None:
+        entity_id = "Car_1"
+        encoded = entity_id.encode("utf-8")
+        values = tuple(float(value) for value in range(1, 19))
+        payload = (
+            struct.pack("<IIqiI", 0, 0, 123, 456, len(encoded))
+            + encoded
+            + struct.pack("<18f", *values)
+        )
+
+        parsed = tcp.parse_get_vehicle_info_payload(payload)
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["result_code"], 0)
+        self.assertEqual(parsed["seconds"], 123)
+        self.assertEqual(parsed["nanos"], 456)
+        self.assertEqual(parsed["entity_id"], entity_id)
+        self.assertEqual(parsed["location"], {"x": 1.0, "y": 2.0, "z": 3.0})
+        self.assertEqual(parsed["local_velocity"], {"x": 7.0, "y": 8.0, "z": 9.0})
+        self.assertEqual(parsed["control"], {
+            "throttle": 16.0,
+            "brake": 17.0,
+            "steer_angle": 18.0,
+        })
+        self.assertEqual(parsed["raw_size"], 96 + len(encoded))
+
+    def test_parse_get_vehicle_info_failure_payload(self) -> None:
+        parsed = tcp.parse_get_vehicle_info_payload(struct.pack("<II", 102, 7))
+        self.assertEqual(parsed, {"result_code": 102, "detail_code": 7})
+
+    def test_parse_get_vehicle_info_rejects_malformed_success_payload(self) -> None:
+        payload = struct.pack("<IIqiI", 0, 0, 1, 2, 5) + b"Car" + struct.pack("<18f", *([0.0] * 18))
+        self.assertIsNone(tcp.parse_get_vehicle_info_payload(payload))
+
     def test_transform_control_by_id_payload(self) -> None:
         entity_id = "Car_2"
         expected = (

@@ -385,7 +385,7 @@ class AppState:
         if self.ad_runners:
             log_panel.append("[AD] already running.", "WARN")
             return
-        interface = vehicles[0].get("interface", "UDP/TCP") if vehicles else "UDP/TCP"
+        interface = vehicles[0].get("interface", "UDP") if vehicles else "UDP"
         if interface == "ROS2":
             if collision_cfg:
                 log_panel.append("[AD:ROS2] collision mode is not supported in ROS2 mode yet.", "WARN")
@@ -444,6 +444,8 @@ class AppState:
                     speed_kph             = speed_kph,
                     trigger_kph           = (collision_cfg or {}).get("trigger_kph", 5.0),
                     max_speed_kph         = v.get("max_speed_kph"),
+                    vehicle_info_source   = "TCP" if interface == "TCP" else "UDP",
+                    request_id_ref        = self.rid,
                 )
                 runner.start()
                 self.ad_runners.append(runner)
@@ -453,7 +455,8 @@ class AppState:
                     role = f"Target ({speed_kph:.0f} km/h)"
                 else:
                     role = f"PathFollow (max={v.get('max_speed_kph', 0):.0f} km/h)"
-                log_panel.append(f"[AD:{v['entity_id']}] started (port={v['vi_port']}, {role})")
+                source = "TCP 0x1306" if interface == "TCP" else f"UDP port={v['vi_port']}"
+                log_panel.append(f"[AD:{v['entity_id']}] started ({source}, {role})")
             except Exception as e:
                 log_panel.append(f"[AD:{v['entity_id']}] start failed: {e}", "ERROR")
         if not self.ad_runners:
@@ -596,6 +599,7 @@ class AppState:
                         sock, self.pending, self.lock,
                         on_disconnect=self._on_disconnect,
                         on_response=self._on_tcp_response,
+                        on_vehicle_info=self._on_vehicle_info_response,
                     )
                     self.receiver.start()
                     cmd_panel.init(
@@ -685,6 +689,12 @@ class AppState:
     def _on_tcp_response(self, msg_type: int, request_id: int) -> None:
         if msg_type == MSG_TYPE_LOAD_SUITE:
             cmd_panel.on_load_suite_response(request_id)
+
+    def _on_vehicle_info_response(self, request_id: int, parsed: dict) -> None:
+        for runner in list(self.ad_runners) + list(self.step_ad_runners):
+            handler = getattr(runner, "handle_vehicle_info_response", None)
+            if handler and handler(request_id, parsed):
+                return
 
 
 # ============================================================

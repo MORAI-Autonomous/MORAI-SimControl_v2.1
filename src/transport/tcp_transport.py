@@ -110,6 +110,15 @@ def build_manual_control_by_id_payload(
     )
 
 
+def build_get_vehicle_info_payload(entity_id: str) -> bytes:
+    if not entity_id:
+        raise ValueError("entity_id is required")
+    return pack_message_payload(
+        proto.MSG_TYPE_GET_VEHICLE_INFO,
+        {"entity_id": entity_id},
+    )
+
+
 def build_transform_control_by_id_payload(
     entity_id: str,
     pos_x: float, pos_y: float, pos_z: float,
@@ -337,6 +346,12 @@ def send_delete_object(sock: socket.socket, request_id: int, entity_id: str) -> 
                  f"DeleteObject(0x1305) id={entity_id}")
 
 
+def send_get_vehicle_info(sock: socket.socket, request_id: int, entity_id: str) -> None:
+    payload = build_get_vehicle_info_payload(entity_id)
+    _send_packet(sock, request_id, proto.MSG_TYPE_GET_VEHICLE_INFO, payload,
+                 f"GetVehicleInfo(0x1306) id={entity_id}")
+
+
 def send_load_suite(sock: socket.socket, request_id: int, suite_path: str) -> None:
     payload = pack_message_payload(
         proto.MSG_TYPE_LOAD_SUITE,
@@ -529,6 +544,78 @@ def parse_create_object_payload(payload: bytes) -> Optional[Dict[str, Any]]:
         return None
     values["object_id_length"] = len(values["object_id"].encode("utf-8"))
     return values
+
+
+def parse_get_vehicle_info_payload(payload: bytes) -> Optional[Dict[str, Any]]:
+    """Parse the variable-length 0x1306 response.
+
+    Failure responses contain only the common 8-byte result. Success responses
+    contain a timestamp, length-prefixed UTF-8 entity ID, and 18 float32 values.
+    """
+    if len(payload) < proto.RESULT_SIZE:
+        return None
+    try:
+        result_code, detail_code = struct.unpack_from(proto.RESULT_FMT, payload, 0)
+    except struct.error:
+        return None
+
+    if result_code != 0:
+        if len(payload) != proto.RESULT_SIZE:
+            return None
+        return {
+            "result_code": result_code,
+            "detail_code": detail_code,
+        }
+
+    if len(payload) < proto.GET_VEHICLE_INFO_SUCCESS_BASE_SIZE + 1:
+        return None
+    try:
+        _, _, seconds, nanos, entity_id_size = struct.unpack_from(
+            proto.GET_VEHICLE_INFO_PREFIX_FMT,
+            payload,
+            0,
+        )
+    except struct.error:
+        return None
+    if entity_id_size <= 0:
+        return None
+
+    expected_size = proto.GET_VEHICLE_INFO_SUCCESS_BASE_SIZE + entity_id_size
+    if len(payload) != expected_size:
+        return None
+
+    entity_id_offset = proto.GET_VEHICLE_INFO_PREFIX_SIZE
+    values_offset = entity_id_offset + entity_id_size
+    try:
+        entity_id = payload[entity_id_offset:values_offset].decode("utf-8")
+        values = struct.unpack_from(proto.GET_VEHICLE_INFO_VALUES_FMT, payload, values_offset)
+    except (UnicodeDecodeError, struct.error):
+        return None
+
+    loc = values[0:3]
+    rot = values[3:6]
+    vel = values[6:9]
+    accel = values[9:12]
+    ang_vel = values[12:15]
+    control = values[15:18]
+    return {
+        "result_code": result_code,
+        "detail_code": detail_code,
+        "seconds": seconds,
+        "nanos": nanos,
+        "entity_id": entity_id,
+        "location": {"x": loc[0], "y": loc[1], "z": loc[2]},
+        "rotation": {"x": rot[0], "y": rot[1], "z": rot[2]},
+        "local_velocity": {"x": vel[0], "y": vel[1], "z": vel[2]},
+        "local_acceleration": {"x": accel[0], "y": accel[1], "z": accel[2]},
+        "angular_velocity": {"x": ang_vel[0], "y": ang_vel[1], "z": ang_vel[2]},
+        "control": {
+            "throttle": control[0],
+            "brake": control[1],
+            "steer_angle": control[2],
+        },
+        "raw_size": len(payload),
+    }
 
 
 def parse_active_suite_status_payload(payload: bytes) -> Optional[Dict[str, Any]]:

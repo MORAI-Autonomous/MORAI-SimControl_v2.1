@@ -29,7 +29,8 @@ def _get_available_maps() -> list:
 
 _MAX_VEHICLES = 6
 _DEFAULT_MAX_SPEED_KPH = 100.0
-_INTERFACE_UDP = "UDP/TCP"
+_INTERFACE_UDP = "UDP"
+_INTERFACE_TCP = "TCP"
 _INTERFACE_ROS2 = "ROS2"
 _DEFAULT_ROS2_VI_TOPIC = "/VehicleInfo"
 _DEFAULT_ROS2_CTRL_TOPIC = "/ManualControl"
@@ -86,9 +87,9 @@ def build(parent) -> None:
             dpg.add_text("Interface :", color=(180, 180, 180, 255))
             dpg.add_combo(
                 tag="au_interface",
-                items=[_INTERFACE_UDP, _INTERFACE_ROS2],
+                items=[_INTERFACE_UDP, _INTERFACE_TCP],
                 default_value=_INTERFACE_UDP,
-                width=120,
+                width=180,
                 callback=_on_interface_change,
             )
 
@@ -191,6 +192,10 @@ def build(parent) -> None:
 def _build_vehicles(count: int) -> None:
     """au_vehicles_area 내 차량 설정 위젯을 (재)생성한다."""
     dpg.delete_item("au_vehicles_area", children_only=True)
+    show_vi_port = not (
+        dpg.does_item_exist("au_interface")
+        and dpg.get_value("au_interface") == _INTERFACE_TCP
+    )
     for i in range(1, count + 1):
         with dpg.group(tag=f"au_vehicle_group_{i}", parent="au_vehicles_area"):
             dpg.add_text(f"[ Vehicle {i} ]", color=(160, 200, 255, 255))
@@ -201,11 +206,12 @@ def _build_vehicles(count: int) -> None:
                                    default_value=f"Car_{i}", width=100,
                                    callback=lambda: _save_state())
                 dpg.add_spacer(width=10)
-                dpg.add_text("Port  :", color=(180, 180, 180, 255))
+                dpg.add_text("Port  :", tag=f"au_vi_port_label_{i}",
+                             color=(180, 180, 180, 255), show=show_vi_port)
                 dpg.add_input_int(tag=f"au_vi_port_{i}",
                                   default_value=9090 + i,
                                   min_value=1, max_value=65535, step=0, width=80,
-                                  callback=lambda: _save_state())
+                                  callback=lambda: _save_state(), show=show_vi_port)
                 dpg.add_spacer(width=10)
                 dpg.add_text("Max Speed  :", color=(180, 180, 180, 255))
                 dpg.add_input_float(tag=f"au_max_speed_kph_{i}",
@@ -270,15 +276,17 @@ def _on_interface_change(sender=None, app_data=None) -> None:
     interface = app_data
     if interface is None and dpg.does_item_exist("au_interface"):
         interface = dpg.get_value("au_interface")
-    is_ros2 = interface == _INTERFACE_ROS2
+    is_tcp = interface == _INTERFACE_TCP
     if dpg.does_item_exist("au_ros2_settings"):
-        dpg.configure_item("au_ros2_settings", show=is_ros2)
+        dpg.configure_item("au_ros2_settings", show=False)
     if dpg.does_item_exist("au_fixed_step"):
-        dpg.configure_item("au_fixed_step", enabled=not is_ros2)
-        if is_ros2:
-            dpg.set_value("au_fixed_step", False)
+        dpg.configure_item("au_fixed_step", enabled=True)
+    for i in range(1, _MAX_VEHICLES + 1):
+        for tag in (f"au_vi_port_label_{i}", f"au_vi_port_{i}"):
+            if dpg.does_item_exist(tag):
+                dpg.configure_item(tag, show=not is_tcp)
     if dpg.does_item_exist("au_save_data"):
-        show_save = (not is_ros2) and dpg.does_item_exist("au_fixed_step") and dpg.get_value("au_fixed_step")
+        show_save = dpg.does_item_exist("au_fixed_step") and dpg.get_value("au_fixed_step")
         dpg.configure_item("au_save_data", show=show_save)
     _save_state()
 
@@ -481,7 +489,13 @@ def _load_state() -> None:
         _int ("au_collision_target",      data, 1)
         _float("au_collision_speed_kph",   data, 60.0)
         _float("au_collision_trigger_kph", data, 5.0)
-        _str("au_interface", data, _INTERFACE_UDP)
+        saved_interface = str(data.get("au_interface", _INTERFACE_UDP))
+        if saved_interface == "TCP (All External)":
+            saved_interface = _INTERFACE_TCP
+        elif saved_interface not in (_INTERFACE_UDP, _INTERFACE_TCP):
+            saved_interface = _INTERFACE_UDP
+        if dpg.does_item_exist("au_interface"):
+            dpg.set_value("au_interface", saved_interface)
         _str("au_ros2_vehicle_info_topic", data, _DEFAULT_ROS2_VI_TOPIC)
         _str("au_ros2_manual_control_topic", data, _DEFAULT_ROS2_CTRL_TOPIC)
         _on_interface_change(app_data=dpg.get_value("au_interface") if dpg.does_item_exist("au_interface") else _INTERFACE_UDP)

@@ -94,13 +94,19 @@ class AdRunner:
         speed_kph=60.0,
         trigger_kph=5.0,
         max_speed_kph=None,
+        vehicle_info_source="UDP",
+        request_id_ref=None,
     ):
         self._tcp_sock = tcp_sock
         self._entity_id = entity_id
-        self._recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self._recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._recv_sock.bind((vi_ip, vi_port))
-        self._recv_sock.settimeout(2.0)
+        self._vehicle_info_source = vehicle_info_source.upper()
+        self._request_id_ref = request_id_ref
+        self._recv_sock = None
+        if self._vehicle_info_source == "UDP":
+            self._recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self._recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._recv_sock.bind((vi_ip, vi_port))
+            self._recv_sock.settimeout(2.0)
 
         self._is_chaser = is_chaser
         self._is_collision_target = is_collision_target
@@ -114,26 +120,76 @@ class AdRunner:
         self._running = False
         self._lock = threading.Lock()
         self._latest = None
+        self._vi_response = None
+        self._vi_event = threading.Event()
+        self._pending_vi_request_ids: set[int] = set()
         self._log = log_fn or (lambda msg, level="INFO": print(f"[{level}] {msg}"))
         self._status_cb = status_cb
 
         role = "Chaser" if is_chaser else "PathFollow"
-        self._log(f"Vehicle Info receiver: {vi_ip}:{vi_port}")
+        if self._vehicle_info_source == "UDP":
+            self._log(f"Vehicle Info receiver: {vi_ip}:{vi_port}")
+        else:
+            self._log("Vehicle Info source: TCP GetVehicleInfo (0x1306)")
         self._log(f"TCP control entity_id={entity_id} ({role})")
 
     def start(self) -> None:
         if self._running:
             return
         self._running = True
-        threading.Thread(target=self._recv_loop, daemon=True).start()
+        if self._recv_sock is not None:
+            threading.Thread(target=self._recv_loop, daemon=True).start()
         threading.Thread(target=self._control_loop, daemon=True).start()
 
     def stop(self) -> None:
         self._running = False
+        if self._recv_sock is not None:
+            try:
+                self._recv_sock.close()
+            except OSError:
+                pass
+        self._vi_event.set()
+
+    def handle_vehicle_info_response(self, request_id: int, parsed: dict) -> bool:
+        """Accept a GetVehicleInfo response owned by this runner."""
+        with self._lock:
+            if request_id not in self._pending_vi_request_ids:
+                return False
+            self._pending_vi_request_ids.discard(request_id)
+            if parsed.get("result_code") == 0:
+                self._latest = parsed
+                self._vi_response = parsed
+            else:
+                self._vi_response = None
+                self._log(
+                    f"GetVehicleInfo failed: result={parsed.get('result_code')} "
+                    f"detail={parsed.get('detail_code')}",
+                    "WARN",
+                )
+        self._vi_event.set()
+        return True
+
+    def _next_request_id(self) -> int:
+        if self._request_id_ref is not None:
+            return self._request_id_ref.next()
+        return _next_rid()
+
+    def _request_vehicle_info(self) -> dict | None:
+        rid = self._next_request_id()
+        self._vi_event.clear()
+        with self._lock:
+            self._vi_response = None
+            self._pending_vi_request_ids.add(rid)
         try:
-            self._recv_sock.close()
-        except OSError:
-            pass
+            tcp.send_get_vehicle_info(self._tcp_sock, rid, self._entity_id)
+        except Exception:
+            with self._lock:
+                self._pending_vi_request_ids.discard(rid)
+            raise
+        received = self._vi_event.wait(timeout=0.5)
+        with self._lock:
+            self._pending_vi_request_ids.discard(rid)
+            return self._vi_response if received else None
 
     def update_max_speed_kph(self, max_speed_kph: float | None) -> None:
         self._max_speed_kph = max_speed_kph
@@ -163,8 +219,15 @@ class AdRunner:
 
         while self._running:
             t_start = time.perf_counter()
-            with self._lock:
-                parsed = self._latest
+            if self._vehicle_info_source == "TCP":
+                try:
+                    parsed = self._request_vehicle_info()
+                except Exception as exc:
+                    self._log(f"GetVehicleInfo error: {exc}", "ERROR")
+                    break
+            else:
+                with self._lock:
+                    parsed = self._latest
 
             if parsed:
                 speed_kph = abs(parsed["local_velocity"]["x"]) * 3.6
@@ -209,7 +272,7 @@ class AdRunner:
 
             tcp.send_manual_control_by_id(
                 self._tcp_sock,
-                _next_rid(),
+                self._next_request_id(),
                 entity_id=self._entity_id,
                 throttle=throttle,
                 brake=brake,
@@ -249,7 +312,7 @@ class AdRunner:
 
         tcp.send_manual_control_by_id(
             self._tcp_sock,
-            _next_rid(),
+            self._next_request_id(),
             entity_id=self._entity_id,
             throttle=throttle,
             brake=brake,

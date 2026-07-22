@@ -2,8 +2,8 @@
 
 > 이 문서는 자동 생성됩니다. Confluence에서 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.
 >
-> - 생성 시각: `2026-06-22 14:07 +0900`
-> - 기준 브랜치: `origin/v1.0-Official-26.H1`
+> - 생성 시각: `2026-07-21 18:12 +0900`
+> - 기준 브랜치: `feature/hwjung/batchsimulation`
 
 ## Common Header
 
@@ -39,6 +39,7 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | [`0x1303`](#api-0x1303) | [`TransformControlById`](#api-0x1303) | `4 + N + 36 bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
 | [`0x1304`](#api-0x1304) | [`SetTrajectory`](#api-0x1304) | `4 + N1 + 4 + 4 + N2 + 4 bytes (N1 = entity_id UTF-8 byte length, N2 = trajectory_name UTF-8 byte length) + 32 bytes * item_count` | `8 bytes` |
 | [`0x1305`](#api-0x1305) | [`DeleteObject`](#api-0x1305) | `N bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
+| [`0x1306`](#api-0x1306) | [`GetVehicleInfo`](#api-0x1306) | `4 + N bytes (N = entity_id UTF-8 byte length)` | `20 + 4 + N + 72 bytes (N = entity_id UTF-8 byte length)` |
 | [`0x1401`](#api-0x1401) | [`ActiveSuiteStatus`](#api-0x1401) | `0 bytes` | `8 + 4 + N1 + 4 + N2 + 4 bytes (N1 = active_suite_name UTF-8 byte length, N2 = active_scenario_name UTF-8 byte length) + variable bytes * item_count` |
 | [`0x1402`](#api-0x1402) | [`LoadSuite`](#api-0x1402) | `4 + N bytes (N = suite_path UTF-8 byte length)` | `8 bytes` |
 | [`0x1504`](#api-0x1504) | [`ScenarioStatus`](#api-0x1504) | `0 bytes` | `12 + 4 + N bytes (N = name UTF-8 byte length)` |
@@ -523,6 +524,66 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 |------|------|-------------|
 | `result_code` | `uint32` | - |
 | `detail_code` | `uint32` | - |
+
+<a id="api-0x1306"></a>
+## `0x1306` GetVehicleInfo
+
+### Req
+
+- Payload: `4 + N bytes (N = entity_id UTF-8 byte length)`
+- Builder: `tcp.send_get_vehicle_info()`
+
+Query the current state of one ground vehicle entity by ID.
+
+Wire layout: `[uint32 entity_id_len][utf-8 * entity_id_len]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
+| `entity_id` | `utf-8 bytes` | Target ground vehicle Entity ID |
+
+Notes:
+- Empty entity IDs are rejected client-side.
+
+### Resp
+
+- Payload: `20 + 4 + N + 72 bytes (N = entity_id UTF-8 byte length)`
+- Parser: `tcp.parse_get_vehicle_info_payload()`
+
+Return the current transform, motion, and control state of one ground vehicle.
+
+Wire layout: `[uint32 result_code] [uint32 detail_code] [int64 seconds] [int32 nanos] [uint32 entity_id_len][utf-8 * entity_id_len] [float32 pos_x] [float32 pos_y] [float32 pos_z] [float32 rot_x] [float32 rot_y] [float32 rot_z] [float32 vel_x] [float32 vel_y] [float32 vel_z] [float32 accel_x] [float32 accel_y] [float32 accel_z] [float32 ang_vel_x] [float32 ang_vel_y] [float32 ang_vel_z] [float32 throttle] [float32 brake] [float32 steer_angle]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+| `seconds` | `int64` | Simulation timestamp seconds |
+| `nanos` | `int32` | Simulation timestamp nanoseconds remainder |
+| `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
+| `entity_id` | `utf-8 bytes` | Echoed ground vehicle Entity ID |
+| `pos_x` | `float32` | - |
+| `pos_y` | `float32` | - |
+| `pos_z` | `float32` | - |
+| `rot_x` | `float32` | - |
+| `rot_y` | `float32` | - |
+| `rot_z` | `float32` | - |
+| `vel_x` | `float32` | - |
+| `vel_y` | `float32` | - |
+| `vel_z` | `float32` | - |
+| `accel_x` | `float32` | - |
+| `accel_y` | `float32` | - |
+| `accel_z` | `float32` | - |
+| `ang_vel_x` | `float32` | - |
+| `ang_vel_y` | `float32` | - |
+| `ang_vel_z` | `float32` | - |
+| `throttle` | `float32` | - |
+| `brake` | `float32` | - |
+| `steer_angle` | `float32` | - |
+
+Notes:
+- Failure responses contain only result_code and detail_code (8 bytes).
+- Success responses contain 96 bytes plus the UTF-8 entity ID byte length.
 
 <a id="api-0x1401"></a>
 ## `0x1401` ActiveSuiteStatus
