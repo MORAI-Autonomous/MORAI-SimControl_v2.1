@@ -160,11 +160,20 @@ class DemoSession:
     def load_suite(self, suite_path: str, timeout: Optional[float] = None) -> Dict[str, Any]:
         if not suite_path.strip():
             raise ValueError("suite_path is required")
-        return self._request_result(
+        response = self._request_result(
             proto.MSG_TYPE_LOAD_SUITE,
             lambda sock, rid: tcp.send_load_suite(sock, rid, suite_path),
             timeout,
         )
+        detail_code = int(response.get("detail_code", 0))
+        if detail_code != 0:
+            raise DemoSessionProtocolError(
+                f"MORAI request 0x{proto.MSG_TYPE_LOAD_SUITE:04X} failed "
+                f"(result=0, detail={detail_code})",
+                result_code=0,
+                detail_code=detail_code,
+            )
+        return response
 
     def set_time_mode(
         self,
@@ -193,6 +202,13 @@ class DemoSession:
         return self._request_result(
             proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS,
             lambda sock, rid: tcp.send_get_status(sock, rid),
+            timeout,
+        )
+
+    def get_simulator_status(self, timeout: Optional[float] = None) -> Dict[str, Any]:
+        return self._request_result(
+            proto.MSG_TYPE_GET_SIMULATOR_STATUS,
+            lambda sock, rid: tcp.send_get_simulator_status(sock, rid),
             timeout,
         )
 
@@ -358,6 +374,8 @@ class DemoSession:
                 "result_code": result[0],
                 "detail_code": result[1],
             }
+        elif msg_type == proto.MSG_TYPE_GET_SIMULATOR_STATUS:
+            parsed = tcp.parse_get_simulator_status_payload(payload)
         elif msg_type == proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS:
             parsed = tcp.parse_get_status_payload(payload)
         elif msg_type == proto.MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND:

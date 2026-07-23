@@ -40,6 +40,7 @@ class BatchSimulationTests(unittest.TestCase):
                 physics_delta_time=20,
                 rtf=2,
                 user_control=True,
+                simulator_path="C:/MORAI/Windows/MoraiSimulator.exe",
             )
             save_config(str(config_path), expected)
             restored = load_config(str(config_path))

@@ -686,9 +686,15 @@ class AppState:
         else:
             log_panel.append("Connection lost. Click Reconnect to retry.", "ERROR")
 
-    def _on_tcp_response(self, msg_type: int, request_id: int) -> None:
+    def _on_tcp_response(
+        self,
+        msg_type: int,
+        request_id: int,
+        result_code=None,
+        detail_code=None,
+    ) -> None:
         if msg_type == MSG_TYPE_LOAD_SUITE:
-            cmd_panel.on_load_suite_response(request_id)
+            cmd_panel.on_load_suite_response(request_id, result_code, detail_code)
 
     def _on_vehicle_info_response(self, request_id: int, parsed: dict) -> None:
         for runner in list(self.ad_runners) + list(self.step_ad_runners):

@@ -26,6 +26,7 @@ class BatchSimulationConfig:
     physics_delta_time: int
     rtf: int
     user_control: bool
+    simulator_path: str
 
 
 def load_config(config_path: str) -> BatchSimulationConfig:
@@ -63,6 +64,7 @@ def load_config(config_path: str) -> BatchSimulationConfig:
         physics_delta_time=int(simulation_time.get("physics_delta_time", 10)),
         rtf=int(simulation_time.get("rtf", 1)),
         user_control=bool(simulation_time.get("user_control", False)),
+        simulator_path=str(data.get("simulator_path", "")).strip(),
     )
     if not config.host:
         raise ValueError("Configuration field 'server.host' must not be empty")
@@ -85,6 +87,7 @@ def _create_default_config(path: Path) -> None:
     data = {
         "suite_path": "",
         "scenario_name": "",
+        "simulator_path": "",
         "server": {
             "host": proto.TCP_SERVER_IP,
             "port": proto.TCP_SERVER_PORT,
@@ -116,6 +119,7 @@ def save_config(config_path: str, config: BatchSimulationConfig) -> None:
     data = {
         "suite_path": config.suite_path,
         "scenario_name": config.scenario_name,
+        "simulator_path": config.simulator_path,
         "server": {"host": config.host, "port": config.port},
         "timeouts": {
             "connect": config.connect_timeout,

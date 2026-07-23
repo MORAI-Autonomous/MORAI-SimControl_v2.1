@@ -89,6 +89,9 @@ class Receiver(threading.Thread):
                     self.on_disconnect()
                 return
 
+            response_result_code = None
+            response_detail_code = None
+
             # SetSimulationTimeModeCommand (0x1102)
             if msg_class == proto.MSG_CLASS_NOTI \
                     and msg_type == proto.MSG_TYPE_SCENARIO_STATUS:
@@ -325,6 +328,8 @@ class Receiver(threading.Thread):
                 parsed = tcp.parse_result_code(payload)
                 if parsed:
                     result_code, detail_code = parsed
+                    response_result_code = result_code
+                    response_detail_code = detail_code
                     level = "RECV" if result_code == 0 else "ERROR"
                     log.append(
                         f"LoadSuite rid={request_id} "
@@ -449,7 +454,12 @@ class Receiver(threading.Thread):
                         )
                 if self.on_response:
                     try:
-                        self.on_response(msg_type, request_id)
+                        self.on_response(
+                            msg_type,
+                            request_id,
+                            response_result_code,
+                            response_detail_code,
+                        )
                     except Exception as e:
                         log.append(f"response callback error: {e}", "WARN")
                 with self.lock:

@@ -48,6 +48,20 @@ def _send_packet(conn: socket.socket, msg_class: int, msg_type: int, request_id:
 
 
 class DemoSessionTests(unittest.TestCase):
+    def test_get_simulator_status_returns_parsed_response(self) -> None:
+        def handler(conn: socket.socket) -> None:
+            _, msg_type, _, request_id, _, _ = tcp.recv_packet(conn)
+            self.assertEqual(msg_type, proto.MSG_TYPE_GET_SIMULATOR_STATUS)
+            payload = struct.pack(proto.GET_SIMULATOR_STATUS_FMT, 0, 0, 4)
+            _send_packet(conn, proto.MSG_CLASS_RESP, msg_type, request_id, payload)
+
+        server = _TestServer(handler)
+        with DemoSession(server.host, server.port, request_timeout=1.0) as session:
+            response = session.get_simulator_status()
+        server.join()
+        self.assertEqual(response["state"], 4)
+        self.assertEqual(response["result_code"], 0)
+
     def test_get_time_status_returns_parsed_response(self) -> None:
         def handler(conn: socket.socket) -> None:
             _, msg_type, _, request_id, _, _ = tcp.recv_packet(conn)
@@ -93,6 +107,25 @@ class DemoSessionTests(unittest.TestCase):
             response = session.load_suite("C:/Demo/Customer.msuite")
         server.join()
         self.assertEqual(response, {"result_code": 0, "detail_code": 0})
+
+    def test_load_suite_rejects_nonzero_detail_code(self) -> None:
+        def handler(conn: socket.socket) -> None:
+            _, msg_type, _, request_id, _, _ = tcp.recv_packet(conn)
+            _send_packet(
+                conn,
+                proto.MSG_CLASS_RESP,
+                msg_type,
+                request_id,
+                struct.pack(proto.RESULT_FMT, 0, 101),
+            )
+
+        server = _TestServer(handler)
+        with DemoSession(server.host, server.port, request_timeout=1.0) as session:
+            with self.assertRaises(DemoSessionProtocolError) as raised:
+                session.load_suite("C:/Demo/Customer.msuite")
+        server.join()
+        self.assertEqual(raised.exception.result_code, 0)
+        self.assertEqual(raised.exception.detail_code, 101)
 
     def test_failed_scenario_control_raises_protocol_error(self) -> None:
         def handler(conn: socket.socket) -> None:

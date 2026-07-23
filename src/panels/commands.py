@@ -518,7 +518,11 @@ def _on_load_suite_sent(request_id: int) -> None:
     log.append(f"[Suite] LoadSuite requested rid={request_id}", "INFO")
 
 
-def on_load_suite_response(request_id: int) -> None:
+def on_load_suite_response(
+    request_id: int,
+    result_code: int | None,
+    detail_code: int | None,
+) -> None:
     global _load_suite_pending_rid
     with _load_suite_lock:
         if _load_suite_pending_rid != request_id:
@@ -527,13 +531,33 @@ def on_load_suite_response(request_id: int) -> None:
         _load_suite_pending_rid = None
 
     elapsed = max(0.0, time.monotonic() - started_at)
-    ui_queue.post(
-        lambda e=elapsed: _set_load_suite_status(
-            f"Complete ({e:.1f}s)",
-            (100, 220, 100, 255),
-        )
+    status_text, status_color = _load_suite_response_status(
+        result_code,
+        detail_code,
+        elapsed,
     )
-    log.append(f"[Suite] LoadSuite complete in {elapsed:.1f}s", "INFO")
+    ui_queue.post(
+        lambda text=status_text, color=status_color: _set_load_suite_status(text, color)
+    )
+    if result_code == 0 and detail_code == 0:
+        log.append(f"[Suite] LoadSuite complete in {elapsed:.1f}s", "INFO")
+    else:
+        log.append(
+            f"[Suite] LoadSuite failed result={result_code} detail={detail_code}",
+            "ERROR",
+        )
+
+
+def _load_suite_response_status(
+    result_code: int | None,
+    detail_code: int | None,
+    elapsed: float,
+):
+    if result_code == 0 and detail_code == 0:
+        return f"Complete ({elapsed:.1f}s)", (100, 220, 100, 255)
+    error_code = result_code if result_code not in (None, 0) else detail_code
+    suffix = f" ({error_code})" if error_code is not None else ""
+    return f"Failed{suffix}", (255, 120, 120, 255)
 
 
 def on_connection_lost() -> None:
