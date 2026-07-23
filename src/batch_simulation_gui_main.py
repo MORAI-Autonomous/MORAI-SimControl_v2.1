@@ -20,15 +20,20 @@ from demo.batch_config import (
 )
 from demo.headless_launcher import (
     ActiveSessionError,
+    HeadlessLoginError,
     MoraiHeadlessLogin,
     find_running_simulator_pid,
-    launch_headless_simulator,
+    launch_simulator,
 )
+from demo.session_store import clear_session, load_session, save_session
 import transport.protocol_defs as proto
 import utils.ui_queue as ui_queue
 
 
 _WINDOW = "batch_main_window"
+_LOGIN_WINDOW = "batch_login_window"
+_LOGIN_CARD = "batch_login_card"
+_LOGIN_STATUS = "batch_login_status"
 _RUN_MODE = "batch_run_mode"
 _HEADLESS_LOGIN_GROUP = "batch_headless_login_group"
 _HEADLESS_AUTH_GROUP = "batch_headless_auth_group"
@@ -36,6 +41,7 @@ _HEADLESS_START = "batch_headless_start_button"
 _LOGIN_ID = "batch_login_id"
 _LOGIN_PASSWORD = "batch_login_password"
 _LOGIN_BUTTON = "batch_login_button"
+_REMEMBER_LOGIN = "batch_remember_login"
 _SIMULATOR_PATH = "batch_simulator_path"
 _SIMULATOR_BROWSE = "batch_simulator_browse_button"
 _VERIFICATION_GROUP = "batch_verification_group"
@@ -62,7 +68,7 @@ _VARIABLE_GROUP = "batch_variable_group"
 _FIXED_GROUP = "batch_fixed_group"
 _RTF = "batch_rtf"
 _USER_CONTROL = "batch_user_control"
-_ELAPSED = "batch_elapsed"
+_SIMULATION_TIME = "batch_simulation_time"
 _SCENARIO_STATUS = "batch_scenario_status"
 
 _CONTROL_BUTTONS = (
@@ -75,6 +81,10 @@ _CONTROL_BUTTONS = (
 )
 
 _STATE_NAMES = {1: "PLAY", 2: "PAUSE", 3: "STOP", 4: "COMPLETED"}
+_SIMULATOR_STATUS_AUTO_POLL = False
+_SIMULATOR_STATUS_POLL_INTERVAL = 1.0
+_SIMULATION_TIME_POLL_INTERVAL = 0.5
+_SCENARIO_TRANSITION_REFRESH_DELAY = 0.25
 _RTF_VALUES = {"Real-Time": 1, "Unlimited": 2}
 _ICON_SIZE = 16
 _ICON_TEXTURES = {
@@ -104,14 +114,24 @@ class BatchSimulationGui:
         self._task_lock = threading.Lock()
         self._task_running = False
         self._worker: Optional[threading.Thread] = None
-        self._elapsed_accumulated = 0.0
-        self._elapsed_started: Optional[float] = None
+        self._time_poll_lock = threading.Lock()
+        self._time_poll_in_flight = False
+        self._time_poll_worker: Optional[threading.Thread] = None
+        self._next_time_poll = time.monotonic() + _SIMULATION_TIME_POLL_INTERVAL
+        self._suite_loaded = False
+        self._closing = False
+        self._completed_refresh_armed = False
+        self._scenario_refresh_worker: Optional[threading.Thread] = None
         self._headless_login: Optional[MoraiHeadlessLogin] = None
         self._force_login_required = False
         self._headless_user_id = ""
         self._headless_tokens: Optional[Dict[str, str]] = None
         self._headless_process: Optional[subprocess.Popen] = None
         self._simulator_state: Optional[int] = None
+        self._saved_login_id = config.login_id
+        self._next_simulator_status_poll = (
+            time.monotonic() + _SIMULATOR_STATUS_POLL_INTERVAL
+        )
 
     def _create_session(self, host: str, port: int) -> DemoSession:
         session = DemoSession(
@@ -125,7 +145,86 @@ class BatchSimulationGui:
 
     def build(self) -> None:
         self._create_icon_textures()
-        with dpg.window(tag=_WINDOW, label="MORAI Batch Simulation"):
+        with dpg.window(tag=_LOGIN_WINDOW, label="MORAI Login"):
+            with dpg.child_window(
+                tag=_LOGIN_CARD,
+                width=430,
+                height=350,
+                pos=(145, 110),
+                border=True,
+                no_scrollbar=True,
+            ):
+                dpg.add_spacer(height=18)
+                with dpg.group(horizontal=True):
+                    dpg.add_spacer(width=157)
+                    dpg.add_text("MORAI LOGIN", color=(80, 170, 255, 255))
+                with dpg.group(horizontal=True):
+                    dpg.add_spacer(width=114)
+                    dpg.add_text("Sign in to use the simulator", color=(150, 150, 150, 255))
+                dpg.add_spacer(height=12)
+                dpg.add_separator()
+                dpg.add_spacer(height=12)
+                with dpg.group(tag=_HEADLESS_AUTH_GROUP):
+                    with dpg.group(horizontal=True):
+                        dpg.add_spacer(width=36)
+                        dpg.add_text("ID :", color=(180, 180, 180, 255))
+                        dpg.add_input_text(
+                            tag=_LOGIN_ID,
+                            default_value=self.config.login_id,
+                            hint="Account ID",
+                            width=300,
+                        )
+                    dpg.add_spacer(height=4)
+                    with dpg.group(horizontal=True):
+                        dpg.add_spacer(width=36)
+                        dpg.add_text("PW :", color=(180, 180, 180, 255))
+                        dpg.add_input_text(
+                            tag=_LOGIN_PASSWORD,
+                            hint="Password",
+                            password=True,
+                            width=300,
+                        )
+                    dpg.add_spacer(height=10)
+                    with dpg.group(horizontal=True):
+                        dpg.add_spacer(width=75)
+                        dpg.add_checkbox(
+                            label="Remember this device",
+                            tag=_REMEMBER_LOGIN,
+                            default_value=self.config.remember_login,
+                        )
+                    dpg.add_spacer(height=6)
+                    with dpg.group(horizontal=True):
+                        dpg.add_spacer(width=75)
+                        dpg.add_button(
+                            label="Login",
+                            tag=_LOGIN_BUTTON,
+                            callback=self._on_headless_login,
+                            width=280,
+                            height=30,
+                        )
+                    with dpg.group(tag=_VERIFICATION_GROUP, show=False):
+                        dpg.add_spacer(height=8)
+                        with dpg.group(horizontal=True):
+                            dpg.add_spacer(width=36)
+                            dpg.add_text("2FA:", color=(180, 180, 180, 255))
+                            dpg.add_input_text(tag=_VERIFICATION_CODE, hint="6-digit code", width=154)
+                            dpg.add_button(
+                                label="Confirm Login",
+                                tag=_VERIFY_BUTTON,
+                                callback=self._on_verify_and_launch,
+                                width=140,
+                            )
+                dpg.add_spacer(height=10)
+                with dpg.group(horizontal=True):
+                    dpg.add_spacer(width=75)
+                    dpg.add_text(
+                        "Enter your account",
+                        tag=_LOGIN_STATUS,
+                        color=(140, 140, 140, 255),
+                        wrap=280,
+                    )
+
+        with dpg.window(tag=_WINDOW, label="MORAI Batch Simulation", show=False):
             dpg.add_text("MORAI Batch Simulation", color=(80, 170, 255, 255))
             dpg.add_separator()
 
@@ -139,7 +238,7 @@ class BatchSimulationGui:
                     width=160,
                     callback=self._on_run_mode_changed,
                 )
-            with dpg.group(tag=_HEADLESS_LOGIN_GROUP, show=False):
+            with dpg.group(tag=_HEADLESS_LOGIN_GROUP):
                 with dpg.group(horizontal=True):
                     dpg.add_text("Simulator Path :", color=(180, 180, 180, 255))
                     dpg.add_input_text(
@@ -161,27 +260,6 @@ class BatchSimulationGui:
                         width=90,
                     )
                     dpg.add_text("Ready", tag=_HEADLESS_STATUS, color=(140, 140, 140, 255))
-                with dpg.group(tag=_HEADLESS_AUTH_GROUP, show=False):
-                    with dpg.group(horizontal=True):
-                        dpg.add_text("ID             :", color=(180, 180, 180, 255))
-                        dpg.add_input_text(tag=_LOGIN_ID, width=180)
-                        dpg.add_text("PW :", color=(180, 180, 180, 255))
-                        dpg.add_input_text(tag=_LOGIN_PASSWORD, password=True, width=180)
-                        dpg.add_button(
-                            label="Login",
-                            tag=_LOGIN_BUTTON,
-                            callback=self._on_headless_login,
-                            width=90,
-                        )
-                    with dpg.group(tag=_VERIFICATION_GROUP, horizontal=True, show=False):
-                        dpg.add_text("2FA Code       :", color=(180, 180, 180, 255))
-                        dpg.add_input_text(tag=_VERIFICATION_CODE, width=80)
-                        dpg.add_button(
-                            label="Confirm & Launch",
-                            tag=_VERIFY_BUTTON,
-                            callback=self._on_verify_and_launch,
-                            width=130,
-                        )
 
             self._section("TCP")
             with dpg.group(horizontal=True):
@@ -312,8 +390,12 @@ class BatchSimulationGui:
 
             self._section("SCENARIO")
             with dpg.group(horizontal=True):
-                dpg.add_text("Elapsed   :", color=(180, 180, 180, 255))
-                dpg.add_text("0:00", tag=_ELAPSED, color=(160, 200, 160, 255))
+                dpg.add_text("Simulation Time :", color=(180, 180, 180, 255))
+                dpg.add_text(
+                    "0:00.000",
+                    tag=_SIMULATION_TIME,
+                    color=(160, 200, 160, 255),
+                )
             with dpg.group(horizontal=True):
                 dpg.add_text("Control   :", color=(180, 180, 180, 255))
                 self._control_button("Previous", "batch_previous_button", "previous")
@@ -333,14 +415,22 @@ class BatchSimulationGui:
                 dpg.add_text("-", tag=_SCENARIO_STATUS, color=(140, 140, 140, 255))
 
     def start(self) -> None:
-        self._on_connect()
+        if self.config.remember_login:
+            self._restore_remembered_login()
 
     def close(self) -> None:
+        self._closing = True
         self._save_preferences()
         self.session.close()
         worker = self._worker
         if worker is not None and worker is not threading.current_thread():
             worker.join(timeout=1.5)
+        time_worker = self._time_poll_worker
+        if time_worker is not None and time_worker is not threading.current_thread():
+            time_worker.join(timeout=1.5)
+        scenario_worker = self._scenario_refresh_worker
+        if scenario_worker is not None and scenario_worker is not threading.current_thread():
+            scenario_worker.join(timeout=1.5)
 
     def _save_preferences(self) -> None:
         if not dpg.does_item_exist(_WINDOW):
@@ -360,15 +450,23 @@ class BatchSimulationGui:
                 rtf=_RTF_VALUES.get(str(dpg.get_value(_RTF)), 1),
                 user_control=bool(dpg.get_value(_USER_CONTROL)),
                 simulator_path=str(dpg.get_value(_SIMULATOR_PATH)).strip(),
+                api_base_url=self.config.api_base_url,
+                login_id=self._saved_login_id,
+                remember_login=bool(dpg.get_value(_REMEMBER_LOGIN)),
             )
             save_config(self.config_path, saved)
+            if not saved.remember_login:
+                clear_session()
             self._log(f"Saved preferences: {self.config_path}")
         except (OSError, TypeError, ValueError) as exc:
             self._log(f"Failed to save preferences: {exc}", "ERROR")
 
     def tick(self) -> None:
-        elapsed = self._current_elapsed()
-        dpg.set_value(_ELAPSED, self._format_seconds(int(elapsed)))
+        if dpg.is_item_shown(_LOGIN_WINDOW):
+            self._center_login_card()
+        if _SIMULATOR_STATUS_AUTO_POLL:
+            self._poll_simulator_status()
+        self._poll_simulation_time()
         process = self._headless_process
         if process is not None:
             exit_code = process.poll()
@@ -378,6 +476,14 @@ class BatchSimulationGui:
                     f"Stopped (exit {exit_code})",
                     (255, 170, 80, 255),
                 )
+
+    @staticmethod
+    def _center_login_card() -> None:
+        viewport_width = dpg.get_viewport_client_width()
+        viewport_height = dpg.get_viewport_client_height()
+        x = max(20, (viewport_width - 430) // 2)
+        y = max(20, (viewport_height - 350) // 2)
+        dpg.set_item_pos(_LOGIN_CARD, (x, y))
 
     def _section(self, label: str) -> None:
         dpg.add_spacer(height=6)
@@ -516,6 +622,7 @@ class BatchSimulationGui:
             return
 
         def work() -> None:
+            self._suite_loaded = False
             ui_queue.post(lambda: self._set_suite_status("Loading...", (255, 190, 90, 255)))
             started = time.monotonic()
             self._log(f"Loading suite: {path}")
@@ -527,6 +634,7 @@ class BatchSimulationGui:
                     f"LoadSuite failed (result={result_code}, detail={detail_code})"
                 )
             elapsed = time.monotonic() - started
+            self._suite_loaded = True
             self._log(f"Suite loaded in {elapsed:.1f}s")
             ui_queue.post(
                 lambda e=elapsed: self._set_suite_status(
@@ -545,17 +653,7 @@ class BatchSimulationGui:
 
     def _on_run_mode_changed(self, sender=None, app_data=None) -> None:
         mode = str(app_data if app_data is not None else dpg.get_value(_RUN_MODE))
-        is_headless = mode == "Headless Mode"
-        dpg.configure_item(_HEADLESS_LOGIN_GROUP, show=is_headless)
-        if not is_headless:
-            self._headless_login = None
-            self._force_login_required = False
-            dpg.set_value(_LOGIN_PASSWORD, "")
-            dpg.set_value(_VERIFICATION_CODE, "")
-            dpg.configure_item(_HEADLESS_AUTH_GROUP, show=False)
-            dpg.configure_item(_VERIFICATION_GROUP, show=False)
-            dpg.configure_item(_VERIFY_BUTTON, label="Confirm & Launch")
-            self._set_headless_status("Ready", (140, 140, 140, 255))
+        self._set_headless_status(mode, (140, 140, 140, 255))
 
     def _on_headless_start(self) -> None:
         simulator_path = str(dpg.get_value(_SIMULATOR_PATH)).strip()
@@ -579,9 +677,10 @@ class BatchSimulationGui:
             )
             return
         if self._headless_tokens is None or not self._headless_user_id:
-            dpg.configure_item(_HEADLESS_AUTH_GROUP, show=True)
-            self._set_headless_status("Login required", (255, 190, 90, 255))
+            self._show_login_view("Login required")
             return
+        run_mode = str(dpg.get_value(_RUN_MODE))
+        headless = run_mode == "Headless Mode"
 
         def work() -> None:
             ui_queue.post(lambda: self._set_headless_status("Starting...", (255, 190, 90, 255)))
@@ -589,25 +688,27 @@ class BatchSimulationGui:
                 self._headless_user_id,
                 self._headless_tokens,
                 simulator_path,
+                headless,
             )
-            self._log(f"Headless simulator restarted. PID: {process.pid}")
+            self._log(f"{run_mode} simulator launched. PID: {process.pid}")
             ui_queue.post(lambda pid=process.pid: self._headless_launched(pid))
 
-        self._start_task("Start Headless", work)
+        self._start_task("Start Simulator", work)
 
     def _on_headless_login(self) -> None:
         user_id = str(dpg.get_value(_LOGIN_ID)).strip()
         password = str(dpg.get_value(_LOGIN_PASSWORD))
-        simulator_path = str(dpg.get_value(_SIMULATOR_PATH)).strip()
-        try:
-            self._validate_headless_inputs(user_id, password, simulator_path)
-        except ValueError as exc:
-            self._set_headless_status(str(exc), (255, 170, 80, 255))
+        remember_login = bool(dpg.get_value(_REMEMBER_LOGIN))
+        if not user_id:
+            self._set_login_status("ID is required", (255, 170, 80, 255))
+            return
+        if not password:
+            self._set_login_status("PW is required", (255, 170, 80, 255))
             return
 
         def work() -> None:
-            login = MoraiHeadlessLogin(user_id)
-            ui_queue.post(lambda: self._set_headless_status("Logging in...", (255, 190, 90, 255)))
+            login = MoraiHeadlessLogin(user_id, api_base_url=self.config.api_base_url)
+            ui_queue.post(lambda: self._set_login_status("Logging in...", (255, 190, 90, 255)))
             tokens = login.login(password)
             if tokens is None:
                 self._headless_login = login
@@ -615,49 +716,36 @@ class BatchSimulationGui:
                 self._log(f"Verification code requested for {user_id}")
                 ui_queue.post(self._verification_code_requested)
                 return
-            process = self._remember_and_launch(login, tokens, simulator_path)
-            self._log(f"Trusted-device login succeeded. Headless PID: {process.pid}")
-            ui_queue.post(lambda pid=process.pid: self._headless_launched(pid))
+            self._remember_credentials(login, tokens, remember_login)
+            self._log("Trusted-device login succeeded")
+            ui_queue.post(self._login_succeeded)
 
         self._start_task("Headless Login", work)
 
     def _on_verify_and_launch(self) -> None:
         code = str(dpg.get_value(_VERIFICATION_CODE)).strip()
-        simulator_path = str(dpg.get_value(_SIMULATOR_PATH)).strip()
         login = self._headless_login
+        remember_login = bool(dpg.get_value(_REMEMBER_LOGIN))
         if login is None:
-            self._set_headless_status("Request a verification code first", (255, 170, 80, 255))
+            self._set_login_status("Request a verification code first", (255, 170, 80, 255))
             return
         if re.fullmatch(r"[0-9]{6}", code) is None:
-            self._set_headless_status("Enter the 6-digit verification code", (255, 170, 80, 255))
-            return
-        try:
-            self._validate_simulator_path(simulator_path)
-        except ValueError as exc:
-            self._set_headless_status(str(exc), (255, 170, 80, 255))
+            self._set_login_status("Enter the 6-digit verification code", (255, 170, 80, 255))
             return
 
         def work() -> None:
-            ui_queue.post(lambda: self._set_headless_status("Verifying...", (255, 190, 90, 255)))
+            ui_queue.post(lambda: self._set_login_status("Verifying...", (255, 190, 90, 255)))
             try:
                 tokens = login.force_verify(code) if self._force_login_required else login.verify(code)
             except ActiveSessionError:
                 self._force_login_required = True
                 ui_queue.post(self._force_login_confirmation_required)
                 return
-            process = self._remember_and_launch(login, tokens, simulator_path)
-            self._log(f"Headless simulator launched. PID: {process.pid}")
-            ui_queue.post(lambda pid=process.pid: self._headless_launched(pid))
+            self._remember_credentials(login, tokens, remember_login)
+            self._log("Login verification succeeded")
+            ui_queue.post(self._login_succeeded)
 
-        self._start_task("Verify and Launch", work)
-
-    @staticmethod
-    def _validate_headless_inputs(user_id: str, password: str, simulator_path: str) -> None:
-        if not user_id:
-            raise ValueError("ID is required")
-        if not password:
-            raise ValueError("PW is required")
-        BatchSimulationGui._validate_simulator_path(simulator_path)
+        self._start_task("Verify Login", work)
 
     @staticmethod
     def _validate_simulator_path(simulator_path: str) -> None:
@@ -672,45 +760,102 @@ class BatchSimulationGui:
     def _verification_code_requested(self) -> None:
         dpg.set_value(_LOGIN_PASSWORD, "")
         dpg.set_value(_VERIFICATION_CODE, "")
-        dpg.configure_item(_HEADLESS_AUTH_GROUP, show=True)
         dpg.configure_item(_VERIFICATION_GROUP, show=True)
-        dpg.configure_item(_VERIFY_BUTTON, label="Confirm & Launch")
-        self._set_headless_status("Code sent", (100, 220, 100, 255))
+        dpg.configure_item(_VERIFY_BUTTON, label="Confirm Login")
+        self._set_login_status("Code sent", (100, 220, 100, 255))
 
     def _force_login_confirmation_required(self) -> None:
-        dpg.configure_item(_VERIFY_BUTTON, label="Force Login & Launch")
-        self._set_headless_status(
+        dpg.configure_item(_VERIFY_BUTTON, label="Force Login")
+        self._set_login_status(
             "Active session exists; confirm force login",
             (255, 170, 80, 255),
         )
 
-    def _headless_launched(self, pid: int) -> None:
+    def _login_succeeded(self) -> None:
+        self._saved_login_id = str(dpg.get_value(_LOGIN_ID)).strip()
+        self._save_preferences()
         dpg.set_value(_LOGIN_PASSWORD, "")
         dpg.set_value(_VERIFICATION_CODE, "")
-        dpg.configure_item(_HEADLESS_AUTH_GROUP, show=False)
         dpg.configure_item(_VERIFICATION_GROUP, show=False)
+        dpg.configure_item(_VERIFY_BUTTON, label="Confirm Login")
         self._headless_login = None
         self._force_login_required = False
-        dpg.configure_item(_VERIFY_BUTTON, label="Confirm & Launch")
+        dpg.configure_item(_LOGIN_WINDOW, show=False)
+        dpg.configure_item(_WINDOW, show=True)
+        dpg.set_primary_window(_WINDOW, True)
+        self._set_headless_status("Ready", (140, 140, 140, 255))
+
+    def _show_login_view(self, status: str) -> None:
+        dpg.configure_item(_WINDOW, show=False)
+        dpg.configure_item(_LOGIN_WINDOW, show=True)
+        dpg.set_primary_window(_LOGIN_WINDOW, True)
+        self._set_login_status(status, (255, 190, 90, 255))
+
+    def _headless_launched(self, pid: int) -> None:
         self._set_headless_status(f"Launched (PID {pid})", (100, 220, 100, 255))
 
-    def _remember_and_launch(self, login, tokens, simulator_path):
+    def _remember_credentials(self, login, tokens, remember_login: bool) -> None:
         launch_credentials = login.resolve_launch_credentials(tokens)
         self._headless_user_id = launch_credentials["user_id"]
         self._headless_tokens = dict(launch_credentials)
-        return self._launch_with_tokens(
-            launch_credentials["user_id"],
-            launch_credentials,
-            simulator_path,
+        if remember_login:
+            save_session({"email": login.email, **launch_credentials})
+        else:
+            clear_session()
+
+    def _restore_remembered_login(self) -> None:
+        def work() -> None:
+            ui_queue.post(
+                lambda: self._set_login_status(
+                    "Restoring saved login...", (255, 190, 90, 255)
+                )
+            )
+            try:
+                saved = load_session()
+                if saved is None:
+                    raise ValueError("Saved login is unavailable")
+                login = MoraiHeadlessLogin(
+                    saved["email"], api_base_url=self.config.api_base_url
+                )
+                credentials = login.resolve_launch_credentials(
+                    {
+                        "access_token": saved["access_token"],
+                        "refresh_token": saved["refresh_token"],
+                    }
+                )
+            except (HeadlessLoginError, OSError, ValueError, KeyError):
+                clear_session()
+                ui_queue.post(self._remembered_login_expired)
+                return
+
+            self._headless_user_id = credentials["user_id"]
+            self._headless_tokens = dict(credentials)
+            ui_queue.post(
+                lambda email=saved["email"]: self._remembered_login_succeeded(email)
+            )
+
+        self._start_task("Restore Login", work)
+
+    def _remembered_login_succeeded(self, email: str) -> None:
+        dpg.set_value(_LOGIN_ID, email)
+        dpg.set_value(_REMEMBER_LOGIN, True)
+        self._login_succeeded()
+
+    def _remembered_login_expired(self) -> None:
+        dpg.set_value(_REMEMBER_LOGIN, False)
+        self._save_preferences()
+        self._set_login_status(
+            "Saved login expired. Sign in again.", (255, 170, 80, 255)
         )
 
-    def _launch_with_tokens(self, user_id, tokens, simulator_path):
-        process = launch_headless_simulator(
+    def _launch_with_tokens(self, user_id, tokens, simulator_path, headless):
+        process = launch_simulator(
             simulator_path=simulator_path,
             user_id=user_id,
             access_token=tokens["access_token"],
             refresh_token=tokens["refresh_token"],
             product_uid=tokens["product_uid"],
+            headless=headless,
         )
         self._headless_process = process
         return process
@@ -752,21 +897,71 @@ class BatchSimulationGui:
                 f"Simulation time status: mode={self._time_mode_name(response['mode'])} "
                 f"fps={response['target_fps']} physics_dt={response['physics_delta_time']} "
                 f"rtf={response['rtf']} user_control={response['user_control']} "
-                f"step={response['step_index']}"
+                f"step={response['step_index']} seconds={response['seconds']} "
+                f"nanos={response['nanos']}"
             )
             ui_queue.post(lambda r=response: self._apply_time_status(r))
 
         self._start_task("Get Simulation Time", work)
 
-    def _on_get_simulator_status(self) -> None:
+    def _poll_simulation_time(self) -> None:
+        now = time.monotonic()
+        if (
+            not self._suite_loaded
+            or not self.session.is_connected
+            or now < self._next_time_poll
+        ):
+            return
+        with self._time_poll_lock:
+            if self._time_poll_in_flight:
+                return
+            self._time_poll_in_flight = True
+        self._next_time_poll = now + _SIMULATION_TIME_POLL_INTERVAL
+
         def work() -> None:
-            ui_queue.post(
-                lambda: self._set_simulator_status("Querying...", (255, 190, 90, 255))
-            )
+            try:
+                response = self.session.get_time_status(log_send=False)
+                ui_queue.post(lambda r=response: self._apply_simulation_time(r))
+            except (DemoSessionError, OSError, ValueError):
+                if not self.session.is_connected:
+                    ui_queue.post(self._apply_disconnected)
+            finally:
+                with self._time_poll_lock:
+                    self._time_poll_in_flight = False
+
+        self._time_poll_worker = threading.Thread(
+            target=work,
+            name="BatchGui-SimulationTime",
+            daemon=True,
+        )
+        self._time_poll_worker.start()
+
+    def _on_get_simulator_status(self) -> None:
+        self._request_simulator_status(log_result=True)
+
+    def _poll_simulator_status(self) -> None:
+        now = time.monotonic()
+        if now < self._next_simulator_status_poll:
+            return
+        self._next_simulator_status_poll = now + _SIMULATOR_STATUS_POLL_INTERVAL
+        with self._task_lock:
+            busy = self._task_running
+        if self.session.is_connected and not busy:
+            self._request_simulator_status(log_result=False)
+
+    def _request_simulator_status(self, log_result: bool) -> None:
+        def work() -> None:
+            if log_result:
+                ui_queue.post(
+                    lambda: self._set_simulator_status(
+                        "Querying...", (255, 190, 90, 255)
+                    )
+                )
             response = self.session.get_simulator_status()
             state = int(response["state"])
             label = proto.SIMULATOR_STATE_MAP.get(state, f"UNKNOWN({state})")
-            self._log(f"Simulator status: {label}")
+            if log_result:
+                self._log(f"Simulator status: {label}")
             ui_queue.post(lambda s=state: self._apply_simulator_status(s))
 
         self._start_task("Get Simulator Status", work)
@@ -776,7 +971,8 @@ class BatchSimulationGui:
             action = getattr(self.session, command)
             action("")
             self._log(f"Scenario {command} accepted")
-            ui_queue.post(lambda: self._control_succeeded(command))
+            if command == "play":
+                self._schedule_play_status_refresh()
 
         self._start_task(f"Scenario {command}", work)
 
@@ -834,14 +1030,17 @@ class BatchSimulationGui:
             self._set_suite_status(f"Failed{suffix}", (255, 120, 120, 255))
         if dpg.get_value(_SIMULATOR_STATUS) == "Querying...":
             self._set_simulator_status("Failed", (255, 120, 120, 255))
-        if dpg.does_item_exist(_HEADLESS_STATUS) and dpg.get_value(_RUN_MODE) == "Headless Mode":
+        if dpg.is_item_shown(_LOGIN_WINDOW):
+            self._set_login_status(message, (255, 120, 120, 255))
+        elif dpg.does_item_exist(_HEADLESS_STATUS):
             self._set_headless_status(message, (255, 120, 120, 255))
 
     def _apply_disconnected(self) -> None:
+        self._suite_loaded = False
         self._simulator_state = None
         self._set_connection("Disconnected", (255, 120, 120, 255))
         self._set_simulator_status("-", (140, 140, 140, 255))
-        self._reset_elapsed()
+        dpg.set_value(_SIMULATION_TIME, "--:--.---")
 
     def _set_connection(self, text: str, color) -> None:
         connected = text == "Connected"
@@ -866,6 +1065,11 @@ class BatchSimulationGui:
         dpg.configure_item(_SIMULATOR_STATUS, color=color)
 
     def _apply_simulator_status(self, state: int) -> None:
+        if (
+            self._simulator_state == state
+            and dpg.get_value(_SIMULATOR_STATUS) != "Querying..."
+        ):
+            return
         self._simulator_state = state
         label = proto.SIMULATOR_STATE_MAP.get(state, f"UNKNOWN({state})")
         color = (140, 140, 140, 255)
@@ -880,6 +1084,10 @@ class BatchSimulationGui:
         dpg.set_value(_HEADLESS_STATUS, text)
         dpg.configure_item(_HEADLESS_STATUS, color=color)
 
+    def _set_login_status(self, text: str, color) -> None:
+        dpg.set_value(_LOGIN_STATUS, text)
+        dpg.configure_item(_LOGIN_STATUS, color=color)
+
     def _apply_time_status(self, response) -> None:
         mode = int(response["mode"])
         mode_name = self._time_mode_name(mode)
@@ -890,6 +1098,15 @@ class BatchSimulationGui:
         dpg.set_value(_USER_CONTROL, bool(response["user_control"]))
         self._on_time_mode_changed(app_data=mode_name)
         self._set_time_status(mode_name, (100, 220, 100, 255))
+        self._apply_simulation_time(response)
+
+    def _apply_simulation_time(self, response) -> None:
+        seconds = int(response["seconds"])
+        nanos = int(response["nanos"])
+        dpg.set_value(
+            _SIMULATION_TIME,
+            self._format_simulation_time(seconds, nanos),
+        )
 
     @staticmethod
     def _time_mode_name(mode: int) -> str:
@@ -924,41 +1141,66 @@ class BatchSimulationGui:
         text = state if not status.name else f"{state} ({status.name})"
         dpg.set_value(_SCENARIO_STATUS, text)
         dpg.configure_item(_SCENARIO_STATUS, color=(100, 220, 100, 255))
-        if status.state == 2:
-            self._pause_elapsed()
-        elif status.state in (3, 4):
-            self._reset_elapsed()
+        if status.state == 4:
+            if not self._completed_refresh_armed:
+                self._completed_refresh_armed = True
+                self._schedule_scenario_status_refresh()
+        else:
+            self._completed_refresh_armed = False
         self._log(f"Scenario status: {text}")
 
-    def _control_succeeded(self, command: str) -> None:
-        if command == "play":
-            if self._elapsed_started is None:
-                self._elapsed_started = time.monotonic()
-        elif command == "pause":
-            self._pause_elapsed()
-        elif command in ("stop", "previous", "next"):
-            self._reset_elapsed()
+    def _schedule_scenario_status_refresh(self) -> None:
+        def work() -> None:
+            time.sleep(_SCENARIO_TRANSITION_REFRESH_DELAY)
+            if not self._closing:
+                self._refresh_scenario_status()
 
-    def _pause_elapsed(self) -> None:
-        if self._elapsed_started is not None:
-            self._elapsed_accumulated += max(0.0, time.monotonic() - self._elapsed_started)
-            self._elapsed_started = None
+        self._scenario_refresh_worker = threading.Thread(
+            target=work,
+            name="BatchGui-ScenarioTransition",
+            daemon=True,
+        )
+        self._scenario_refresh_worker.start()
 
-    def _reset_elapsed(self) -> None:
-        self._elapsed_accumulated = 0.0
-        self._elapsed_started = None
-        if dpg.does_item_exist(_ELAPSED):
-            dpg.set_value(_ELAPSED, "0:00")
+    def _schedule_play_status_refresh(self, attempt: int = 0) -> None:
+        def work() -> None:
+            time.sleep(_SCENARIO_TRANSITION_REFRESH_DELAY)
+            if self._closing or not self.session.is_connected:
+                return
+            try:
+                status = self.session.get_scenario_status(publish=False)
+            except (DemoSessionError, OSError, ValueError) as exc:
+                self._log(f"Scenario status refresh failed: {exc}", "WARN")
+                return
+            if status.state == 3 and attempt == 0:
+                self._schedule_play_status_refresh(attempt=1)
+                return
+            ui_queue.post(lambda s=status: self._apply_scenario_status(s))
 
-    def _current_elapsed(self) -> float:
-        elapsed = self._elapsed_accumulated
-        if self._elapsed_started is not None:
-            elapsed += max(0.0, time.monotonic() - self._elapsed_started)
-        return elapsed
+        self._scenario_refresh_worker = threading.Thread(
+            target=work,
+            name="BatchGui-PlayStatus",
+            daemon=True,
+        )
+        self._scenario_refresh_worker.start()
+
+    def _refresh_scenario_status(self) -> None:
+        if self._closing or not self.session.is_connected:
+            return
+        try:
+            self.session.get_scenario_status()
+        except (DemoSessionError, OSError, ValueError) as exc:
+            self._log(f"Scenario status refresh failed: {exc}", "WARN")
 
     @staticmethod
-    def _format_seconds(seconds: int) -> str:
-        return f"{seconds // 60}:{seconds % 60:02d}"
+    def _format_simulation_time(seconds: int, nanos: int) -> str:
+        total_milliseconds = max(0, seconds * 1000 + nanos // 1_000_000)
+        hours, remainder = divmod(total_milliseconds, 3_600_000)
+        minutes, remainder = divmod(remainder, 60_000)
+        whole_seconds, milliseconds = divmod(remainder, 1000)
+        if hours:
+            return f"{hours}:{minutes:02d}:{whole_seconds:02d}.{milliseconds:03d}"
+        return f"{minutes}:{whole_seconds:02d}.{milliseconds:03d}"
 
     @staticmethod
     def _log(message: str, level: str = "INFO") -> None:
@@ -986,7 +1228,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             resizable=True,
         )
         dpg.setup_dearpygui()
-        dpg.set_primary_window(_WINDOW, True)
+        dpg.set_primary_window(_LOGIN_WINDOW, True)
         dpg.show_viewport()
         gui.start()
 

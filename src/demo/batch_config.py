@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import transport.protocol_defs as proto
+from demo.headless_launcher import DEFAULT_API_BASE_URL
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -27,6 +28,9 @@ class BatchSimulationConfig:
     rtf: int
     user_control: bool
     simulator_path: str
+    api_base_url: str
+    login_id: str
+    remember_login: bool
 
 
 def load_config(config_path: str) -> BatchSimulationConfig:
@@ -65,9 +69,14 @@ def load_config(config_path: str) -> BatchSimulationConfig:
         rtf=int(simulation_time.get("rtf", 1)),
         user_control=bool(simulation_time.get("user_control", False)),
         simulator_path=str(data.get("simulator_path", "")).strip(),
+        api_base_url=str(data.get("api_base_url", DEFAULT_API_BASE_URL)).strip(),
+        login_id=str(data.get("login_id", "")).strip(),
+        remember_login=bool(data.get("remember_login", False)),
     )
     if not config.host:
         raise ValueError("Configuration field 'server.host' must not be empty")
+    if not config.api_base_url.startswith(("http://", "https://")):
+        raise ValueError("Configuration field 'api_base_url' must be an HTTP(S) URL")
     if not 1 <= config.port <= 65535:
         raise ValueError("Configuration field 'server.port' must be between 1 and 65535")
     if min(config.connect_timeout, config.request_timeout, config.load_timeout) <= 0:
@@ -88,6 +97,9 @@ def _create_default_config(path: Path) -> None:
         "suite_path": "",
         "scenario_name": "",
         "simulator_path": "",
+        "api_base_url": DEFAULT_API_BASE_URL,
+        "login_id": "",
+        "remember_login": False,
         "server": {
             "host": proto.TCP_SERVER_IP,
             "port": proto.TCP_SERVER_PORT,
@@ -120,6 +132,9 @@ def save_config(config_path: str, config: BatchSimulationConfig) -> None:
         "suite_path": config.suite_path,
         "scenario_name": config.scenario_name,
         "simulator_path": config.simulator_path,
+        "api_base_url": config.api_base_url,
+        "login_id": config.login_id,
+        "remember_login": config.remember_login,
         "server": {"host": config.host, "port": config.port},
         "timeouts": {
             "connect": config.connect_timeout,

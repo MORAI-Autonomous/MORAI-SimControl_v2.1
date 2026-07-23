@@ -203,13 +203,18 @@ class Receiver(threading.Thread):
                     and msg_type == proto.MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND:
                 parsed = tcp.parse_set_simulation_time_mode_payload(payload)
                 if parsed:
-                    log.append(
+                    message = (
                         f"SetSimulationTimeMode rid={request_id} "
-                        f"result={parsed['result_code']}({result_to_string(parsed['result_code'])}) "
-                        f"mode={time_mode_to_string(parsed['mode'])} "
-                        f"fixed_delta={parsed['fixed_delta']:.3f}",
-                        "RECV"
+                        f"result={parsed['result_code']}"
+                        f"({result_to_string(parsed['result_code'])}) "
+                        f"detail={parsed['detail_code']}"
                     )
+                    if "mode" in parsed:
+                        message += (
+                            f" mode={time_mode_to_string(parsed['mode'])} "
+                            f"fixed_delta={parsed['fixed_delta']:.3f}"
+                        )
+                    log.append(message, "RECV")
                 else:
                     log.append(f"SetSimulationTimeMode parse_failed rid={request_id}", "WARN")
 

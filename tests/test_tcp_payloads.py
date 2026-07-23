@@ -18,6 +18,23 @@ import transport.tcp_transport as tcp
 
 
 class TcpPayloadGoldenTests(unittest.TestCase):
+    def test_parse_set_simulation_time_mode_result_only_response(self) -> None:
+        payload = struct.pack("<II", 0, 0)
+
+        parsed = tcp.parse_set_simulation_time_mode_payload(payload)
+
+        self.assertEqual(parsed, {"result_code": 0, "detail_code": 0})
+
+    def test_parse_set_simulation_time_mode_detailed_response(self) -> None:
+        payload = struct.pack("<IIIff", 0, 0, 2, 0.01, 2.0)
+
+        parsed = tcp.parse_set_simulation_time_mode_payload(payload)
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["result_code"], 0)
+        self.assertEqual(parsed["detail_code"], 0)
+        self.assertEqual(parsed["mode"], 2)
+
     def test_get_simulator_status_request_has_no_payload(self) -> None:
         actual = pack_message_payload(
             proto.MSG_TYPE_GET_SIMULATOR_STATUS,

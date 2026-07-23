@@ -17,6 +17,7 @@ from demo.headless_launcher import (
     SimulatorAlreadyRunningError,
     find_running_simulator_pid,
     launch_headless_simulator,
+    launch_simulator,
     load_or_create_hardware_hash,
 )
 
@@ -171,6 +172,27 @@ class HeadlessLauncherTests(unittest.TestCase):
             "--mode=headless",
             "-nullrhi",
         ])
+
+    def test_rendering_launcher_omits_headless_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            executable = Path(temp_dir) / "MoraiSimulator.exe"
+            executable.touch()
+            with patch("demo.headless_launcher.find_running_simulator_pid", return_value=None), patch(
+                "demo.headless_launcher.subprocess.Popen", return_value=Mock(pid=4321)
+            ) as popen:
+                launch_simulator(
+                    str(executable),
+                    "launch-account",
+                    "access-value",
+                    "refresh-value",
+                    product_uid="S90000",
+                    headless=False,
+                )
+
+        arguments = popen.call_args[0][0]
+        self.assertNotIn("--mode=headless", arguments)
+        self.assertNotIn("-nullrhi", arguments)
+        self.assertEqual(arguments[-1], "--productUid=S90000")
 
     def test_running_shipping_process_is_detected(self) -> None:
         tasklist = Mock(

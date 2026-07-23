@@ -198,10 +198,14 @@ class DemoSession:
             timeout,
         )
 
-    def get_time_status(self, timeout: Optional[float] = None) -> Dict[str, Any]:
+    def get_time_status(
+        self,
+        timeout: Optional[float] = None,
+        log_send: bool = True,
+    ) -> Dict[str, Any]:
         return self._request_result(
             proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS,
-            lambda sock, rid: tcp.send_get_status(sock, rid),
+            lambda sock, rid: tcp.send_get_status(sock, rid, log_send=log_send),
             timeout,
         )
 
@@ -212,14 +216,19 @@ class DemoSession:
             timeout,
         )
 
-    def get_scenario_status(self, timeout: Optional[float] = None) -> ScenarioStatus:
+    def get_scenario_status(
+        self,
+        timeout: Optional[float] = None,
+        publish: bool = True,
+    ) -> ScenarioStatus:
         response = self._request_result(
             proto.MSG_TYPE_SCENARIO_STATUS,
             lambda sock, rid: tcp.send_scenario_status(sock, rid),
             timeout,
         )
         status = ScenarioStatus(state=response["state"], name=response.get("name", ""))
-        self._publish_scenario_status(status)
+        if publish:
+            self._publish_scenario_status(status)
         return status
 
     def control_scenario(

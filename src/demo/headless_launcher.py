@@ -13,8 +13,8 @@ import urllib.error
 import urllib.request
 
 
-DEFAULT_API_BASE_URL = "https://v2-dev-api.morai-sim.com:8080"
-DEFAULT_PRODUCT_UID = "S00001"
+DEFAULT_API_BASE_URL = "https://v2-prd-api.morai-sim.com:8080"
+DEFAULT_PRODUCT_UID = "S00002"
 EMAIL_VERIFICATION_REQUIRED = "2235"
 DEFAULT_HARDWARE_HASH_FILE = Path.home() / ".morai_login" / "hardware_hash"
 
@@ -193,12 +193,13 @@ class MoraiHeadlessLogin:
         return result
 
 
-def launch_headless_simulator(
+def launch_simulator(
     simulator_path: str,
     user_id: str,
     access_token: str,
     refresh_token: str,
     product_uid: str = DEFAULT_PRODUCT_UID,
+    headless: bool = True,
 ) -> subprocess.Popen:
     executable = Path(simulator_path).expanduser().resolve()
     if not executable.is_file():
@@ -214,10 +215,27 @@ def launch_headless_simulator(
         f"--accessToken={access_token}",
         f"--refreshToken={refresh_token}",
         f"--productUid={product_uid}",
-        "--mode=headless",
-        "-nullrhi",
     ]
+    if headless:
+        arguments.extend(["--mode=headless", "-nullrhi"])
     return subprocess.Popen(arguments, cwd=str(executable.parent))
+
+
+def launch_headless_simulator(
+    simulator_path: str,
+    user_id: str,
+    access_token: str,
+    refresh_token: str,
+    product_uid: str = DEFAULT_PRODUCT_UID,
+) -> subprocess.Popen:
+    return launch_simulator(
+        simulator_path=simulator_path,
+        user_id=user_id,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        product_uid=product_uid,
+        headless=True,
+    )
 
 
 def find_running_simulator_pid() -> Optional[int]:

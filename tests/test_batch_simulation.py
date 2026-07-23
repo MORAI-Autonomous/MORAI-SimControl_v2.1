@@ -41,6 +41,9 @@ class BatchSimulationTests(unittest.TestCase):
                 rtf=2,
                 user_control=True,
                 simulator_path="C:/MORAI/Windows/MoraiSimulator.exe",
+                api_base_url="https://customer-api.example.com:8080",
+                login_id="driver@example.com",
+                remember_login=True,
             )
             save_config(str(config_path), expected)
             restored = load_config(str(config_path))

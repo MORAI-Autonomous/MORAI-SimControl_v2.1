@@ -172,9 +172,19 @@ def build_set_trajectory_payload(
 # Send commands
 # ============================================================
 
-def send_get_status(sock: socket.socket, request_id: int) -> None:
-    _send_packet(sock, request_id, proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS, b"",
-                 "GetStatus(0x1101)")
+def send_get_status(
+    sock: socket.socket,
+    request_id: int,
+    log_send: bool = True,
+) -> None:
+    log = "GetStatus(0x1101)" if log_send else ""
+    _send_packet(
+        sock,
+        request_id,
+        proto.MSG_TYPE_GET_SIMULATION_TIME_STATUS,
+        b"",
+        log,
+    )
 
 
 def send_get_simulator_status(sock: socket.socket, request_id: int) -> None:
@@ -524,6 +534,14 @@ def parse_get_status_payload(payload: bytes) -> Optional[Dict[str, Any]]:
 
 
 def parse_set_simulation_time_mode_payload(payload: bytes) -> Optional[Dict[str, Any]]:
+    if len(payload) == proto.RESULT_SIZE:
+        result = parse_result_code(payload)
+        if result is None:
+            return None
+        return {
+            "result_code": result[0],
+            "detail_code": result[1],
+        }
     if len(payload) != proto.SET_SIM_TIME_MODE_RESP_SIZE:
         return None
     try:
