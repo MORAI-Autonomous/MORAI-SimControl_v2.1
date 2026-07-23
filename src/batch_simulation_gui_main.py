@@ -8,6 +8,7 @@ import subprocess
 import threading
 import time
 from typing import Callable, Dict, Optional, Sequence, Tuple
+import webbrowser
 
 import dearpygui.dearpygui as dpg
 
@@ -42,6 +43,9 @@ _LOGIN_ID = "batch_login_id"
 _LOGIN_PASSWORD = "batch_login_password"
 _LOGIN_BUTTON = "batch_login_button"
 _REMEMBER_LOGIN = "batch_remember_login"
+_LOGOUT_BUTTON = "batch_logout_button"
+_GITHUB_BUTTON = "batch_github_button"
+_TCP_API_BUTTON = "batch_tcp_api_button"
 _SIMULATOR_PATH = "batch_simulator_path"
 _SIMULATOR_BROWSE = "batch_simulator_browse_button"
 _VERIFICATION_GROUP = "batch_verification_group"
@@ -85,6 +89,11 @@ _SIMULATOR_STATUS_AUTO_POLL = False
 _SIMULATOR_STATUS_POLL_INTERVAL = 1.0
 _SIMULATION_TIME_POLL_INTERVAL = 0.5
 _SCENARIO_TRANSITION_REFRESH_DELAY = 0.25
+_GITHUB_URL = "https://github.com/MORAI-Autonomous/MORAI-SimControl_v2.1"
+_TCP_API_URL = (
+    "https://github.com/MORAI-Autonomous/MORAI-SimControl_v2.1/"
+    "blob/main/docs/tcp-api.md"
+)
 _RTF_VALUES = {"Real-Time": 1, "Unlimited": 2}
 _ICON_SIZE = 16
 _ICON_TEXTURES = {
@@ -225,7 +234,29 @@ class BatchSimulationGui:
                     )
 
         with dpg.window(tag=_WINDOW, label="MORAI Batch Simulation", show=False):
-            dpg.add_text("MORAI Batch Simulation", color=(80, 170, 255, 255))
+            with dpg.group(horizontal=True):
+                dpg.add_text("MORAI Batch Simulation", color=(80, 170, 255, 255))
+                dpg.add_spacer(width=185)
+                dpg.add_button(
+                    label="GitHub",
+                    tag=_GITHUB_BUTTON,
+                    callback=self._on_open_link,
+                    user_data=_GITHUB_URL,
+                    width=70,
+                )
+                dpg.add_button(
+                    label="TCP API",
+                    tag=_TCP_API_BUTTON,
+                    callback=self._on_open_link,
+                    user_data=_TCP_API_URL,
+                    width=75,
+                )
+                dpg.add_button(
+                    label="Logout",
+                    tag=_LOGOUT_BUTTON,
+                    callback=self._on_logout,
+                    width=80,
+                )
             dpg.add_separator()
 
             self._section("MODE")
@@ -791,6 +822,28 @@ class BatchSimulationGui:
         dpg.set_primary_window(_LOGIN_WINDOW, True)
         self._set_login_status(status, (255, 190, 90, 255))
 
+    def _on_logout(self) -> None:
+        dpg.set_value(_REMEMBER_LOGIN, False)
+        dpg.set_value(_LOGIN_PASSWORD, "")
+        dpg.set_value(_VERIFICATION_CODE, "")
+        dpg.configure_item(_VERIFICATION_GROUP, show=False)
+        dpg.configure_item(_VERIFY_BUTTON, label="Confirm Login")
+        clear_session()
+        self._headless_login = None
+        self._headless_user_id = ""
+        self._headless_tokens = None
+        self._force_login_required = False
+        self.session.close()
+        self._apply_disconnected()
+        self._save_preferences()
+        self._show_login_view("Signed out")
+
+    @staticmethod
+    def _on_open_link(sender=None, app_data=None, user_data=None) -> None:
+        url = str(user_data or "").strip()
+        if url:
+            webbrowser.open(url, new=2)
+
     def _headless_launched(self, pid: int) -> None:
         self._set_headless_status(f"Launched (PID {pid})", (100, 220, 100, 255))
 
@@ -1128,6 +1181,7 @@ class BatchSimulationGui:
         dpg.configure_item(_TIME_SET, enabled=connected and not busy)
         dpg.configure_item(_HEADLESS_START, enabled=not busy)
         dpg.configure_item(_LOGIN_BUTTON, enabled=not busy)
+        dpg.configure_item(_LOGOUT_BUTTON, enabled=not busy)
         dpg.configure_item(_SIMULATOR_BROWSE, enabled=not busy)
         dpg.configure_item(_VERIFY_BUTTON, enabled=not busy)
         for tag in _CONTROL_BUTTONS:
