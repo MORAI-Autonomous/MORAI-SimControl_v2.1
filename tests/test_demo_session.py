@@ -48,6 +48,26 @@ def _send_packet(conn: socket.socket, msg_class: int, msg_type: int, request_id:
 
 
 class DemoSessionTests(unittest.TestCase):
+    def test_shutdown_simulator_sends_force_flag_and_accepts_result(self) -> None:
+        def handler(conn: socket.socket) -> None:
+            msg_class, msg_type, _, request_id, _, payload = tcp.recv_packet(conn)
+            self.assertEqual(msg_class, proto.MSG_CLASS_REQ)
+            self.assertEqual(msg_type, proto.MSG_TYPE_SHUTDOWN_SIMULATOR)
+            self.assertEqual(payload, b"\x01")
+            _send_packet(
+                conn,
+                proto.MSG_CLASS_RESP,
+                msg_type,
+                request_id,
+                struct.pack(proto.RESULT_FMT, 0, 0),
+            )
+
+        server = _TestServer(handler)
+        with DemoSession(server.host, server.port, request_timeout=1.0) as session:
+            response = session.shutdown_simulator(force=True)
+        server.join()
+        self.assertEqual(response, {"result_code": 0, "detail_code": 0})
+
     def test_get_simulator_status_returns_parsed_response(self) -> None:
         def handler(conn: socket.socket) -> None:
             _, msg_type, _, request_id, _, _ = tcp.recv_packet(conn)

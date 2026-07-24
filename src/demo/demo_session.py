@@ -175,6 +175,21 @@ class DemoSession:
             )
         return response
 
+    def shutdown_simulator(
+        self,
+        force: bool = False,
+        timeout: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        return self._request_result(
+            proto.MSG_TYPE_SHUTDOWN_SIMULATOR,
+            lambda sock, rid: tcp.send_shutdown_simulator(
+                sock,
+                rid,
+                b_force=1 if force else 0,
+            ),
+            timeout,
+        )
+
     def set_time_mode(
         self,
         mode: int,
@@ -377,7 +392,11 @@ class DemoSession:
             )
 
     def _parse_response(self, msg_type: int, payload: bytes) -> Dict[str, Any]:
-        if msg_type in (proto.MSG_TYPE_LOAD_SUITE, proto.MSG_TYPE_SCENARIO_CONTROL):
+        if msg_type in (
+            proto.MSG_TYPE_SHUTDOWN_SIMULATOR,
+            proto.MSG_TYPE_LOAD_SUITE,
+            proto.MSG_TYPE_SCENARIO_CONTROL,
+        ):
             result = tcp.parse_result_code(payload)
             parsed = None if result is None else {
                 "result_code": result[0],

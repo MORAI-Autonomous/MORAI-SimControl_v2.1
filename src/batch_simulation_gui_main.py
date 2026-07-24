@@ -39,6 +39,7 @@ _RUN_MODE = "batch_run_mode"
 _HEADLESS_LOGIN_GROUP = "batch_headless_login_group"
 _HEADLESS_AUTH_GROUP = "batch_headless_auth_group"
 _HEADLESS_START = "batch_headless_start_button"
+_LAUNCH_ACTION_SPACER = "batch_launch_action_spacer"
 _LOGIN_ID = "batch_login_id"
 _LOGIN_PASSWORD = "batch_login_password"
 _LOGIN_BUTTON = "batch_login_button"
@@ -59,6 +60,8 @@ _CONNECT = "batch_connect_button"
 _DISCONNECT = "batch_disconnect_button"
 _SIMULATOR_STATUS = "batch_simulator_status"
 _SIMULATOR_STATUS_GET = "batch_simulator_status_get_button"
+_SHUTDOWN_BUTTON = "batch_shutdown_button"
+_FORCE_SHUTDOWN_BUTTON = "batch_force_shutdown_button"
 _SUITE_PATH = "batch_suite_path"
 _SUITE_LOAD = "batch_suite_load_button"
 _SUITE_STATUS = "batch_suite_status"
@@ -234,32 +237,30 @@ class BatchSimulationGui:
                     )
 
         with dpg.window(tag=_WINDOW, label="MORAI Batch Simulation", show=False):
-            with dpg.group(horizontal=True):
-                dpg.add_text("MORAI Batch Simulation", color=(80, 170, 255, 255))
-                dpg.add_spacer(width=185)
-                dpg.add_button(
-                    label="GitHub",
-                    tag=_GITHUB_BUTTON,
-                    callback=self._on_open_link,
-                    user_data=_GITHUB_URL,
-                    width=70,
-                )
-                dpg.add_button(
-                    label="TCP API",
-                    tag=_TCP_API_BUTTON,
-                    callback=self._on_open_link,
-                    user_data=_TCP_API_URL,
-                    width=75,
-                )
-                dpg.add_button(
-                    label="Logout",
-                    tag=_LOGOUT_BUTTON,
-                    callback=self._on_logout,
-                    width=80,
-                )
+            with dpg.menu_bar():
+                with dpg.menu(label="Links"):
+                    dpg.add_menu_item(
+                        label="GitHub",
+                        tag=_GITHUB_BUTTON,
+                        callback=self._on_open_link,
+                        user_data=_GITHUB_URL,
+                    )
+                    dpg.add_menu_item(
+                        label="TCP API",
+                        tag=_TCP_API_BUTTON,
+                        callback=self._on_open_link,
+                        user_data=_TCP_API_URL,
+                    )
+                with dpg.menu(label="Account"):
+                    dpg.add_menu_item(
+                        label="Logout",
+                        tag=_LOGOUT_BUTTON,
+                        callback=self._on_logout,
+                    )
+            dpg.add_text("MORAI Batch Simulation", color=(80, 170, 255, 255))
             dpg.add_separator()
 
-            self._section("MODE")
+            self._section("1. SIMULATOR LAUNCH")
             with dpg.group(horizontal=True):
                 dpg.add_text("Mode           :", color=(180, 180, 180, 255))
                 dpg.add_combo(
@@ -290,9 +291,28 @@ class BatchSimulationGui:
                         callback=self._on_headless_start,
                         width=90,
                     )
+                    dpg.add_spacer(tag=_LAUNCH_ACTION_SPACER, width=400)
+                    dpg.add_button(
+                        label="Shutdown",
+                        tag=_SHUTDOWN_BUTTON,
+                        callback=self._on_shutdown_simulator,
+                        user_data=False,
+                        width=90,
+                        enabled=False,
+                    )
+                    dpg.add_button(
+                        label="Force Shutdown",
+                        tag=_FORCE_SHUTDOWN_BUTTON,
+                        callback=self._on_shutdown_simulator,
+                        user_data=True,
+                        width=120,
+                        enabled=False,
+                    )
+                with dpg.group(horizontal=True):
+                    dpg.add_text("Status :", color=(180, 180, 180, 255))
                     dpg.add_text("Ready", tag=_HEADLESS_STATUS, color=(140, 140, 140, 255))
 
-            self._section("TCP")
+            self._section("2. TCP CONNECTION")
             with dpg.group(horizontal=True):
                 dpg.add_text("IP   :", color=(180, 180, 180, 255))
                 dpg.add_input_text(tag=_IP, default_value=self.config.host, width=150)
@@ -315,9 +335,8 @@ class BatchSimulationGui:
                 )
                 dpg.add_text("Disconnected", tag=_CONNECTION, color=(255, 120, 120, 255))
 
-            self._section("SIMULATOR")
             with dpg.group(horizontal=True):
-                dpg.add_text("Status :", color=(180, 180, 180, 255))
+                dpg.add_text("Simulator Status :", color=(180, 180, 180, 255))
                 dpg.add_button(
                     label="Get",
                     tag=_SIMULATOR_STATUS_GET,
@@ -327,7 +346,7 @@ class BatchSimulationGui:
                 )
                 dpg.add_text("-", tag=_SIMULATOR_STATUS, color=(140, 140, 140, 255))
 
-            self._section("SUITE")
+            self._section("3. SUITE LOAD")
             with dpg.group(horizontal=True):
                 dpg.add_text("Browse :", color=(180, 180, 180, 255))
                 dpg.add_button(label="...", callback=self._on_browse_suite, width=35)
@@ -350,7 +369,7 @@ class BatchSimulationGui:
                 )
                 dpg.add_text("-", tag=_SUITE_STATUS, color=(140, 140, 140, 255))
 
-            self._section("SIMULATION TIME")
+            self._section("4. SIMULATION TIME")
             with dpg.group(horizontal=True):
                 dpg.add_text("Sim Status :", color=(180, 180, 180, 255))
                 dpg.add_button(
@@ -400,7 +419,7 @@ class BatchSimulationGui:
                 dpg.add_text("ms", color=(160, 160, 160, 255))
             with dpg.group(tag=_VARIABLE_GROUP, show=self.config.time_mode == "Variable"):
                 dpg.add_text(
-                    "Variable mode sends rtf=0 and user_control=0.",
+                    "Variable: rtf=0, user_control=0.",
                     color=(160, 160, 160, 255),
                 )
             with dpg.group(tag=_FIXED_GROUP, show=self.config.time_mode == "Fixed"):
@@ -419,7 +438,7 @@ class BatchSimulationGui:
                         default_value=self.config.user_control,
                     )
 
-            self._section("SCENARIO")
+            self._section("5. SCENARIO CONTROL")
             with dpg.group(horizontal=True):
                 dpg.add_text("Simulation Time :", color=(180, 180, 180, 255))
                 dpg.add_text(
@@ -495,6 +514,7 @@ class BatchSimulationGui:
     def tick(self) -> None:
         if dpg.is_item_shown(_LOGIN_WINDOW):
             self._center_login_card()
+        self._align_launch_actions()
         if _SIMULATOR_STATUS_AUTO_POLL:
             self._poll_simulator_status()
         self._poll_simulation_time()
@@ -516,8 +536,14 @@ class BatchSimulationGui:
         y = max(20, (viewport_height - 350) // 2)
         dpg.set_item_pos(_LOGIN_CARD, (x, y))
 
+    @staticmethod
+    def _align_launch_actions() -> None:
+        available_width = dpg.get_viewport_client_width()
+        spacer_width = max(20, available_width - 360)
+        dpg.configure_item(_LAUNCH_ACTION_SPACER, width=spacer_width)
+
     def _section(self, label: str) -> None:
-        dpg.add_spacer(height=6)
+        dpg.add_spacer(height=3)
         dpg.add_text(label, color=(100, 180, 255, 255))
 
     def _control_button(self, label: str, tag: str, command: str) -> None:
@@ -992,6 +1018,24 @@ class BatchSimulationGui:
     def _on_get_simulator_status(self) -> None:
         self._request_simulator_status(log_result=True)
 
+    def _on_shutdown_simulator(self, sender=None, app_data=None, user_data=None) -> None:
+        force = bool(user_data)
+
+        def work() -> None:
+            self.session.shutdown_simulator(force=force)
+            mode = "force" if force else "graceful"
+            self._log(f"Simulator {mode} shutdown accepted")
+            self.session.close()
+            ui_queue.post(lambda f=force: self._shutdown_succeeded(f))
+
+        self._start_task("Shutdown Simulator", work)
+
+    def _shutdown_succeeded(self, force: bool) -> None:
+        self._headless_process = None
+        self._apply_disconnected()
+        mode = "Force shutdown" if force else "Shutdown"
+        self._set_headless_status(f"{mode} complete", (100, 220, 100, 255))
+
     def _poll_simulator_status(self) -> None:
         now = time.monotonic()
         if now < self._next_simulator_status_poll:
@@ -1177,6 +1221,8 @@ class BatchSimulationGui:
         dpg.configure_item(_DISCONNECT, enabled=not busy)
         dpg.configure_item(_SUITE_LOAD, enabled=connected and not busy)
         dpg.configure_item(_SIMULATOR_STATUS_GET, enabled=connected and not busy)
+        dpg.configure_item(_SHUTDOWN_BUTTON, enabled=connected and not busy)
+        dpg.configure_item(_FORCE_SHUTDOWN_BUTTON, enabled=connected and not busy)
         dpg.configure_item(_TIME_GET, enabled=connected and not busy)
         dpg.configure_item(_TIME_SET, enabled=connected and not busy)
         dpg.configure_item(_HEADLESS_START, enabled=not busy)
@@ -1275,10 +1321,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         gui.build()
         dpg.create_viewport(
             title="MORAI Batch Simulation",
-            width=720,
-            height=600,
-            min_width=640,
-            min_height=540,
+            width=800,
+            height=700,
+            min_width=680,
+            min_height=600,
             resizable=True,
         )
         dpg.setup_dearpygui()

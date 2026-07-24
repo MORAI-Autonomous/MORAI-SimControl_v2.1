@@ -2,8 +2,8 @@
 
 > 이 문서는 자동 생성됩니다. Confluence에서 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.
 >
-> - 생성 시각: `2026-07-21 18:12 +0900`
-> - 기준 브랜치: `feature/hwjung/batchsimulation`
+> - 생성 시각: `2026-07-24 10:58 +0900`
+> - 기준 브랜치: `main`
 
 ## Common Header
 
@@ -30,6 +30,7 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | [`0x1002`](#api-0x1002) | [`GetSimulatorMode`](#api-0x1002) | `0 bytes` | `12 bytes` |
 | [`0x1003`](#api-0x1003) | [`SetSimulatorMode`](#api-0x1003) | `4 bytes` | `8 bytes` |
 | [`0x1004`](#api-0x1004) | [`LoadMap`](#api-0x1004) | `4 + N bytes (N = map_name UTF-8 byte length)` | `8 bytes` |
+| [`0x1005`](#api-0x1005) | [`ShutdownSimulator`](#api-0x1005) | `1 bytes` | `8 bytes` |
 | [`0x1101`](#api-0x1101) | [`GetSimulationTimeStatus`](#api-0x1101) | `0 bytes` | `48 bytes` |
 | [`0x1102`](#api-0x1102) | [`SetSimulationTimeModeCommand`](#api-0x1102) | `20 bytes` | `20 bytes` |
 | [`0x1201`](#api-0x1201) | [`FixedStep`](#api-0x1201) | `4 bytes` | `8 bytes` |
@@ -187,6 +188,36 @@ Notes:
 - Parser: `tcp.parse_result_code()`
 
 Return result code for a load-map request.
+
+Wire layout: `[uint32 result_code] [uint32 detail_code]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `result_code` | `uint32` | - |
+| `detail_code` | `uint32` | - |
+
+<a id="api-0x1005"></a>
+## `0x1005` ShutdownSimulator
+
+### Req
+
+- Payload: `1 bytes`
+- Builder: `tcp.send_shutdown_simulator()`
+
+Request graceful or forced simulator shutdown.
+
+Wire layout: `[uint8 b_force]`
+
+| Field | Type | Description |
+|------|------|-------------|
+| `b_force` | `uint8` | 0=graceful shutdown, 1=forced shutdown |
+
+### Resp
+
+- Payload: `8 bytes`
+- Parser: `tcp.parse_result_code()`
+
+Return result code before the simulator exits.
 
 Wire layout: `[uint32 result_code] [uint32 detail_code]`
 

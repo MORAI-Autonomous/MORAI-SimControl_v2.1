@@ -219,6 +219,26 @@ def send_load_map(sock: socket.socket, request_id: int, map_name: str) -> None:
                  f"LoadMap(0x1004) map={map_name}")
 
 
+def send_shutdown_simulator(
+    sock: socket.socket,
+    request_id: int,
+    b_force: int,
+) -> None:
+    if b_force not in (0, 1):
+        raise ValueError("b_force must be 0 or 1")
+    payload = pack_message_payload(
+        proto.MSG_TYPE_SHUTDOWN_SIMULATOR,
+        {"b_force": b_force},
+    )
+    _send_packet(
+        sock,
+        request_id,
+        proto.MSG_TYPE_SHUTDOWN_SIMULATOR,
+        payload,
+        f"ShutdownSimulator(0x1005) bForce={b_force}",
+    )
+
+
 def send_simulation_time_mode_command(
     sock: socket.socket,
     request_id: int,

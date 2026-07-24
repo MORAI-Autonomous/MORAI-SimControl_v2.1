@@ -18,6 +18,22 @@ import transport.tcp_transport as tcp
 
 
 class TcpPayloadGoldenTests(unittest.TestCase):
+    def test_shutdown_simulator_payload_is_one_byte(self) -> None:
+        self.assertEqual(
+            pack_message_payload(
+                proto.MSG_TYPE_SHUTDOWN_SIMULATOR,
+                {"b_force": 0},
+            ),
+            b"\x00",
+        )
+        self.assertEqual(
+            pack_message_payload(
+                proto.MSG_TYPE_SHUTDOWN_SIMULATOR,
+                {"b_force": 1},
+            ),
+            b"\x01",
+        )
+
     def test_parse_set_simulation_time_mode_result_only_response(self) -> None:
         payload = struct.pack("<II", 0, 0)
 

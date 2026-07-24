@@ -40,6 +40,7 @@ class MessageSpec:
 
 
 TYPE_LABELS: Dict[str, str] = {
+    "uint8": "uint8",
     "int32": "int32",
     "uint32": "uint32",
     "int64": "int64",
@@ -51,6 +52,7 @@ TYPE_LABELS: Dict[str, str] = {
 }
 
 TYPE_SIZES: Dict[str, Optional[int]] = {
+    "uint8": 1,
     "int32": 4,
     "uint32": 4,
     "int64": 8,
@@ -62,6 +64,7 @@ TYPE_SIZES: Dict[str, Optional[int]] = {
 }
 
 STRUCT_FORMAT_CHARS: Dict[str, str] = {
+    "uint8": "B",
     "int32": "i",
     "uint32": "I",
     "int64": "q",
@@ -108,6 +111,16 @@ MESSAGES: tuple[MessageSpec, ...] = (
             FieldSpec("map_name", "string_u32", "Map name string to look up in the map registry"),
         ),
         notes=("Returns InvalidParam if the map name is not found in the registry.",),
+    ),
+    MessageSpec(
+        msg_type=0x1005,
+        name="ShutdownSimulator",
+        direction="request",
+        summary="Request graceful or forced simulator shutdown.",
+        handler="tcp.send_shutdown_simulator()",
+        fields=(
+            FieldSpec("b_force", "uint8", "0=graceful shutdown, 1=forced shutdown"),
+        ),
     ),
     MessageSpec(
         msg_type=0x1101,
@@ -332,6 +345,17 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
         name="LoadMap",
         direction="response",
         summary="Return result code for a load-map request.",
+        parser="tcp.parse_result_code()",
+        fields=(
+            FieldSpec("result_code", "uint32"),
+            FieldSpec("detail_code", "uint32"),
+        ),
+    ),
+    MessageSpec(
+        msg_type=0x1005,
+        name="ShutdownSimulator",
+        direction="response",
+        summary="Return result code before the simulator exits.",
         parser="tcp.parse_result_code()",
         fields=(
             FieldSpec("result_code", "uint32"),

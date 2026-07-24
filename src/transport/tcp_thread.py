@@ -200,6 +200,21 @@ class Receiver(threading.Thread):
                     log.append(f"LoadMap parse_failed rid={request_id}", "WARN")
 
             elif msg_class == proto.MSG_CLASS_RESP \
+                    and msg_type == proto.MSG_TYPE_SHUTDOWN_SIMULATOR:
+                parsed = tcp.parse_result_code(payload)
+                if parsed:
+                    result_code, detail_code = parsed
+                    level = "RECV" if result_code == 0 else "WARN"
+                    log.append(
+                        f"ShutdownSimulator rid={request_id} "
+                        f"result={result_code}({result_to_string(result_code)}) "
+                        f"detail={detail_code}",
+                        level,
+                    )
+                else:
+                    log.append(f"ShutdownSimulator parse_failed rid={request_id}", "WARN")
+
+            elif msg_class == proto.MSG_CLASS_RESP \
                     and msg_type == proto.MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND:
                 parsed = tcp.parse_set_simulation_time_mode_payload(payload)
                 if parsed:
