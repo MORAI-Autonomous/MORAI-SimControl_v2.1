@@ -92,6 +92,7 @@ _SIMULATOR_STATUS_AUTO_POLL = False
 _SIMULATOR_STATUS_POLL_INTERVAL = 1.0
 _SIMULATION_TIME_POLL_INTERVAL = 0.5
 _SCENARIO_TRANSITION_REFRESH_DELAY = 0.25
+_SCENARIO_TRANSITION_MAX_ATTEMPTS = 5
 _GITHUB_URL = "https://github.com/MORAI-Autonomous/MORAI-SimControl_v2.1"
 _TCP_API_URL = (
     "https://github.com/MORAI-Autonomous/MORAI-SimControl_v2.1/"
@@ -133,6 +134,7 @@ class BatchSimulationGui:
         self._suite_loaded = False
         self._closing = False
         self._completed_refresh_armed = False
+        self._last_scenario_name = ""
         self._scenario_refresh_worker: Optional[threading.Thread] = None
         self._headless_login: Optional[MoraiHeadlessLogin] = None
         self._force_login_required = False
@@ -1075,7 +1077,8 @@ class BatchSimulationGui:
 
     def _on_get_status(self) -> None:
         def work() -> None:
-            self.session.get_scenario_status()
+            status = self._get_current_scenario_status()
+            ui_queue.post(lambda s=status: self._apply_scenario_status(s))
 
         self._start_task("Scenario Status", work)
 
@@ -1244,16 +1247,52 @@ class BatchSimulationGui:
         if status.state == 4:
             if not self._completed_refresh_armed:
                 self._completed_refresh_armed = True
-                self._schedule_scenario_status_refresh()
+                completed_name = status.name or self._last_scenario_name
+                self._schedule_scenario_status_refresh(completed_name)
         else:
             self._completed_refresh_armed = False
+            if status.name:
+                self._last_scenario_name = status.name
         self._log(f"Scenario status: {text}")
 
-    def _schedule_scenario_status_refresh(self) -> None:
+    def _schedule_scenario_status_refresh(
+        self,
+        completed_name: str,
+        attempt: int = 0,
+    ) -> None:
         def work() -> None:
             time.sleep(_SCENARIO_TRANSITION_REFRESH_DELAY)
-            if not self._closing:
-                self._refresh_scenario_status()
+            if self._closing or not self.session.is_connected:
+                return
+            try:
+                status = self._get_current_scenario_status()
+            except (DemoSessionError, OSError, ValueError) as exc:
+                self._log(f"Scenario status refresh failed: {exc}", "WARN")
+                return
+
+            stale_play = (
+                status.state == 1
+                and bool(completed_name)
+                and status.name == completed_name
+            )
+            transition_pending = status.state == 4 or stale_play
+            if (
+                transition_pending
+                and attempt + 1 < _SCENARIO_TRANSITION_MAX_ATTEMPTS
+            ):
+                self._schedule_scenario_status_refresh(
+                    completed_name,
+                    attempt=attempt + 1,
+                )
+                return
+            if transition_pending:
+                if stale_play:
+                    self._log(
+                        f"Scenario transition still reports {completed_name!r}",
+                        "WARN",
+                    )
+                return
+            ui_queue.post(lambda s=status: self._apply_scenario_status(s))
 
         self._scenario_refresh_worker = threading.Thread(
             target=work,
@@ -1268,7 +1307,7 @@ class BatchSimulationGui:
             if self._closing or not self.session.is_connected:
                 return
             try:
-                status = self.session.get_scenario_status(publish=False)
+                status = self._get_current_scenario_status()
             except (DemoSessionError, OSError, ValueError) as exc:
                 self._log(f"Scenario status refresh failed: {exc}", "WARN")
                 return
@@ -1284,13 +1323,18 @@ class BatchSimulationGui:
         )
         self._scenario_refresh_worker.start()
 
-    def _refresh_scenario_status(self) -> None:
-        if self._closing or not self.session.is_connected:
-            return
+    def _get_current_scenario_status(self) -> ScenarioStatus:
+        status = self.session.get_scenario_status(publish=False)
         try:
-            self.session.get_scenario_status()
+            suite_status = self.session.get_active_suite_status()
         except (DemoSessionError, OSError, ValueError) as exc:
-            self._log(f"Scenario status refresh failed: {exc}", "WARN")
+            self._log(f"Active suite status refresh failed: {exc}", "WARN")
+            return status
+        active_name = str(suite_status.get("active_scenario_name", "")).strip()
+        return ScenarioStatus(
+            state=status.state,
+            name=active_name or status.name,
+        )
 
     @staticmethod
     def _format_simulation_time(seconds: int, nanos: int) -> str:

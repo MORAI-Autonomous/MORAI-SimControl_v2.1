@@ -48,6 +48,29 @@ def _send_packet(conn: socket.socket, msg_class: int, msg_type: int, request_id:
 
 
 class DemoSessionTests(unittest.TestCase):
+    def test_get_active_suite_status_returns_current_scenario(self) -> None:
+        def handler(conn: socket.socket) -> None:
+            _, msg_type, _, request_id, _, _ = tcp.recv_packet(conn)
+            self.assertEqual(msg_type, proto.MSG_TYPE_ACTIVE_SUITE_STATUS)
+            suite_name = b"SuiteA"
+            scenario_name = b"Scenario02"
+            payload = (
+                struct.pack(proto.RESULT_FMT, 0, 0)
+                + struct.pack("<I", len(suite_name))
+                + suite_name
+                + struct.pack("<I", len(scenario_name))
+                + scenario_name
+                + struct.pack("<I", 0)
+            )
+            _send_packet(conn, proto.MSG_CLASS_RESP, msg_type, request_id, payload)
+
+        server = _TestServer(handler)
+        with DemoSession(server.host, server.port, request_timeout=1.0) as session:
+            response = session.get_active_suite_status()
+        server.join()
+        self.assertEqual(response["active_suite_name"], "SuiteA")
+        self.assertEqual(response["active_scenario_name"], "Scenario02")
+
     def test_shutdown_simulator_sends_force_flag_and_accepts_result(self) -> None:
         def handler(conn: socket.socket) -> None:
             msg_class, msg_type, _, request_id, _, payload = tcp.recv_packet(conn)

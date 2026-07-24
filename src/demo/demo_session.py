@@ -175,6 +175,16 @@ class DemoSession:
             )
         return response
 
+    def get_active_suite_status(
+        self,
+        timeout: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        return self._request_result(
+            proto.MSG_TYPE_ACTIVE_SUITE_STATUS,
+            lambda sock, rid: tcp.send_active_suite_status(sock, rid),
+            timeout,
+        )
+
     def shutdown_simulator(
         self,
         force: bool = False,
@@ -408,6 +418,8 @@ class DemoSession:
             parsed = tcp.parse_get_status_payload(payload)
         elif msg_type == proto.MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND:
             parsed = tcp.parse_set_simulation_time_mode_payload(payload)
+        elif msg_type == proto.MSG_TYPE_ACTIVE_SUITE_STATUS:
+            parsed = tcp.parse_active_suite_status_payload(payload)
         elif msg_type == proto.MSG_TYPE_SCENARIO_STATUS:
             parsed = tcp.parse_scenario_status_payload(payload)
         else:
