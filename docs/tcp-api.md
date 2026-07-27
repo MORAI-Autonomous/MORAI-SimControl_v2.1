@@ -2,7 +2,7 @@
 
 > 이 문서는 자동 생성됩니다. Confluence에서 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.
 >
-> - 생성 시각: `2026-07-24 10:58 +0900`
+> - 생성 시각: `2026-07-24 18:16 +0900`
 > - 기준 브랜치: `main`
 
 ## Common Header
@@ -254,13 +254,13 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 mode] [int32 tar
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
-| `mode` | `uint32` | 1 = TIME_MODE_VARIABLE, 2 = TIME_MODE_FIXED |
-| `target_fps` | `int32` | Target FPS |
-| `physics_delta_time` | `int32` | Physics delta time in ms |
-| `rtf` | `int32` | Fixed only. Variable mode returns 0 |
-| `user_control` | `int32` | Fixed only. Variable mode returns 0 |
+| `result_code` | `uint32` | 0=success, nonzero=failure |
+| `detail_code` | `uint32` | Additional result detail |
+| `mode` | `uint32` | 1=Variable (simulator-managed timing), 2=Fixed (fixed physics interval) |
+| `target_fps` | `int32` | Configured target frame rate |
+| `physics_delta_time` | `int32` | Configured physics update interval in ms |
+| `rtf` | `int32` | Fixed only: 1=Real-Time, 2=Unlimited. Variable mode returns 0 |
+| `user_control` | `int32` | Fixed only: 0=not waiting for external control, 1=waiting for external vehicle control. Variable mode returns 0 |
 | `step_index` | `uint64` | Accumulated step count |
 | `seconds` | `int64` | Simulation time seconds |
 | `nanos` | `int32` | Simulation time nanoseconds remainder |
@@ -273,17 +273,21 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 mode] [int32 tar
 - Payload: `20 bytes`
 - Builder: `tcp.send_simulation_time_mode_command()`
 
-Set simulation time mode using a fixed 20-byte payload.
+Configure how the simulator advances simulation time.
 
 Wire layout: `[int32 mode] [int32 target_fps] [int32 physics_delta_time] [int32 rtf] [int32 user_control]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `mode` | `int32` | 1 = TIME_MODE_VARIABLE, 2 = TIME_MODE_FIXED |
-| `target_fps` | `int32` | Target FPS (10~200) |
-| `physics_delta_time` | `int32` | Physics delta time in ms (5~100) |
-| `rtf` | `int32` | Fixed only. Variable mode must send 0 |
-| `user_control` | `int32` | Fixed only. Variable mode sends 0 |
+| `mode` | `int32` | 1=Variable (simulator-managed timing), 2=Fixed (fixed physics interval) |
+| `target_fps` | `int32` | Target frame rate, 10~200 FPS |
+| `physics_delta_time` | `int32` | Physics update interval, 5~100 ms |
+| `rtf` | `int32` | Fixed only: 1=Real-Time, 2=Unlimited. Variable mode must send 0 |
+| `user_control` | `int32` | Fixed only: 0=do not wait for external vehicle control, 1=wait for external vehicle-control input over TCP or UDP. Variable mode must send 0 |
+
+Notes:
+- With user_control=1, the simulator can remain paused until an external vehicle-control input is received over TCP or UDP.
+- An external controller that waits for its first vehicle-state message before sending control input can deadlock with user_control=1. Send an initial control input or otherwise break the startup dependency.
 
 ### Resp
 
@@ -296,11 +300,11 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 mode] [float32 f
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
-| `mode` | `uint32` | - |
-| `fixed_delta` | `float32` | - |
-| `simulation_speed` | `float32` | - |
+| `result_code` | `uint32` | 0=success, nonzero=failure |
+| `detail_code` | `uint32` | Additional result detail |
+| `mode` | `uint32` | Applied mode: 1=Variable, 2=Fixed |
+| `fixed_delta` | `float32` | Applied fixed time-step value reported by the simulator |
+| `simulation_speed` | `float32` | Applied simulation-speed value reported by the simulator |
 
 <a id="api-0x1201"></a>
 ## `0x1201` FixedStep

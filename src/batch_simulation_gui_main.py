@@ -77,6 +77,8 @@ _RTF = "batch_rtf"
 _USER_CONTROL = "batch_user_control"
 _SIMULATION_TIME = "batch_simulation_time"
 _SCENARIO_STATUS = "batch_scenario_status"
+_ACTIVE_SUITE = "batch_active_suite"
+_ACTIVE_SCENARIO = "batch_active_scenario"
 
 _CONTROL_BUTTONS = (
     "batch_previous_button",
@@ -93,6 +95,7 @@ _SIMULATOR_STATUS_POLL_INTERVAL = 1.0
 _SIMULATION_TIME_POLL_INTERVAL = 0.5
 _SCENARIO_TRANSITION_REFRESH_DELAY = 0.25
 _SCENARIO_TRANSITION_MAX_ATTEMPTS = 5
+_PLAY_STATUS_MAX_ATTEMPTS = 12
 _GITHUB_URL = "https://github.com/MORAI-Autonomous/MORAI-SimControl_v2.1"
 _TCP_API_URL = (
     "https://github.com/MORAI-Autonomous/MORAI-SimControl_v2.1/"
@@ -119,6 +122,25 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _bind_unicode_font() -> None:
+    font_candidates = (
+        Path("C:/Windows/Fonts/malgun.ttf"),
+        Path("C:/Windows/Fonts/gulim.ttc"),
+        Path("/mnt/c/Windows/Fonts/malgun.ttf"),
+        Path("/mnt/c/Windows/Fonts/gulim.ttc"),
+    )
+    for font_path in font_candidates:
+        if not font_path.is_file():
+            continue
+        with dpg.font_registry():
+            with dpg.font(str(font_path), 14) as font:
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Korean)
+                dpg.add_font_range(0x2000, 0x27FF)
+        dpg.bind_font(font)
+        return
+
+
 class BatchSimulationGui:
     def __init__(self, config: BatchSimulationConfig, config_path: str) -> None:
         self.config = config
@@ -134,7 +156,9 @@ class BatchSimulationGui:
         self._suite_loaded = False
         self._closing = False
         self._completed_refresh_armed = False
-        self._last_scenario_name = ""
+        self._active_suite_name = ""
+        self._active_scenario_name = ""
+        self._scenario_refresh_generation = 0
         self._scenario_refresh_worker: Optional[threading.Thread] = None
         self._headless_login: Optional[MoraiHeadlessLogin] = None
         self._force_login_required = False
@@ -421,7 +445,7 @@ class BatchSimulationGui:
                 dpg.add_text("ms", color=(160, 160, 160, 255))
             with dpg.group(tag=_VARIABLE_GROUP, show=self.config.time_mode == "Variable"):
                 dpg.add_text(
-                    "Variable: rtf=0, user_control=0.",
+                    "Variable: simulator-managed timing; RTF and external control are disabled.",
                     color=(160, 160, 160, 255),
                 )
             with dpg.group(tag=_FIXED_GROUP, show=self.config.time_mode == "Fixed"):
@@ -436,9 +460,19 @@ class BatchSimulationGui:
                     dpg.add_spacer(width=12)
                     dpg.add_checkbox(
                         tag=_USER_CONTROL,
-                        label="User Control",
+                        label="Wait for External Control",
                         default_value=self.config.user_control,
                     )
+                    with dpg.tooltip(_USER_CONTROL):
+                        dpg.add_text(
+                            "Fixed mode only.\n"
+                            "Waits for external vehicle-control input over TCP or UDP.\n"
+                            "The simulator may remain paused until the first input arrives."
+                        )
+                dpg.add_text(
+                    "External Control can start paused until TCP or UDP control input arrives.",
+                    color=(160, 160, 160, 255),
+                )
 
             self._section("5. SCENARIO CONTROL")
             with dpg.group(horizontal=True):
@@ -456,7 +490,7 @@ class BatchSimulationGui:
                 self._control_button("Pause", "batch_pause_button", "pause")
                 self._control_button("Next", "batch_next_button", "next")
             with dpg.group(horizontal=True):
-                dpg.add_text("Status    :", color=(180, 180, 180, 255))
+                dpg.add_text("Control Status  :", color=(180, 180, 180, 255))
                 dpg.add_button(
                     label="Get",
                     tag="batch_status_button",
@@ -465,6 +499,12 @@ class BatchSimulationGui:
                     enabled=False,
                 )
                 dpg.add_text("-", tag=_SCENARIO_STATUS, color=(140, 140, 140, 255))
+            with dpg.group(horizontal=True):
+                dpg.add_text("Active Suite    :", color=(180, 180, 180, 255))
+                dpg.add_text("-", tag=_ACTIVE_SUITE, color=(140, 140, 140, 255))
+            with dpg.group(horizontal=True):
+                dpg.add_text("Active Scenario :", color=(180, 180, 180, 255))
+                dpg.add_text("-", tag=_ACTIVE_SCENARIO, color=(140, 140, 140, 255))
 
     def start(self) -> None:
         if self.config.remember_login:
@@ -679,10 +719,10 @@ class BatchSimulationGui:
         if not path:
             self._log("Suite path is required", "WARN")
             return
+        self._prepare_suite_load()
 
         def work() -> None:
             self._suite_loaded = False
-            ui_queue.post(lambda: self._set_suite_status("Loading...", (255, 190, 90, 255)))
             started = time.monotonic()
             self._log(f"Loading suite: {path}")
             response = self.session.load_suite(path, timeout=self.config.load_timeout)
@@ -701,8 +741,26 @@ class BatchSimulationGui:
                     (100, 220, 100, 255),
                 )
             )
+            self._schedule_active_suite_refresh(
+                previous_name="",
+                max_attempts=_PLAY_STATUS_MAX_ATTEMPTS,
+            )
 
         self._start_task("Load Suite", work)
+
+    def _prepare_suite_load(self) -> None:
+        self._scenario_refresh_generation += 1
+        self._completed_refresh_armed = False
+        self._active_suite_name = ""
+        self._active_scenario_name = ""
+        self._set_suite_status("Loading...", (255, 190, 90, 255))
+        dpg.set_value(_SCENARIO_STATUS, "-")
+        dpg.configure_item(_SCENARIO_STATUS, color=(140, 140, 140, 255))
+        dpg.set_value(_ACTIVE_SUITE, "-")
+        dpg.configure_item(_ACTIVE_SUITE, color=(140, 140, 140, 255))
+        dpg.set_value(_ACTIVE_SCENARIO, "-")
+        dpg.configure_item(_ACTIVE_SCENARIO, color=(140, 140, 140, 255))
+        dpg.set_value(_SIMULATION_TIME, "0:00.000")
 
     def _on_time_mode_changed(self, sender=None, app_data=None) -> None:
         mode = str(app_data if app_data is not None else dpg.get_value(_TIME_MODE))
@@ -1070,15 +1128,17 @@ class BatchSimulationGui:
             action = getattr(self.session, command)
             action("")
             self._log(f"Scenario {command} accepted")
-            if command == "play":
-                self._schedule_play_status_refresh()
 
         self._start_task(f"Scenario {command}", work)
 
     def _on_get_status(self) -> None:
         def work() -> None:
-            status = self._get_current_scenario_status()
-            ui_queue.post(lambda s=status: self._apply_scenario_status(s))
+            scenario_status = self.session.get_scenario_status(publish=False)
+            suite_status = self.session.get_active_suite_status()
+            ui_queue.post(
+                lambda scenario=scenario_status, suite=suite_status:
+                    self._apply_scenario_snapshot(scenario, suite)
+            )
 
         self._start_task("Scenario Status", work)
 
@@ -1238,103 +1298,102 @@ class BatchSimulationGui:
 
     def _on_scenario_status(self, status: ScenarioStatus) -> None:
         ui_queue.post(lambda s=status: self._apply_scenario_status(s))
+        if status.state == 1:
+            self._schedule_active_suite_refresh(
+                previous_name="",
+                max_attempts=1,
+            )
 
     def _apply_scenario_status(self, status: ScenarioStatus) -> None:
-        state = _STATE_NAMES.get(status.state, f"UNKNOWN({status.state})")
-        text = state if not status.name else f"{state} ({status.name})"
-        dpg.set_value(_SCENARIO_STATUS, text)
-        dpg.configure_item(_SCENARIO_STATUS, color=(100, 220, 100, 255))
+        text = _STATE_NAMES.get(status.state, f"UNKNOWN({status.state})")
         if status.state == 4:
             if not self._completed_refresh_armed:
                 self._completed_refresh_armed = True
-                completed_name = status.name or self._last_scenario_name
-                self._schedule_scenario_status_refresh(completed_name)
+                self._schedule_active_suite_refresh(
+                    previous_name=self._active_scenario_name,
+                    max_attempts=_SCENARIO_TRANSITION_MAX_ATTEMPTS,
+                )
         else:
             self._completed_refresh_armed = False
-            if status.name:
-                self._last_scenario_name = status.name
-        self._log(f"Scenario status: {text}")
+        dpg.set_value(_SCENARIO_STATUS, text)
+        dpg.configure_item(_SCENARIO_STATUS, color=(100, 220, 100, 255))
+        self._log(f"Scenario control status: {text}")
 
-    def _schedule_scenario_status_refresh(
+    def _apply_active_suite_status(self, suite_status: Dict[str, object]) -> None:
+        suite_name = str(suite_status.get("active_suite_name", "")).strip()
+        scenario_name = str(suite_status.get("active_scenario_name", "")).strip()
+        self._active_suite_name = suite_name
+        self._active_scenario_name = scenario_name
+        dpg.set_value(_ACTIVE_SUITE, suite_name or "-")
+        dpg.configure_item(_ACTIVE_SUITE, color=(100, 220, 100, 255))
+        dpg.set_value(_ACTIVE_SCENARIO, scenario_name or "-")
+        dpg.configure_item(_ACTIVE_SCENARIO, color=(100, 220, 100, 255))
+        self._log(
+            f"Active suite status: suite={suite_name or '-'} "
+            f"scenario={scenario_name or '-'}"
+        )
+
+    def _apply_scenario_snapshot(
         self,
-        completed_name: str,
-        attempt: int = 0,
+        scenario_status: ScenarioStatus,
+        suite_status: Dict[str, object],
     ) -> None:
+        self._apply_scenario_status(scenario_status)
+        self._apply_active_suite_status(suite_status)
+
+    def _schedule_active_suite_refresh(
+        self,
+        previous_name: str,
+        max_attempts: int,
+        attempt: int = 0,
+        generation: Optional[int] = None,
+    ) -> None:
+        refresh_generation = (
+            self._scenario_refresh_generation
+            if generation is None
+            else generation
+        )
+
         def work() -> None:
             time.sleep(_SCENARIO_TRANSITION_REFRESH_DELAY)
-            if self._closing or not self.session.is_connected:
-                return
-            try:
-                status = self._get_current_scenario_status()
-            except (DemoSessionError, OSError, ValueError) as exc:
-                self._log(f"Scenario status refresh failed: {exc}", "WARN")
-                return
-
-            stale_play = (
-                status.state == 1
-                and bool(completed_name)
-                and status.name == completed_name
-            )
-            transition_pending = status.state == 4 or stale_play
             if (
-                transition_pending
-                and attempt + 1 < _SCENARIO_TRANSITION_MAX_ATTEMPTS
+                self._closing
+                or refresh_generation != self._scenario_refresh_generation
+                or not self.session.is_connected
             ):
-                self._schedule_scenario_status_refresh(
-                    completed_name,
+                return
+            suite_status: Optional[Dict[str, object]] = None
+            try:
+                suite_status = self.session.get_active_suite_status()
+            except (DemoSessionError, OSError, ValueError) as exc:
+                self._log(f"Active suite status refresh failed: {exc}", "WARN")
+            else:
+                ui_queue.post(
+                    lambda status=suite_status: self._apply_active_suite_status(status)
+                )
+
+            active_name = (
+                str(suite_status.get("active_scenario_name", "")).strip()
+                if suite_status is not None
+                else ""
+            )
+            if active_name and active_name != previous_name:
+                return
+            if attempt + 1 < max_attempts:
+                self._schedule_active_suite_refresh(
+                    previous_name=previous_name,
+                    max_attempts=max_attempts,
                     attempt=attempt + 1,
+                    generation=refresh_generation,
                 )
                 return
-            if transition_pending:
-                if stale_play:
-                    self._log(
-                        f"Scenario transition still reports {completed_name!r}",
-                        "WARN",
-                    )
-                return
-            ui_queue.post(lambda s=status: self._apply_scenario_status(s))
 
         self._scenario_refresh_worker = threading.Thread(
             target=work,
-            name="BatchGui-ScenarioTransition",
+            name="BatchGui-ActiveScenario",
             daemon=True,
         )
         self._scenario_refresh_worker.start()
-
-    def _schedule_play_status_refresh(self, attempt: int = 0) -> None:
-        def work() -> None:
-            time.sleep(_SCENARIO_TRANSITION_REFRESH_DELAY)
-            if self._closing or not self.session.is_connected:
-                return
-            try:
-                status = self._get_current_scenario_status()
-            except (DemoSessionError, OSError, ValueError) as exc:
-                self._log(f"Scenario status refresh failed: {exc}", "WARN")
-                return
-            if status.state == 3 and attempt == 0:
-                self._schedule_play_status_refresh(attempt=1)
-                return
-            ui_queue.post(lambda s=status: self._apply_scenario_status(s))
-
-        self._scenario_refresh_worker = threading.Thread(
-            target=work,
-            name="BatchGui-PlayStatus",
-            daemon=True,
-        )
-        self._scenario_refresh_worker.start()
-
-    def _get_current_scenario_status(self) -> ScenarioStatus:
-        status = self.session.get_scenario_status(publish=False)
-        try:
-            suite_status = self.session.get_active_suite_status()
-        except (DemoSessionError, OSError, ValueError) as exc:
-            self._log(f"Active suite status refresh failed: {exc}", "WARN")
-            return status
-        active_name = str(suite_status.get("active_scenario_name", "")).strip()
-        return ScenarioStatus(
-            state=status.state,
-            name=active_name or status.name,
-        )
 
     @staticmethod
     def _format_simulation_time(seconds: int, nanos: int) -> str:
@@ -1360,6 +1419,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 2
 
     dpg.create_context()
+    _bind_unicode_font()
     gui = BatchSimulationGui(config, args.config)
     try:
         gui.build()

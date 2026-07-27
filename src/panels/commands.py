@@ -163,7 +163,10 @@ def build(parent: int | str) -> None:
             dpg.add_text("ms", color=(160, 160, 160, 255))
 
         with dpg.group(tag="sim_variable_group", show=False):
-            dpg.add_text("Variable mode sends rtf=0 and user_control=0.", color=(160, 160, 160, 255))
+            dpg.add_text(
+                "Variable: simulator-managed timing; RTF and external control are disabled.",
+                color=(160, 160, 160, 255),
+            )
 
         with dpg.group(tag="sim_fixed_group", show=True):
             with dpg.group(horizontal=True):
@@ -171,7 +174,21 @@ def build(parent: int | str) -> None:
                 dpg.add_combo(tag="sim_rtf", items=_RTF_ITEMS,
                               default_value="Real-Time", width=105)
                 dpg.add_spacer(width=12)
-                dpg.add_checkbox(tag="sim_user_control", label="User Control", default_value=False)
+                dpg.add_checkbox(
+                    tag="sim_user_control",
+                    label="Wait for External Control",
+                    default_value=False,
+                )
+                with dpg.tooltip("sim_user_control"):
+                    dpg.add_text(
+                        "Fixed mode only.\n"
+                        "Waits for external vehicle-control input over TCP or UDP.\n"
+                        "The simulator may remain paused until the first input arrives."
+                    )
+            dpg.add_text(
+                "External Control can start paused until TCP or UDP control input arrives.",
+                color=(160, 160, 160, 255),
+            )
 
         # ── Scenario ───────────────────────────────────────
         _section("SCENARIO")

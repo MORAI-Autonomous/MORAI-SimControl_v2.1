@@ -134,14 +134,39 @@ MESSAGES: tuple[MessageSpec, ...] = (
         msg_type=0x1102,
         name="SetSimulationTimeModeCommand",
         direction="request",
-        summary="Set simulation time mode using a fixed 20-byte payload.",
+        summary="Configure how the simulator advances simulation time.",
         handler="tcp.send_simulation_time_mode_command()",
         fields=(
-            FieldSpec("mode", "int32", "1 = TIME_MODE_VARIABLE, 2 = TIME_MODE_FIXED"),
-            FieldSpec("target_fps", "int32", "Target FPS (10~200)"),
-            FieldSpec("physics_delta_time", "int32", "Physics delta time in ms (5~100)"),
-            FieldSpec("rtf", "int32", "Fixed only. Variable mode must send 0"),
-            FieldSpec("user_control", "int32", "Fixed only. Variable mode sends 0"),
+            FieldSpec(
+                "mode",
+                "int32",
+                "1=Variable (simulator-managed timing), 2=Fixed (fixed physics interval)",
+            ),
+            FieldSpec("target_fps", "int32", "Target frame rate, 10~200 FPS"),
+            FieldSpec(
+                "physics_delta_time",
+                "int32",
+                "Physics update interval, 5~100 ms",
+            ),
+            FieldSpec(
+                "rtf",
+                "int32",
+                "Fixed only: 1=Real-Time, 2=Unlimited. Variable mode must send 0",
+            ),
+            FieldSpec(
+                "user_control",
+                "int32",
+                "Fixed only: 0=do not wait for external vehicle control, "
+                "1=wait for external vehicle-control input over TCP or UDP. "
+                "Variable mode must send 0",
+            ),
+        ),
+        notes=(
+            "With user_control=1, the simulator can remain paused until an external "
+            "vehicle-control input is received over TCP or UDP.",
+            "An external controller that waits for its first vehicle-state message "
+            "before sending control input can deadlock with user_control=1. Send an "
+            "initial control input or otherwise break the startup dependency.",
         ),
     ),
     MessageSpec(
@@ -369,13 +394,30 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
         summary="Return result code plus current simulation time mode and simulation clock state.",
         parser="tcp.parse_get_status_payload()",
         fields=(
-            FieldSpec("result_code", "uint32"),
-            FieldSpec("detail_code", "uint32"),
-            FieldSpec("mode", "uint32", "1 = TIME_MODE_VARIABLE, 2 = TIME_MODE_FIXED"),
-            FieldSpec("target_fps", "int32", "Target FPS"),
-            FieldSpec("physics_delta_time", "int32", "Physics delta time in ms"),
-            FieldSpec("rtf", "int32", "Fixed only. Variable mode returns 0"),
-            FieldSpec("user_control", "int32", "Fixed only. Variable mode returns 0"),
+            FieldSpec("result_code", "uint32", "0=success, nonzero=failure"),
+            FieldSpec("detail_code", "uint32", "Additional result detail"),
+            FieldSpec(
+                "mode",
+                "uint32",
+                "1=Variable (simulator-managed timing), 2=Fixed (fixed physics interval)",
+            ),
+            FieldSpec("target_fps", "int32", "Configured target frame rate"),
+            FieldSpec(
+                "physics_delta_time",
+                "int32",
+                "Configured physics update interval in ms",
+            ),
+            FieldSpec(
+                "rtf",
+                "int32",
+                "Fixed only: 1=Real-Time, 2=Unlimited. Variable mode returns 0",
+            ),
+            FieldSpec(
+                "user_control",
+                "int32",
+                "Fixed only: 0=not waiting for external control, "
+                "1=waiting for external vehicle control. Variable mode returns 0",
+            ),
             FieldSpec("step_index", "uint64", "Accumulated step count"),
             FieldSpec("seconds", "int64", "Simulation time seconds"),
             FieldSpec("nanos", "int32", "Simulation time nanoseconds remainder"),
@@ -388,11 +430,23 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
         summary="Return result code and the applied simulation time settings.",
         parser="tcp.parse_set_simulation_time_mode_payload()",
         fields=(
-            FieldSpec("result_code", "uint32"),
-            FieldSpec("detail_code", "uint32"),
-            FieldSpec("mode", "uint32"),
-            FieldSpec("fixed_delta", "float32"),
-            FieldSpec("simulation_speed", "float32"),
+            FieldSpec("result_code", "uint32", "0=success, nonzero=failure"),
+            FieldSpec("detail_code", "uint32", "Additional result detail"),
+            FieldSpec(
+                "mode",
+                "uint32",
+                "Applied mode: 1=Variable, 2=Fixed",
+            ),
+            FieldSpec(
+                "fixed_delta",
+                "float32",
+                "Applied fixed time-step value reported by the simulator",
+            ),
+            FieldSpec(
+                "simulation_speed",
+                "float32",
+                "Applied simulation-speed value reported by the simulator",
+            ),
         ),
     ),
     MessageSpec(

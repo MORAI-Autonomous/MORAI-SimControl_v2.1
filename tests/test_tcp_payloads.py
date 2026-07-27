@@ -424,9 +424,9 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         self.assertEqual(parsed["object_id"], object_id)
 
     def test_parse_active_suite_status_payload(self) -> None:
-        suite_name = "SuiteA"
-        scenario_name = "Scenario01"
-        scenario_list = ["Scenario01", "Scenario02"]
+        suite_name = "테스트 Suite"
+        scenario_name = "시나리오 01"
+        scenario_list = ["시나리오 01", "시나리오 02"]
         payload = (
             struct.pack(proto.RESULT_FMT, 0, 0)
             + struct.pack("<I", len(suite_name.encode("utf-8")))
