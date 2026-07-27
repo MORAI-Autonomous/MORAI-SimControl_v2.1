@@ -13,8 +13,8 @@ import webbrowser
 import dearpygui.dearpygui as dpg
 
 from demo import DemoSession, DemoSessionError, ScenarioStatus
-from demo.batch_config import (
-    BatchSimulationConfig,
+from demo.simulation_control_config import (
+    SimulationControlConfig,
     DEFAULT_CONFIG_PATH,
     load_config,
     save_config,
@@ -31,62 +31,62 @@ import transport.protocol_defs as proto
 import utils.ui_queue as ui_queue
 
 
-_WINDOW = "batch_main_window"
-_LOGIN_WINDOW = "batch_login_window"
-_LOGIN_CARD = "batch_login_card"
-_LOGIN_STATUS = "batch_login_status"
-_RUN_MODE = "batch_run_mode"
-_HEADLESS_LOGIN_GROUP = "batch_headless_login_group"
-_HEADLESS_AUTH_GROUP = "batch_headless_auth_group"
-_HEADLESS_START = "batch_headless_start_button"
-_LAUNCH_ACTION_SPACER = "batch_launch_action_spacer"
-_LOGIN_ID = "batch_login_id"
-_LOGIN_PASSWORD = "batch_login_password"
-_LOGIN_BUTTON = "batch_login_button"
-_REMEMBER_LOGIN = "batch_remember_login"
-_LOGOUT_BUTTON = "batch_logout_button"
-_GITHUB_BUTTON = "batch_github_button"
-_TCP_API_BUTTON = "batch_tcp_api_button"
-_SIMULATOR_PATH = "batch_simulator_path"
-_SIMULATOR_BROWSE = "batch_simulator_browse_button"
-_VERIFICATION_GROUP = "batch_verification_group"
-_VERIFICATION_CODE = "batch_verification_code"
-_VERIFY_BUTTON = "batch_verify_button"
-_HEADLESS_STATUS = "batch_headless_status"
-_IP = "batch_tcp_ip"
-_PORT = "batch_tcp_port"
-_CONNECTION = "batch_connection_status"
-_CONNECT = "batch_connect_button"
-_DISCONNECT = "batch_disconnect_button"
-_SIMULATOR_STATUS = "batch_simulator_status"
-_SIMULATOR_STATUS_GET = "batch_simulator_status_get_button"
-_SHUTDOWN_BUTTON = "batch_shutdown_button"
-_FORCE_SHUTDOWN_BUTTON = "batch_force_shutdown_button"
-_SUITE_PATH = "batch_suite_path"
-_SUITE_LOAD = "batch_suite_load_button"
-_SUITE_STATUS = "batch_suite_status"
-_TIME_STATUS = "batch_time_status"
-_TIME_GET = "batch_time_get_button"
-_TIME_MODE = "batch_time_mode"
-_TIME_SET = "batch_time_set_button"
-_TARGET_FPS = "batch_target_fps"
-_PHYSICS_DT = "batch_physics_dt"
-_VARIABLE_GROUP = "batch_variable_group"
-_FIXED_GROUP = "batch_fixed_group"
-_RTF = "batch_rtf"
-_USER_CONTROL = "batch_user_control"
-_SIMULATION_TIME = "batch_simulation_time"
-_SCENARIO_STATUS = "batch_scenario_status"
-_ACTIVE_SUITE = "batch_active_suite"
-_ACTIVE_SCENARIO = "batch_active_scenario"
+_WINDOW = "simulation_control_main_window"
+_LOGIN_WINDOW = "simulation_control_login_window"
+_LOGIN_CARD = "simulation_control_login_card"
+_LOGIN_STATUS = "simulation_control_login_status"
+_RUN_MODE = "simulation_control_run_mode"
+_HEADLESS_LOGIN_GROUP = "simulation_control_headless_login_group"
+_HEADLESS_AUTH_GROUP = "simulation_control_headless_auth_group"
+_HEADLESS_START = "simulation_control_headless_start_button"
+_LAUNCH_ACTION_SPACER = "simulation_control_launch_action_spacer"
+_LOGIN_ID = "simulation_control_login_id"
+_LOGIN_PASSWORD = "simulation_control_login_password"
+_LOGIN_BUTTON = "simulation_control_login_button"
+_REMEMBER_LOGIN = "simulation_control_remember_login"
+_LOGOUT_BUTTON = "simulation_control_logout_button"
+_GITHUB_BUTTON = "simulation_control_github_button"
+_TCP_API_BUTTON = "simulation_control_tcp_api_button"
+_SIMULATOR_PATH = "simulation_control_simulator_path"
+_SIMULATOR_BROWSE = "simulation_control_simulator_browse_button"
+_VERIFICATION_GROUP = "simulation_control_verification_group"
+_VERIFICATION_CODE = "simulation_control_verification_code"
+_VERIFY_BUTTON = "simulation_control_verify_button"
+_HEADLESS_STATUS = "simulation_control_headless_status"
+_IP = "simulation_control_tcp_ip"
+_PORT = "simulation_control_tcp_port"
+_CONNECTION = "simulation_control_connection_status"
+_CONNECT = "simulation_control_connect_button"
+_DISCONNECT = "simulation_control_disconnect_button"
+_SIMULATOR_STATUS = "simulation_control_simulator_status"
+_SIMULATOR_STATUS_GET = "simulation_control_simulator_status_get_button"
+_SHUTDOWN_BUTTON = "simulation_control_shutdown_button"
+_FORCE_SHUTDOWN_BUTTON = "simulation_control_force_shutdown_button"
+_SUITE_PATH = "simulation_control_suite_path"
+_SUITE_LOAD = "simulation_control_suite_load_button"
+_SUITE_STATUS = "simulation_control_suite_status"
+_TIME_STATUS = "simulation_control_time_status"
+_TIME_GET = "simulation_control_time_get_button"
+_TIME_MODE = "simulation_control_time_mode"
+_TIME_SET = "simulation_control_time_set_button"
+_TARGET_FPS = "simulation_control_target_fps"
+_PHYSICS_DT = "simulation_control_physics_dt"
+_VARIABLE_GROUP = "simulation_control_variable_group"
+_FIXED_GROUP = "simulation_control_fixed_group"
+_RTF = "simulation_control_rtf"
+_USER_CONTROL = "simulation_control_user_control"
+_SIMULATION_TIME = "simulation_control_simulation_time"
+_SCENARIO_STATUS = "simulation_control_scenario_status"
+_ACTIVE_SUITE = "simulation_control_active_suite"
+_ACTIVE_SCENARIO = "simulation_control_active_scenario"
 
 _CONTROL_BUTTONS = (
-    "batch_previous_button",
-    "batch_stop_button",
-    "batch_play_button",
-    "batch_pause_button",
-    "batch_next_button",
-    "batch_status_button",
+    "simulation_control_previous_button",
+    "simulation_control_stop_button",
+    "simulation_control_play_button",
+    "simulation_control_pause_button",
+    "simulation_control_next_button",
+    "simulation_control_status_button",
 )
 
 _STATE_NAMES = {1: "PLAY", 2: "PAUSE", 3: "STOP", 4: "COMPLETED"}
@@ -104,16 +104,19 @@ _TCP_API_URL = (
 _RTF_VALUES = {"Real-Time": 1, "Unlimited": 2}
 _ICON_SIZE = 16
 _ICON_TEXTURES = {
-    "previous": "batch_icon_previous",
-    "stop": "batch_icon_stop",
-    "play": "batch_icon_play",
-    "pause": "batch_icon_pause",
-    "next": "batch_icon_next",
+    "previous": "simulation_control_icon_previous",
+    "stop": "simulation_control_icon_stop",
+    "play": "simulation_control_icon_play",
+    "pause": "simulation_control_icon_pause",
+    "next": "simulation_control_icon_next",
 }
+_SIMULATION_CONTROL_TITLE = "MORAI Simulation Control"
+_TITLE_FONT = "simulation_control_title_font"
+_SECTION_FONT = "simulation_control_section_font"
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="MORAI batch simulation GUI")
+    parser = argparse.ArgumentParser(description="MORAI simulation control GUI")
     parser.add_argument(
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
@@ -137,12 +140,20 @@ def _bind_unicode_font() -> None:
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Korean)
                 dpg.add_font_range(0x2000, 0x27FF)
+            with dpg.font(str(font_path), 16, tag=_SECTION_FONT):
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Korean)
+                dpg.add_font_range(0x2000, 0x27FF)
+            with dpg.font(str(font_path), 18, tag=_TITLE_FONT):
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Korean)
+                dpg.add_font_range(0x2000, 0x27FF)
         dpg.bind_font(font)
         return
 
 
-class BatchSimulationGui:
-    def __init__(self, config: BatchSimulationConfig, config_path: str) -> None:
+class SimulationControlGui:
+    def __init__(self, config: SimulationControlConfig, config_path: str) -> None:
         self.config = config
         self.config_path = config_path
         self.session = self._create_session(config.host, config.port)
@@ -262,7 +273,7 @@ class BatchSimulationGui:
                         wrap=280,
                     )
 
-        with dpg.window(tag=_WINDOW, label="MORAI Batch Simulation", show=False):
+        with dpg.window(tag=_WINDOW, label=_SIMULATION_CONTROL_TITLE, show=False):
             with dpg.menu_bar():
                 with dpg.menu(label="Links"):
                     dpg.add_menu_item(
@@ -283,10 +294,15 @@ class BatchSimulationGui:
                         tag=_LOGOUT_BUTTON,
                         callback=self._on_logout,
                     )
-            dpg.add_text("MORAI Batch Simulation", color=(80, 170, 255, 255))
+            title_item = dpg.add_text(
+                _SIMULATION_CONTROL_TITLE,
+                color=(80, 170, 255, 255),
+            )
+            if dpg.does_item_exist(_TITLE_FONT):
+                dpg.bind_item_font(title_item, _TITLE_FONT)
             dpg.add_separator()
 
-            self._section("1. SIMULATOR LAUNCH")
+            self._section("Simulation Launch")
             with dpg.group(horizontal=True):
                 dpg.add_text("Mode           :", color=(180, 180, 180, 255))
                 dpg.add_combo(
@@ -338,7 +354,7 @@ class BatchSimulationGui:
                     dpg.add_text("Status :", color=(180, 180, 180, 255))
                     dpg.add_text("Ready", tag=_HEADLESS_STATUS, color=(140, 140, 140, 255))
 
-            self._section("2. TCP CONNECTION")
+            self._section("TCP Connection")
             with dpg.group(horizontal=True):
                 dpg.add_text("IP   :", color=(180, 180, 180, 255))
                 dpg.add_input_text(tag=_IP, default_value=self.config.host, width=150)
@@ -372,7 +388,7 @@ class BatchSimulationGui:
                 )
                 dpg.add_text("-", tag=_SIMULATOR_STATUS, color=(140, 140, 140, 255))
 
-            self._section("3. SUITE LOAD")
+            self._section("Suite Load")
             with dpg.group(horizontal=True):
                 dpg.add_text("Browse :", color=(180, 180, 180, 255))
                 dpg.add_button(label="...", callback=self._on_browse_suite, width=35)
@@ -395,7 +411,7 @@ class BatchSimulationGui:
                 )
                 dpg.add_text("-", tag=_SUITE_STATUS, color=(140, 140, 140, 255))
 
-            self._section("4. SIMULATION TIME")
+            self._section("Simulation Time")
             with dpg.group(horizontal=True):
                 dpg.add_text("Sim Status :", color=(180, 180, 180, 255))
                 dpg.add_button(
@@ -474,7 +490,7 @@ class BatchSimulationGui:
                     color=(160, 160, 160, 255),
                 )
 
-            self._section("5. SCENARIO CONTROL")
+            self._section("Scenario Control")
             with dpg.group(horizontal=True):
                 dpg.add_text("Simulation Time :", color=(180, 180, 180, 255))
                 dpg.add_text(
@@ -484,16 +500,16 @@ class BatchSimulationGui:
                 )
             with dpg.group(horizontal=True):
                 dpg.add_text("Control   :", color=(180, 180, 180, 255))
-                self._control_button("Previous", "batch_previous_button", "previous")
-                self._control_button("Stop", "batch_stop_button", "stop")
-                self._control_button("Play", "batch_play_button", "play")
-                self._control_button("Pause", "batch_pause_button", "pause")
-                self._control_button("Next", "batch_next_button", "next")
+                self._control_button("Previous", "simulation_control_previous_button", "previous")
+                self._control_button("Stop", "simulation_control_stop_button", "stop")
+                self._control_button("Play", "simulation_control_play_button", "play")
+                self._control_button("Pause", "simulation_control_pause_button", "pause")
+                self._control_button("Next", "simulation_control_next_button", "next")
             with dpg.group(horizontal=True):
                 dpg.add_text("Control Status  :", color=(180, 180, 180, 255))
                 dpg.add_button(
                     label="Get",
-                    tag="batch_status_button",
+                    tag="simulation_control_status_button",
                     callback=self._on_get_status,
                     width=75,
                     enabled=False,
@@ -528,7 +544,7 @@ class BatchSimulationGui:
         if not dpg.does_item_exist(_WINDOW):
             return
         try:
-            saved = BatchSimulationConfig(
+            saved = SimulationControlConfig(
                 suite_path=str(dpg.get_value(_SUITE_PATH)).strip(),
                 scenario_name=self.config.scenario_name,
                 host=str(dpg.get_value(_IP)).strip(),
@@ -586,7 +602,9 @@ class BatchSimulationGui:
 
     def _section(self, label: str) -> None:
         dpg.add_spacer(height=3)
-        dpg.add_text(label, color=(100, 180, 255, 255))
+        section_item = dpg.add_text(label, color=(100, 180, 255, 255))
+        if dpg.does_item_exist(_SECTION_FONT):
+            dpg.bind_item_font(section_item, _SECTION_FONT)
 
     def _control_button(self, label: str, tag: str, command: str) -> None:
         dpg.add_image_button(
@@ -694,7 +712,7 @@ class BatchSimulationGui:
             if path:
                 ui_queue.post(lambda p=path: dpg.set_value(_SUITE_PATH, p))
 
-        threading.Thread(target=browse, name="BatchGui-SuiteBrowse", daemon=True).start()
+        threading.Thread(target=browse, name="SimulationControl-SuiteBrowse", daemon=True).start()
 
     def _on_browse_simulator(self) -> None:
         def browse() -> None:
@@ -712,7 +730,7 @@ class BatchSimulationGui:
             if path:
                 ui_queue.post(lambda p=path: dpg.set_value(_SIMULATOR_PATH, p))
 
-        threading.Thread(target=browse, name="BatchGui-SimulatorBrowse", daemon=True).start()
+        threading.Thread(target=browse, name="SimulationControl-SimulatorBrowse", daemon=True).start()
 
     def _on_load_suite(self) -> None:
         path = str(dpg.get_value(_SUITE_PATH)).strip()
@@ -1070,7 +1088,7 @@ class BatchSimulationGui:
 
         self._time_poll_worker = threading.Thread(
             target=work,
-            name="BatchGui-SimulationTime",
+            name="SimulationControl-SimulationTime",
             daemon=True,
         )
         self._time_poll_worker.start()
@@ -1161,7 +1179,7 @@ class BatchSimulationGui:
                     self._task_running = False
                 ui_queue.post(self._apply_button_state)
 
-        self._worker = threading.Thread(target=run, name=f"BatchGui-{label}", daemon=True)
+        self._worker = threading.Thread(target=run, name=f"SimulationControl-{label}", daemon=True)
         self._worker.start()
 
     def _read_tcp_endpoint(self) -> Tuple[str, int]:
@@ -1390,7 +1408,7 @@ class BatchSimulationGui:
 
         self._scenario_refresh_worker = threading.Thread(
             target=work,
-            name="BatchGui-ActiveScenario",
+            name="SimulationControl-ActiveScenario",
             daemon=True,
         )
         self._scenario_refresh_worker.start()
@@ -1420,11 +1438,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     dpg.create_context()
     _bind_unicode_font()
-    gui = BatchSimulationGui(config, args.config)
+    gui = SimulationControlGui(config, args.config)
     try:
         gui.build()
         dpg.create_viewport(
-            title="MORAI Batch Simulation",
+            title=_SIMULATION_CONTROL_TITLE,
             width=800,
             height=700,
             min_width=680,

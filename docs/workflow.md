@@ -30,7 +30,7 @@
 | Python 3.8 타입힌트 | 최신 문법 가정 | `from __future__ import annotations` |
 | DearPyGUI 탭 | `add_tab_bar` 남용 | 버튼 + show/hide |
 | 버튼 라벨 | 유니코드 아이콘 사용 | ASCII 텍스트 사용 |
-| panel 의존성 | `app.py` import | `init(callback)` |
+| panel 의존성 | 메인 모듈 import | `init(callback)` |
 | 동적 UI 태그 접근 | 존재 가정 | `does_item_exist()` 체크 |
 | 대용량 파일 읽기 | 처음부터 끝까지 전부 읽기 | 위치 검색 후 필요한 부분만 읽기 |
 | 매 tick 로그 출력 | `log.append()` 남발 | `status_cb` + `set_value()` |

@@ -10,11 +10,11 @@ from demo.headless_launcher import DEFAULT_API_BASE_URL
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG_PATH = ROOT_DIR / "config" / "batch_simulation.json"
+DEFAULT_CONFIG_PATH = ROOT_DIR / "config" / "simulation_control.json"
 
 
 @dataclass(frozen=True)
-class BatchSimulationConfig:
+class SimulationControlConfig:
     suite_path: str
     scenario_name: str
     host: str
@@ -33,11 +33,11 @@ class BatchSimulationConfig:
     remember_login: bool
 
 
-def load_config(config_path: str) -> BatchSimulationConfig:
+def load_config(config_path: str) -> SimulationControlConfig:
     path = Path(config_path).expanduser().resolve()
     if not path.is_file():
         _create_default_config(path)
-        print(f"[INFO] Created default batch simulation config: {path}")
+        print(f"[INFO] Created default simulation control config: {path}")
 
     try:
         with path.open("r", encoding="utf-8") as config_file:
@@ -55,7 +55,7 @@ def load_config(config_path: str) -> BatchSimulationConfig:
     if suite_path is not None and not suite_path.is_absolute():
         suite_path = path.parent / suite_path
 
-    config = BatchSimulationConfig(
+    config = SimulationControlConfig(
         suite_path=str(suite_path.resolve()) if suite_path is not None else "",
         scenario_name=str(data.get("scenario_name", "")).strip(),
         host=str(server.get("host", proto.TCP_SERVER_IP)).strip(),
@@ -126,7 +126,7 @@ def _create_default_config(path: Path) -> None:
         raise ValueError(f"Failed to create configuration file {path}: {exc}") from exc
 
 
-def save_config(config_path: str, config: BatchSimulationConfig) -> None:
+def save_config(config_path: str, config: SimulationControlConfig) -> None:
     path = Path(config_path).expanduser().resolve()
     data = {
         "suite_path": config.suite_path,

@@ -5,14 +5,14 @@ This document captures the project rules that matter during feature work.
 ## Runtime Shape
 
 ```text
-app.py
+morai_interface_console.py
   src/panels/*             DearPyGUI UI surfaces
   src/runners/*            Long-running feature wrappers
   src/transport/*          TCP protocol and receiver thread
   src/receivers/*          UDP receivers and template parsing
   src/utils/ui_queue.py    Main-thread UI dispatch
 
-app_cli.py
+cli/morai_interface_console_cli.py
   src/transport/*
   src/utils/input_helper.py
 ```
@@ -29,11 +29,11 @@ import utils.ui_queue as ui_queue
 ui_queue.post(lambda: dpg.set_value("status_tag", "Running"))
 ```
 
-`ui_queue.drain()` is called from the main loop in `app.py`.
+`ui_queue.drain()` is called from the main loop in `morai_interface_console.py`.
 
 ## Panel Init Pattern
 
-Panel modules must not import `app.py`. Shared app behavior is passed through `init(...)` callbacks.
+Panel modules must not import the Interface Console main module. Shared application behavior is passed through `init(...)` callbacks.
 
 ```python
 # panels/some_panel.py
@@ -45,7 +45,7 @@ def init(start_fn):
 ```
 
 ```python
-# app.py
+# morai_interface_console.py
 some_panel.init(start_fn=state.start_something)
 ```
 
@@ -53,7 +53,7 @@ This keeps panel code reusable and avoids circular imports.
 
 ## Runner Ownership
 
-Runners wrap long-running behavior and are owned by `AppState`.
+Runners wrap long-running behavior and are owned by `InterfaceConsoleState`.
 
 | Runner | Owner field | Mode | Responsibility |
 |---|---|---|---|
@@ -102,7 +102,7 @@ Runtime state is stored under `config/*.json`.
 
 Known state files:
 
-- `config/app_state.json`
+- `config/interface_console_state.json`
 - `config/fp_state.json`
 - `config/tfp_state.json`
 - `config/monitor_state.json`

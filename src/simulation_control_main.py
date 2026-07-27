@@ -5,7 +5,7 @@ import sys
 from typing import Dict, Optional, Sequence
 
 from demo import DemoSession, DemoSessionError, ScenarioStatus
-from demo.batch_config import DEFAULT_CONFIG_PATH, load_config
+from demo.simulation_control_config import DEFAULT_CONFIG_PATH, load_config
 
 
 _SCENARIO_STATE_NAMES: Dict[int, str] = {

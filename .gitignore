@@ -5,7 +5,6 @@ config/
 .vscode/launch.json
 debug/
 runs/
-.github/workflows/
 # Added by code-review-graph
 .code-review-graph/
 

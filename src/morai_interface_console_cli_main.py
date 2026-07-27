@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Command-line interface for MORAI Interface Console.
+
 import socket
 import threading
 import time

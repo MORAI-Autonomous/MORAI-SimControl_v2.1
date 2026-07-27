@@ -11,15 +11,15 @@ _SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from batch_simulation_main import _execute_command, _format_status, build_parser
+from simulation_control_main import _execute_command, _format_status, build_parser
 from demo import ScenarioStatus
-from demo.batch_config import load_config, save_config
+from demo.simulation_control_config import load_config, save_config
 
 
-class BatchSimulationTests(unittest.TestCase):
+class SimulationControlTests(unittest.TestCase):
     def test_missing_config_is_created_with_gui_safe_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "config" / "batch_simulation.json"
+            config_path = Path(temp_dir) / "config" / "simulation_control.json"
             config = load_config(str(config_path))
 
             self.assertTrue(config_path.is_file())
@@ -29,7 +29,7 @@ class BatchSimulationTests(unittest.TestCase):
 
     def test_saved_preferences_are_restored(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "batch_simulation.json"
+            config_path = Path(temp_dir) / "simulation_control.json"
             default_config = load_config(str(config_path))
             expected = replace(
                 default_config,
@@ -56,7 +56,7 @@ class BatchSimulationTests(unittest.TestCase):
 
     def test_load_config_reads_suite_scenario_and_server(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = Path(temp_dir) / "batch.json"
+            config_path = Path(temp_dir) / "simulation_control.json"
             config_path.write_text(
                 """{
   "suite_path": "Customer.msuite",

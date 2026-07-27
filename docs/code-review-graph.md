@@ -7,8 +7,8 @@ runtime data flow, and modules that are risky to change together.
 
 ```mermaid
 flowchart TD
-    app["app.py<br/>DearPyGUI entrypoint"]
-    cli["app_cli.py<br/>CLI entrypoint"]
+    app["morai_interface_console.py<br/>DearPyGUI entrypoint"]
+    cli["cli/morai_interface_console_cli.py<br/>CLI entrypoint"]
 
     panels["src/panels/*<br/>GUI panels"]
     runners["src/runners/*.py<br/>GUI runner wrappers"]
@@ -91,7 +91,7 @@ flowchart TD
     thread["src/transport/tcp_thread.py<br/>background TCP thread"]
     commands["src/transport/commands.py<br/>high-level command calls"]
 
-    app["app.py"]
+    app["morai_interface_console.py"]
     command_panel["src/panels/commands.py"]
     udp_control["src/panels/udp_control_panel.py"]
     runners["src/runners/ad_runner.py / src/runners/lane_runner.py / src/runners/step_ad_runner.py"]
@@ -184,7 +184,7 @@ flowchart TD
 
 ## High-Risk Review Boundaries
 
-- `src/panels/*` must not import `app.py`; callbacks should be injected from the entrypoint.
+- `src/panels/*` must not import the Interface Console main module; callbacks should be injected from the entrypoint.
 - Background receiver threads must not update DearPyGUI directly; use `utils.ui_queue.post()`.
 - UDP camera/template changes should be reviewed with the matching file under `templates/*/`.
 - TCP API changes should update `src/transport/message_schema.py`, regenerate `docs/tcp-api.md`, and run payload tests.
@@ -193,7 +193,7 @@ flowchart TD
 ## Useful Verification Commands
 
 ```bash
-python -m py_compile app.py src/panels/camera_sensor_panel.py src/receivers/camera_depth_receiver.py
+python -m py_compile morai_interface_console.py src/panels/camera_sensor_panel.py src/receivers/camera_depth_receiver.py
 python tools/gen_tcp_docs.py --check
 python -m unittest tests.test_tcp_payloads
 ```

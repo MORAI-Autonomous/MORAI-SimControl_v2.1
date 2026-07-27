@@ -42,7 +42,7 @@ python -m unittest tests.test_tcp_payloads
 For a quick syntax pass:
 
 ```bash
-python -m compileall -q app.py app_cli.py sitecustomize.py src tools tests
+python -m compileall -q morai_interface_console.py simulation_control.py cli sitecustomize.py src tools tests
 ```
 
 ## Rules Of Thumb

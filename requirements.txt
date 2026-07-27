@@ -1,4 +1,4 @@
-# GUI (app.py)
+# GUI (MORAI Interface Console and MORAI Simulation Control)
 dearpygui>=1.10.1
 
 # Core math / image / path follow

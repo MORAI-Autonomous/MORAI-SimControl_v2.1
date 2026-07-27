@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# app.py
+# morai_interface_console.py
 import ipaddress
 import json
 import os
@@ -35,14 +35,18 @@ import panels.traffic_scenario as traffic_panel
 import transport.commands as udp_cmd
 from utils.project_paths import ROOT_DIR
 
-APP_TITLE = "Sim Control Example"
+INTERFACE_CONSOLE_TITLE = "MORAI Interface Console"
 _logo_tag = None   # Loaded in main() when the logo texture is available.
 
 # Layout constants
 W_INIT, H_INIT = 1400, 1200  # Initial viewport size.
 W_MIN,  H_MIN  = 900,  600   # Minimum viewport size.
 _BASE_DIR = str(ROOT_DIR)
-_APP_STATE_FILE = os.path.join(_BASE_DIR, "config", "app_state.json")
+_INTERFACE_CONSOLE_STATE_FILE = os.path.join(
+    _BASE_DIR,
+    "config",
+    "interface_console_state.json",
+)
 _DEFAULT_TAB = "udp"
 _TAB_KEYS = {"udp", "udp_ctrl", "cam_sensor", "object_control", "traffic", "lc", "au", "fp", "tfp"}
 CMD_W      = 400        # Fixed command panel width.
@@ -57,16 +61,16 @@ def _top_h(): return max(_vp_h() - TITLEBAR_H - LOG_H - PAD, 100)
 def _mon_w(): return max(_vp_w() - CMD_W - PAD * 3, 200)
 
 
-def _load_app_state() -> dict:
+def _load_interface_console_state() -> dict:
     try:
-        with open(_APP_STATE_FILE, "r", encoding="utf-8") as f:
+        with open(_INTERFACE_CONSOLE_STATE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
 
-def _save_app_state(state=None) -> None:
+def _save_interface_console_state(state=None) -> None:
     try:
         width = int(dpg.get_viewport_width())
         height = int(dpg.get_viewport_height())
@@ -87,8 +91,8 @@ def _save_app_state(state=None) -> None:
             tcp_port = TCP_SERVER_PORT
             pass
 
-        os.makedirs(os.path.dirname(_APP_STATE_FILE), exist_ok=True)
-        with open(_APP_STATE_FILE, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(_INTERFACE_CONSOLE_STATE_FILE), exist_ok=True)
+        with open(_INTERFACE_CONSOLE_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(
                 {
                     "viewport": {
@@ -111,7 +115,7 @@ def _save_app_state(state=None) -> None:
 
 
 def _initial_viewport_size() -> tuple:
-    state = _load_app_state()
+    state = _load_interface_console_state()
     viewport = state.get("viewport")
     if not isinstance(viewport, dict):
         return W_INIT, H_INIT
@@ -130,12 +134,12 @@ def _normalize_tab(tab_name: str) -> str:
 
 
 def _initial_selected_tab() -> str:
-    state = _load_app_state()
+    state = _load_interface_console_state()
     return _normalize_tab(str(state.get("selected_tab", _DEFAULT_TAB)))
 
 
 def _initial_tcp_endpoint() -> tuple:
-    state = _load_app_state()
+    state = _load_interface_console_state()
     tcp_state = state.get("tcp")
     if not isinstance(tcp_state, dict):
         return TCP_SERVER_IP, TCP_SERVER_PORT
@@ -248,9 +252,9 @@ def _set_conn_status(connected: bool, editing_enabled: Optional[bool] = None):
 
 
 # ============================================================
-# AppState
+# InterfaceConsoleState
 # ============================================================
-class AppState:
+class InterfaceConsoleState:
     def __init__(self):
         self.pending     = {}
         self.lock        = threading.Lock()
@@ -884,7 +888,7 @@ def _patch_tfp_caller(caller: ac.AutoCaller, vehicles: list, on_done=None):
 # ============================================================
 # UI build
 # ============================================================
-def build_ui(state: AppState):
+def build_ui(state: InterfaceConsoleState):
 
     with dpg.theme() as global_theme:
         with dpg.theme_component(dpg.mvAll):
@@ -951,7 +955,7 @@ def build_ui(state: AppState):
 
     with dpg.window(tag="app_info_modal", label="App Info", modal=True,
                     show=False, no_resize=True, width=420, height=180):
-        dpg.add_text(APP_TITLE)
+        dpg.add_text(INTERFACE_CONSOLE_TITLE)
         dpg.add_spacer(height=6)
         dpg.add_text("Python example client for MORAI simulator TCP/UDP control.")
         dpg.add_text("This menu bar is a scaffold for future app info and settings.")
@@ -987,7 +991,7 @@ def build_ui(state: AppState):
                 return
             TCP_SERVER_IP = new_ip
             TCP_SERVER_PORT = new_port
-            _save_app_state(state)
+            _save_interface_console_state(state)
             state.connect()
 
         with dpg.menu_bar():
@@ -1011,7 +1015,7 @@ def build_ui(state: AppState):
             if _logo_tag:
                 dpg.add_image(_logo_tag, width=28, height=28)
                 dpg.add_spacer(width=6)
-            dpg.add_text(APP_TITLE, color=(160, 160, 170))
+            dpg.add_text(INTERFACE_CONSOLE_TITLE, color=(160, 160, 170))
             dpg.add_spacer(width=16)
             dpg.add_text("IP:", color=(160, 160, 170))
             dpg.add_input_text(tag="tb_ip_input",
@@ -1161,7 +1165,7 @@ def build_ui(state: AppState):
             save_due_at = _layout_state["save_due_at"]
             if save_due_at is not None and time.monotonic() >= save_due_at:
                 _layout_state["save_due_at"] = None
-                _save_app_state(state)
+                _save_interface_console_state(state)
             return False
 
         _layout_state["dirty"] = False
@@ -1182,7 +1186,7 @@ def build_ui(state: AppState):
         save_due_at = _layout_state["save_due_at"]
         if save_due_at is not None and time.monotonic() >= save_due_at:
             _layout_state["save_due_at"] = None
-            _save_app_state(state)
+            _save_interface_console_state(state)
         return True
 
     dpg.set_viewport_resize_callback(_mark_layout_dirty)
@@ -1193,7 +1197,7 @@ def build_ui(state: AppState):
 # Main
 # ============================================================
 def main():
-    state = AppState()
+    state = InterfaceConsoleState()
     udp_ctrl_panel.init(
         send_udp_control_fn=state.send_udp_control,
     )
@@ -1244,7 +1248,7 @@ def main():
 
     viewport_w, viewport_h = _initial_viewport_size()
     dpg.create_viewport(
-        title=APP_TITLE,
+        title=INTERFACE_CONSOLE_TITLE,
         width=viewport_w, height=viewport_h,
         min_width=W_MIN, min_height=H_MIN,
         resizable=True,
@@ -1308,7 +1312,7 @@ def main():
         state.receiver.stop()
     if state.tcp_sock:
         _close_socket(state.tcp_sock)
-    _save_app_state(state)
+    _save_interface_console_state(state)
     dpg.destroy_context()
 
 
