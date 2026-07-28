@@ -11,6 +11,10 @@ from demo.headless_launcher import DEFAULT_API_BASE_URL
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = ROOT_DIR / "config" / "simulation_control.json"
+DEFAULT_WINDOW_WIDTH = 880
+DEFAULT_WINDOW_HEIGHT = 740
+MIN_WINDOW_WIDTH = 680
+MIN_WINDOW_HEIGHT = 600
 
 
 @dataclass(frozen=True)
@@ -31,6 +35,8 @@ class SimulationControlConfig:
     api_base_url: str
     login_id: str
     remember_login: bool
+    window_width: int
+    window_height: int
 
 
 def load_config(config_path: str) -> SimulationControlConfig:
@@ -50,6 +56,7 @@ def load_config(config_path: str) -> SimulationControlConfig:
     server = _object_value(data, "server")
     timeouts = _object_value(data, "timeouts")
     simulation_time = _object_value(data, "simulation_time")
+    window = _object_value(data, "window")
     suite_value = str(data.get("suite_path", "")).strip()
     suite_path = Path(suite_value).expanduser() if suite_value else None
     if suite_path is not None and not suite_path.is_absolute():
@@ -72,6 +79,14 @@ def load_config(config_path: str) -> SimulationControlConfig:
         api_base_url=str(data.get("api_base_url", DEFAULT_API_BASE_URL)).strip(),
         login_id=str(data.get("login_id", "")).strip(),
         remember_login=bool(data.get("remember_login", False)),
+        window_width=max(
+            MIN_WINDOW_WIDTH,
+            int(window.get("width", DEFAULT_WINDOW_WIDTH)),
+        ),
+        window_height=max(
+            MIN_WINDOW_HEIGHT,
+            int(window.get("height", DEFAULT_WINDOW_HEIGHT)),
+        ),
     )
     if not config.host:
         raise ValueError("Configuration field 'server.host' must not be empty")
@@ -100,6 +115,10 @@ def _create_default_config(path: Path) -> None:
         "api_base_url": DEFAULT_API_BASE_URL,
         "login_id": "",
         "remember_login": False,
+        "window": {
+            "width": DEFAULT_WINDOW_WIDTH,
+            "height": DEFAULT_WINDOW_HEIGHT,
+        },
         "server": {
             "host": proto.TCP_SERVER_IP,
             "port": proto.TCP_SERVER_PORT,
@@ -135,6 +154,10 @@ def save_config(config_path: str, config: SimulationControlConfig) -> None:
         "api_base_url": config.api_base_url,
         "login_id": config.login_id,
         "remember_login": config.remember_login,
+        "window": {
+            "width": config.window_width,
+            "height": config.window_height,
+        },
         "server": {"host": config.host, "port": config.port},
         "timeouts": {
             "connect": config.connect_timeout,

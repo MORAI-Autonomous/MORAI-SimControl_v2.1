@@ -12,6 +12,7 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 from simulation_control_main import _execute_command, _format_status, build_parser
+from simulation_control_gui_main import _format_scenario_progress
 from demo import ScenarioStatus
 from demo.simulation_control_config import load_config, save_config
 
@@ -26,6 +27,8 @@ class SimulationControlTests(unittest.TestCase):
             self.assertEqual(config.suite_path, "")
             self.assertGreater(config.port, 0)
             self.assertGreater(config.load_timeout, 0)
+            self.assertEqual(config.window_width, 880)
+            self.assertEqual(config.window_height, 740)
 
     def test_saved_preferences_are_restored(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -44,6 +47,8 @@ class SimulationControlTests(unittest.TestCase):
                 api_base_url="https://customer-api.example.com:8080",
                 login_id="driver@example.com",
                 remember_login=True,
+                window_width=1024,
+                window_height=800,
             )
             save_config(str(config_path), expected)
             restored = load_config(str(config_path))
@@ -88,6 +93,31 @@ class SimulationControlTests(unittest.TestCase):
             _format_status(ScenarioStatus(1, "HighwayDemo")),
             "PLAY (HighwayDemo)",
         )
+
+    def test_scenario_progress_uses_active_scenario_position(self) -> None:
+        self.assertEqual(
+            _format_scenario_progress(
+                {
+                    "active_scenario_name": "Scenario02",
+                    "scenario_list": ["Scenario01", "Scenario02", "Scenario03"],
+                }
+            ),
+            "2 / 3",
+        )
+
+    def test_scenario_progress_shows_total_before_scenario_is_active(self) -> None:
+        self.assertEqual(
+            _format_scenario_progress(
+                {
+                    "active_scenario_name": "",
+                    "scenario_list": ["Scenario01", "Scenario02"],
+                }
+            ),
+            "- / 2",
+        )
+
+    def test_scenario_progress_is_empty_without_suite_list(self) -> None:
+        self.assertEqual(_format_scenario_progress({}), "- / -")
 
 
 if __name__ == "__main__":

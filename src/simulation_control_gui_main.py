@@ -14,6 +14,8 @@ import dearpygui.dearpygui as dpg
 
 from demo import DemoSession, DemoSessionError, ScenarioStatus
 from demo.simulation_control_config import (
+    MIN_WINDOW_HEIGHT,
+    MIN_WINDOW_WIDTH,
     SimulationControlConfig,
     DEFAULT_CONFIG_PATH,
     load_config,
@@ -79,6 +81,7 @@ _SIMULATION_TIME = "simulation_control_simulation_time"
 _SCENARIO_STATUS = "simulation_control_scenario_status"
 _ACTIVE_SUITE = "simulation_control_active_suite"
 _ACTIVE_SCENARIO = "simulation_control_active_scenario"
+_SCENARIO_PROGRESS = "simulation_control_scenario_progress"
 
 _CONTROL_BUTTONS = (
     "simulation_control_previous_button",
@@ -123,6 +126,22 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Configuration JSON path (default: {DEFAULT_CONFIG_PATH})",
     )
     return parser
+
+
+def _format_scenario_progress(suite_status: Dict[str, object]) -> str:
+    scenario_list = suite_status.get("scenario_list")
+    if not isinstance(scenario_list, list) or not scenario_list:
+        return "- / -"
+
+    names = [str(name).strip() for name in scenario_list]
+    active_name = str(suite_status.get("active_scenario_name", "")).strip()
+    if not active_name:
+        return f"- / {len(names)}"
+    try:
+        current_index = names.index(active_name) + 1
+    except ValueError:
+        return f"- / {len(names)}"
+    return f"{current_index} / {len(names)}"
 
 
 def _bind_unicode_font() -> None:
@@ -521,6 +540,9 @@ class SimulationControlGui:
             with dpg.group(horizontal=True):
                 dpg.add_text("Active Scenario :", color=(180, 180, 180, 255))
                 dpg.add_text("-", tag=_ACTIVE_SCENARIO, color=(140, 140, 140, 255))
+            with dpg.group(horizontal=True):
+                dpg.add_text("Scenario Progress:", color=(180, 180, 180, 255))
+                dpg.add_text("-", tag=_SCENARIO_PROGRESS, color=(140, 140, 140, 255))
 
     def start(self) -> None:
         if self.config.remember_login:
@@ -561,6 +583,14 @@ class SimulationControlGui:
                 api_base_url=self.config.api_base_url,
                 login_id=self._saved_login_id,
                 remember_login=bool(dpg.get_value(_REMEMBER_LOGIN)),
+                window_width=max(
+                    MIN_WINDOW_WIDTH,
+                    int(dpg.get_viewport_width()),
+                ),
+                window_height=max(
+                    MIN_WINDOW_HEIGHT,
+                    int(dpg.get_viewport_height()),
+                ),
             )
             save_config(self.config_path, saved)
             if not saved.remember_login:
@@ -778,6 +808,8 @@ class SimulationControlGui:
         dpg.configure_item(_ACTIVE_SUITE, color=(140, 140, 140, 255))
         dpg.set_value(_ACTIVE_SCENARIO, "-")
         dpg.configure_item(_ACTIVE_SCENARIO, color=(140, 140, 140, 255))
+        dpg.set_value(_SCENARIO_PROGRESS, "-")
+        dpg.configure_item(_SCENARIO_PROGRESS, color=(140, 140, 140, 255))
         dpg.set_value(_SIMULATION_TIME, "0:00.000")
 
     def _on_time_mode_changed(self, sender=None, app_data=None) -> None:
@@ -1346,6 +1378,8 @@ class SimulationControlGui:
         dpg.configure_item(_ACTIVE_SUITE, color=(100, 220, 100, 255))
         dpg.set_value(_ACTIVE_SCENARIO, scenario_name or "-")
         dpg.configure_item(_ACTIVE_SCENARIO, color=(100, 220, 100, 255))
+        dpg.set_value(_SCENARIO_PROGRESS, _format_scenario_progress(suite_status))
+        dpg.configure_item(_SCENARIO_PROGRESS, color=(100, 220, 100, 255))
         self._log(
             f"Active suite status: suite={suite_name or '-'} "
             f"scenario={scenario_name or '-'}"
@@ -1443,10 +1477,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         gui.build()
         dpg.create_viewport(
             title=_SIMULATION_CONTROL_TITLE,
-            width=800,
-            height=700,
-            min_width=680,
-            min_height=600,
+            width=config.window_width,
+            height=config.window_height,
+            min_width=MIN_WINDOW_WIDTH,
+            min_height=MIN_WINDOW_HEIGHT,
             resizable=True,
         )
         dpg.setup_dearpygui()
