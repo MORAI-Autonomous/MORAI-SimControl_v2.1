@@ -1212,6 +1212,8 @@ class SimulationControlGui:
             action = getattr(self.session, command)
             action("")
             self._log(f"Scenario {command} accepted")
+            if command == "stop":
+                ui_queue.post(self._reset_simulation_time)
 
         self._start_task(f"Scenario {command}", work)
 
@@ -1351,6 +1353,10 @@ class SimulationControlGui:
             _SIMULATION_TIME,
             self._format_simulation_time(seconds, nanos),
         )
+
+    def _reset_simulation_time(self) -> None:
+        dpg.set_value(_SIMULATION_TIME, "0:00.000")
+        self._next_time_poll = time.monotonic() + _SIMULATION_TIME_POLL_INTERVAL
 
     @staticmethod
     def _time_mode_name(mode: int) -> str:
