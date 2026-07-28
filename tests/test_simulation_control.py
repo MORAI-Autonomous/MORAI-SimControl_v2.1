@@ -12,7 +12,10 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 from simulation_control_main import _execute_command, _format_status, build_parser
-from simulation_control_gui_main import _format_scenario_progress
+from simulation_control_gui_main import (
+    _format_scenario_progress,
+    _suite_load_block_reason,
+)
 from demo import ScenarioStatus
 from demo.simulation_control_config import load_config, save_config
 
@@ -118,6 +121,21 @@ class SimulationControlTests(unittest.TestCase):
 
     def test_scenario_progress_is_empty_without_suite_list(self) -> None:
         self.assertEqual(_format_scenario_progress({}), "- / -")
+
+    def test_suite_load_is_blocked_without_tcp_connection(self) -> None:
+        self.assertEqual(
+            _suite_load_block_reason(False, None),
+            "TCP is not connected",
+        )
+
+    def test_suite_load_is_blocked_during_pre_login(self) -> None:
+        self.assertEqual(
+            _suite_load_block_reason(True, 1),
+            "Suite cannot be loaded while the simulator is in PRE_LOGIN",
+        )
+
+    def test_suite_load_is_allowed_from_home(self) -> None:
+        self.assertEqual(_suite_load_block_reason(True, 2), "")
 
 
 if __name__ == "__main__":

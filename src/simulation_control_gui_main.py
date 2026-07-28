@@ -144,6 +144,14 @@ def _format_scenario_progress(suite_status: Dict[str, object]) -> str:
     return f"{current_index} / {len(names)}"
 
 
+def _suite_load_block_reason(connected: bool, simulator_state: Optional[int]) -> str:
+    if not connected:
+        return "TCP is not connected"
+    if simulator_state == 1:
+        return "Suite cannot be loaded while the simulator is in PRE_LOGIN"
+    return ""
+
+
 def _bind_unicode_font() -> None:
     font_candidates = (
         Path("C:/Windows/Fonts/malgun.ttf"),
@@ -715,6 +723,11 @@ class SimulationControlGui:
             self.session.connect()
             self._log(f"Connected {host}:{port}")
             ui_queue.post(lambda: self._set_connection("Connected", (100, 220, 100, 255)))
+            response = self.session.get_simulator_status()
+            state = int(response["state"])
+            label = proto.SIMULATOR_STATE_MAP.get(state, f"UNKNOWN({state})")
+            self._log(f"Simulator status after connect: {label}")
+            ui_queue.post(lambda s=state: self._apply_simulator_status(s))
 
         self._start_task("Connect", work)
 
@@ -767,10 +780,31 @@ class SimulationControlGui:
         if not path:
             self._log("Suite path is required", "WARN")
             return
+        block_reason = _suite_load_block_reason(
+            self.session.is_connected,
+            self._simulator_state,
+        )
+        if block_reason:
+            self._set_suite_status(block_reason, (255, 170, 80, 255))
+            self._log(block_reason, "WARN")
+            return
         self._prepare_suite_load()
 
         def work() -> None:
             self._suite_loaded = False
+            status_response = self.session.get_simulator_status()
+            simulator_state = int(status_response["state"])
+            ui_queue.post(lambda s=simulator_state: self._apply_simulator_status(s))
+            block_reason = _suite_load_block_reason(True, simulator_state)
+            if block_reason:
+                self._log(block_reason, "WARN")
+                ui_queue.post(
+                    lambda reason=block_reason: self._set_suite_status(
+                        reason,
+                        (255, 170, 80, 255),
+                    )
+                )
+                return
             started = time.monotonic()
             self._log(f"Loading suite: {path}")
             response = self.session.load_suite(path, timeout=self.config.load_timeout)
