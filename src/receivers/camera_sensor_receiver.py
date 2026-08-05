@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import os
 import select
@@ -13,21 +12,38 @@ from typing import Callable, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from receivers.template_parser import MAX_REPEAT_COUNT, TemplateParser
 from utils.template_paths import resolve_template_path
 
 _HEADER_FMT = "<IHH"
 _HEADER_SIZE = struct.calcsize(_HEADER_FMT)
 _RECV_BUF = 65535
 _ASSEMBLY_TIMEOUT = 5.0
+# ponytail: BBox-only packets have no dimensions; make this configurable if the protocol adds them.
+_CANVAS_W = 1920
+_CANVAS_H = 1080
 
-_TYPE_MAP: Dict[str, Tuple[str, int]] = {
-    "FLOAT": ("f", 4),
-    "DOUBLE": ("d", 8),
-    "INT32": ("i", 4),
-    "INT64": ("q", 8),
-    "UINT32": ("I", 4),
-    "ENUM": ("I", 4),
-}
+
+def _make_debug_canvas() -> np.ndarray:
+    canvas = np.full((_CANVAS_H, _CANVAS_W, 3), 24, dtype=np.uint8)
+    for x in range(0, _CANVAS_W + 1, _CANVAS_W // 4):
+        cv2.line(canvas, (x, 0), (x, _CANVAS_H), (48, 48, 48), 1)
+    for y in range(0, _CANVAS_H + 1, _CANVAS_H // 4):
+        cv2.line(canvas, (0, y), (_CANVAS_W, y), (48, 48, 48), 1)
+    cv2.putText(
+        canvas,
+        f"BBox debug canvas {_CANVAS_W} x {_CANVAS_H}",
+        (20, 35),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (160, 160, 160),
+        2,
+        cv2.LINE_AA,
+    )
+    return canvas
+
+
+_DEBUG_CANVAS = _make_debug_canvas()
 
 
 class _AssemblyState:
@@ -67,18 +83,16 @@ class CameraSensorReceiver(threading.Thread):
         self._debug_last: Dict[str, float] = {}
         self._packet_seq = 0
 
-        self._tmpl_path = (
-            tmpl_path
-            or resolve_template_path("CameraSensorMessageTemplate.tmpl")
-            or resolve_template_path("Camera With 2D_3D Bounding Box.tmpl")
-        )
+        self._tmpl_path = tmpl_path or resolve_template_path("Camera 2D Bounding Box.tmpl")
         if self._tmpl_path is None:
-            raise FileNotFoundError("CameraSensorMessageTemplate.tmpl")
-        self._repeat_fields = self._load_repeat_fields()
-        self._row_fmt = "<" + "".join(_TYPE_MAP[t][0] for _, t in self._repeat_fields)
-        self._row_size = struct.calcsize(self._row_fmt)
+            raise FileNotFoundError("Camera 2D Bounding Box.tmpl")
+        self._parser = TemplateParser(self._tmpl_path)
+        repeat_segment = self._parser.repeat_segment
+        if repeat_segment is None:
+            raise ValueError(f"{os.path.basename(self._tmpl_path)} has no REPEAT segment")
+        self._row_size = repeat_segment.byte_size()
         self._debug(
-            f"template={os.path.basename(self._tmpl_path)} repeat_fields={len(self._repeat_fields)} row_size={self._row_size}",
+            f"template={os.path.basename(self._tmpl_path)} row_size={self._row_size}",
             key="init",
             interval_sec=0.0,
         )
@@ -114,37 +128,14 @@ class CameraSensorReceiver(threading.Thread):
                         data, _addr = sock.recvfrom(_RECV_BUF)
                     except BlockingIOError:
                         break
-                    except OSError as e:
+                    except OSError as exc:
                         if self.running:
-                            print(f"[CameraSensorReceiver] recv error: {e}")
+                            print(f"[CameraSensorReceiver] recv error: {exc}")
                         break
-                    self._debug(
-                        f"udp datagram bytes={len(data)} chunked={self._is_chunked(data)}",
-                        key="recv",
-                        interval_sec=2.0,
-                    )
                     self._handle_datagram(data)
         finally:
             sock.close()
             print(f"[CameraSensorReceiver] Stopped ({self.ip}:{self.port})")
-
-    def _load_repeat_fields(self) -> List[Tuple[str, str]]:
-        with open(self._tmpl_path, "r", encoding="utf-8") as fp:
-            raw = json.load(fp)
-
-        segs = raw.get("messageTemplate", {}).get("segmentList", [])
-        for seg in segs:
-            if str(seg.get("type", "")).upper() != "REPEAT":
-                continue
-            result: List[Tuple[str, str]] = []
-            for field in seg.get("fieldList", []):
-                name = field.get("variableName", field.get("name", ""))
-                var_type = str(field.get("variableType", "FLOAT")).upper()
-                if var_type not in _TYPE_MAP:
-                    raise ValueError(f"Unsupported repeat field type: {var_type}")
-                result.append((name, var_type))
-            return result
-        raise ValueError("CameraSensorMessageTemplate.tmpl has no REPEAT segment")
 
     def _handle_datagram(self, data: bytes) -> None:
         if self._is_chunked(data):
@@ -221,6 +212,31 @@ class CameraSensorReceiver(threading.Thread):
                 print(f"[CameraSensorReceiver] on_packet error: {e}")
 
     def _parse_payload(self, payload: bytes) -> Optional[dict]:
+        if self._parser.fields_segment is None:
+            if self._row_size <= 0:
+                return None
+            remainder = len(payload) % self._row_size
+            if remainder:
+                self._debug(
+                    f"repeat tail mismatch bytes={len(payload)} row_size={self._row_size} remainder={remainder}",
+                    key="repeat_remainder",
+                    interval_sec=1.0,
+                )
+
+            parsed = self._parser.parse(payload)
+            if parsed is None:
+                return None
+            objects = [row["fields"] for row in parsed["repeat_rows"]]
+            return {
+                "frame": _DEBUG_CANVAS,
+                "image_size": 0,
+                "object_count": len(objects),
+                "objects": objects,
+                "raw_size": len(payload),
+                "parse_mode": "bbox_only",
+                "template_name": parsed["template_name"],
+            }
+
         if len(payload) < 4:
             self._debug(f"payload too short: {len(payload)} bytes", key="short", interval_sec=1.0)
             return None
@@ -283,36 +299,27 @@ class CameraSensorReceiver(threading.Thread):
             "image_start": image_start,
             "image_end": image_end,
             "parse_mode": parse_mode,
+            "template_name": self._parser.template_name,
         }
 
-    def _parse_repeat_rows(self, remain: bytes) -> List[dict]:
-        if self._row_size <= 0 or not remain:
-            if remain:
-                self._debug(f"repeat row size invalid: row_size={self._row_size} remain={len(remain)}", key="bad_row_size", interval_sec=1.0)
+    def _parse_repeat_rows(self, data: bytes) -> List[dict]:
+        segment = self._parser.repeat_segment
+        if segment is None or self._row_size <= 0:
             return []
 
-        count = len(remain) // self._row_size
-        remainder = len(remain) % self._row_size
-        if remainder != 0:
-            self._debug(
-                f"repeat tail mismatch remain={len(remain)} row_size={self._row_size} count={count} remainder={remainder}",
-                key="repeat_remainder",
-                interval_sec=1.0,
-            )
-        else:
-            self._debug(
-                f"repeat rows remain={len(remain)} row_size={self._row_size} count={count}",
-                key="repeat_count",
-                interval_sec=2.0,
-            )
         rows: List[dict] = []
-        offset = 0
-        for _ in range(count):
-            values = struct.unpack_from(self._row_fmt, remain, offset)
-            offset += self._row_size
-            row: Dict[str, float] = {}
-            for idx, (name, _var_type) in enumerate(self._repeat_fields):
-                row[name] = values[idx]
+        count = min(len(data) // self._row_size, MAX_REPEAT_COUNT)
+        for row_index in range(count):
+            values = struct.unpack_from(segment.build_fmt(), data, row_index * self._row_size)
+            row: dict = {}
+            for field, raw_value in zip(segment.fields, values):
+                value = (
+                    raw_value.split(b"\x00", 1)[0].decode("utf-8", errors="ignore")
+                    if field.is_string
+                    else raw_value
+                )
+                row[field.variable_name] = value
+                row[field.name] = value
             rows.append(row)
         return rows
 
@@ -353,7 +360,7 @@ def draw_bbox_overlays(frame: np.ndarray, objects: List[dict]) -> Tuple[np.ndarr
     for idx, obj in enumerate(objects):
         if _draw_bbox_2d(out, obj, idx):
             drawn_2d += 1
-        if _draw_bbox_3d_projected(out, obj):
+        if _draw_bbox_3d_projected(out, obj, idx):
             drawn_3d += 1
     return out, {
         "total_objects": len(objects),
@@ -362,13 +369,17 @@ def draw_bbox_overlays(frame: np.ndarray, objects: List[dict]) -> Tuple[np.ndarr
     }
 
 
+def _object_label(obj: dict, idx: int) -> str:
+    return str(obj.get("annotation", "")).strip() or f"obj {idx}"
+
+
 def _draw_bbox_2d(frame: np.ndarray, obj: dict, idx: int) -> bool:
     try:
         x0 = int(round(obj["bounding_box_2d.min.x"]))
         y0 = int(round(obj["bounding_box_2d.min.y"]))
         x1 = int(round(obj["bounding_box_2d.max.x"]))
         y1 = int(round(obj["bounding_box_2d.max.y"]))
-    except Exception:
+    except (KeyError, TypeError, ValueError, OverflowError):
         return False
 
     if x1 <= x0 or y1 <= y0:
@@ -377,7 +388,7 @@ def _draw_bbox_2d(frame: np.ndarray, obj: dict, idx: int) -> bool:
     cv2.rectangle(frame, (x0, y0), (x1, y1), (0, 0, 255), 2)
     cv2.putText(
         frame,
-        f"obj {idx}",
+        _object_label(obj, idx),
         (x0, max(14, y0 - 6)),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.5,
@@ -388,11 +399,11 @@ def _draw_bbox_2d(frame: np.ndarray, obj: dict, idx: int) -> bool:
     return True
 
 
-def _draw_bbox_3d_projected(frame: np.ndarray, obj: dict) -> bool:
+def _draw_bbox_3d_projected(frame: np.ndarray, obj: dict, idx: int) -> bool:
     points: List[Tuple[int, int]] = []
-    for i in range(1, 9):
-        x_key = f"bounding_box_3D8_points.projected_corner_points_{i}.x"
-        y_key = f"bounding_box_3D8_points.projected_corner_points_{i}.y"
+    for point_index in range(1, 9):
+        x_key = f"bounding_box_3D8_points.projected_corner_points_{point_index}.x"
+        y_key = f"bounding_box_3D8_points.projected_corner_points_{point_index}.y"
         x = obj.get(x_key)
         y = obj.get(y_key)
         if x is None or y is None:
@@ -406,6 +417,16 @@ def _draw_bbox_3d_projected(frame: np.ndarray, obj: dict) -> bool:
         (4, 5), (5, 6), (6, 7), (7, 4),
         (0, 4), (1, 5), (2, 6), (3, 7),
     ]
-    for a, b in edges:
-        cv2.line(frame, points[a], points[b], (255, 0, 0), 1, cv2.LINE_AA)
+    for start, end in edges:
+        cv2.line(frame, points[start], points[end], (255, 0, 0), 2, cv2.LINE_AA)
+    cv2.putText(
+        frame,
+        _object_label(obj, idx),
+        (points[0][0], max(14, points[0][1] - 6)),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (255, 0, 0),
+        1,
+        cv2.LINE_AA,
+    )
     return True

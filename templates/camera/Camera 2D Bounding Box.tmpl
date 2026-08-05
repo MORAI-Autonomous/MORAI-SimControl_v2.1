@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0-alpha",
+  "messageTemplate": {
+    "name": "Camera 2D Bounding Box",
+    "isSensor": true,
+    "segmentList": [
+      {
+        "type": "REPEAT",
+        "relationName": "CameraEntity",
+        "repeatFieldName": "camera_attributes.bound_box_data",
+        "groupOutputFormat": "JSON",
+        "fieldList": [
+          { "variableName": "annotation", "variableType": "STRING", "length": 64 },
+          { "variableName": "bounding_box_2d.min.x", "variableType": "FLOAT" },
+          { "variableName": "bounding_box_2d.min.y", "variableType": "FLOAT" },
+          { "variableName": "bounding_box_2d.max.x", "variableType": "FLOAT" },
+          { "variableName": "bounding_box_2d.max.y", "variableType": "FLOAT" }
+        ]
+      }
+    ]
+  }
+}
