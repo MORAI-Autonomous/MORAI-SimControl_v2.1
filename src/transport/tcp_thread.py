@@ -52,7 +52,7 @@ def _msg_type_name(msg_type: int) -> str:
 
 class Receiver(threading.Thread):
     def __init__(self, sock, pending: dict, lock: threading.Lock, on_disconnect=None,
-                 on_response=None, on_vehicle_info=None):
+                 on_response=None, on_vehicle_info=None, on_create_object=None):
         super().__init__(daemon=True)
         self.sock          = sock
         self.pending       = pending
@@ -61,6 +61,7 @@ class Receiver(threading.Thread):
         self.on_disconnect = on_disconnect
         self.on_response   = on_response
         self.on_vehicle_info = on_vehicle_info
+        self.on_create_object = on_create_object
 
     def stop(self):
         self.running = False
@@ -262,6 +263,13 @@ class Receiver(threading.Thread):
                     and msg_type == proto.MSG_TYPE_CREATE_OBJECT:
                 parsed = tcp.parse_create_object_payload(payload)
                 if parsed:
+                    response_result_code = parsed["result_code"]
+                    response_detail_code = parsed["detail_code"]
+                    if self.on_create_object:
+                        try:
+                            self.on_create_object(request_id, parsed)
+                        except Exception as e:
+                            log.append(f"create object callback error: {e}", "WARN")
                     log.append(
                         f"CreateObject rid={request_id} "
                         f"result={parsed['result_code']}({result_to_string(parsed['result_code'])}) "
@@ -293,6 +301,8 @@ class Receiver(threading.Thread):
                 parsed = tcp.parse_result_code(payload)
                 if parsed:
                     result_code, detail_code = parsed
+                    response_result_code = result_code
+                    response_detail_code = detail_code
                     level = "RECV" if result_code == 0 else "WARN"
                     log.append(
                         f"DeleteObject rid={request_id} "

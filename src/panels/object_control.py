@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Callable, Optional
 import json
 import os
+import threading
+import time
 
 import dearpygui.dearpygui as dpg
 
@@ -11,19 +13,43 @@ import transport.object_enums as object_enums
 import transport.protocol_defs as proto
 import transport.tcp_transport as tcp
 from utils import trajectory_samples
-from utils.project_paths import ROOT_DIR
+from utils import bulk_vehicle_spawn
+import utils.ui_queue as ui_queue
+from utils.project_paths import ROOT_DIR, SRC_DIR
 
 _STATE_FILE = os.path.join(str(ROOT_DIR), "config", "object_control_state.json")
 _LEGACY_COMMANDS_STATE_FILE = os.path.join(str(ROOT_DIR), "config", "commands_state.json")
+_MAP_DIR = SRC_DIR / "autonomous_driving" / "config" / "map"
+_DEFAULT_BULK_MAP = "Sangam_Track"
+_BULK_VEHICLE_SPACING_M = 8.0
+_BULK_LANE_OFFSET_M = 4.0
+_BULK_SEND_INTERVAL_SEC = 0.05
+_MAX_BULK_VEHICLES = 1000
 
 _tcp_sock = None
 _dispatch: Optional[Callable] = None
+_bulk_create_running = False
+_bulk_delete_running = False
+_bulk_request_lock = threading.Lock()
+_bulk_create_pending = set()
+_bulk_delete_pending = {}
+_bulk_created_ids = set()
 
 
 def init(tcp_sock, dispatch_fn: Callable) -> None:
     global _tcp_sock, _dispatch
     _tcp_sock = tcp_sock
     _dispatch = dispatch_fn
+
+
+def _get_bulk_maps() -> list:
+    try:
+        return sorted(
+            path.name for path in _MAP_DIR.iterdir()
+            if path.is_dir() and (path / "path_link.csv").is_file()
+        )
+    except OSError:
+        return []
 
 
 def build() -> None:
@@ -35,7 +61,8 @@ def build() -> None:
         dpg.add_button(label="Delete", callback=_on_delete_object)
         dpg.add_text("0x1305", color=(140, 140, 140, 255))
 
-    with dpg.collapsing_header(label="Create Object", default_open=False):
+    _subsection("Create Object")
+    with dpg.group():
         dpg.add_spacer(height=2)
         with dpg.group(horizontal=True):
             dpg.add_text("Type", color=(160, 160, 160, 255))
@@ -86,7 +113,49 @@ def build() -> None:
             dpg.add_button(label="Create", callback=_on_create_object)
             dpg.add_text("0x1301", color=(140, 140, 140, 255))
 
-    with dpg.collapsing_header(label="Manual Control", default_open=True):
+        dpg.add_spacer(height=6)
+        bulk_maps = _get_bulk_maps()
+        default_bulk_map = (
+            _DEFAULT_BULK_MAP if _DEFAULT_BULK_MAP in bulk_maps
+            else (bulk_maps[0] if bulk_maps else "")
+        )
+        with dpg.group(horizontal=True):
+            dpg.add_text("Bulk map", color=(160, 160, 160, 255))
+            dpg.add_combo(
+                tag="co_bulk_map",
+                items=bulk_maps,
+                default_value=default_bulk_map,
+                width=220,
+            )
+        with dpg.group(horizontal=True):
+            dpg.add_text("Bulk count", color=(160, 160, 160, 255))
+            dpg.add_input_int(
+                tag="co_bulk_count",
+                default_value=100,
+                min_value=1,
+                max_value=_MAX_BULK_VEHICLES,
+                min_clamped=True,
+                max_clamped=True,
+                step=1,
+                width=90,
+            )
+            dpg.add_button(
+                label="Create Vehicles",
+                tag="co_bulk_create_btn",
+                callback=_on_bulk_create_objects,
+            )
+            dpg.add_button(
+                label="Delete Created",
+                tag="co_bulk_delete_btn",
+                callback=_on_bulk_delete_objects,
+            )
+        dpg.add_text(
+            "Selected map path_link.csv / IONIQ5 / Kinematics / 8 m spacing",
+            color=(130, 130, 130, 255),
+        )
+
+    _subsection("Manual Control")
+    with dpg.group():
         dpg.add_spacer(height=2)
         with dpg.group(horizontal=True):
             for tag, label, default in [
@@ -107,7 +176,8 @@ def build() -> None:
         dpg.add_spacer(height=2)
         dpg.add_button(label="Send", callback=_on_manual_control)
 
-    with dpg.collapsing_header(label="Transform Control", default_open=True):
+    _subsection("Transform Control")
+    with dpg.group():
         dpg.add_spacer(height=2)
         with dpg.group(horizontal=True):
             for tag, label in [("tc_px", "px"), ("tc_py", "py"), ("tc_pz", "pz")]:
@@ -125,7 +195,8 @@ def build() -> None:
         dpg.add_spacer(height=2)
         dpg.add_button(label="Send", callback=_on_transform_control)
 
-    with dpg.collapsing_header(label="Set Trajectory", default_open=False):
+    _subsection("Set Trajectory")
+    with dpg.group():
         dpg.add_spacer(height=2)
         with dpg.group(horizontal=True):
             dpg.add_text("Mode", color=(160, 160, 160, 255))
@@ -197,6 +268,179 @@ def _on_create_object() -> None:
         f"pos=({params['pos_x']:.3f}, {params['pos_y']:.3f}, {params['pos_z']:.3f})",
         "INFO",
     )
+
+
+def _on_bulk_create_objects() -> None:
+    global _bulk_create_running
+    if _bulk_create_running:
+        log.append("[Object] Bulk Create is already running", "WARN")
+        return
+    if _dispatch is None or _tcp_sock is None:
+        log.append("[Object] Bulk Create skipped: TCP is not connected", "WARN")
+        return
+
+    count = int(dpg.get_value("co_bulk_count"))
+    map_name = str(dpg.get_value("co_bulk_map")).strip()
+    if count < 1 or count > _MAX_BULK_VEHICLES:
+        log.append(
+            f"[Object] Bulk Create count must be 1..{_MAX_BULK_VEHICLES}",
+            "WARN",
+        )
+        return
+
+    _save_state()
+    try:
+        path_file = _MAP_DIR / map_name / "path_link.csv"
+        if map_name not in _get_bulk_maps():
+            raise ValueError(f"unknown bulk map: {map_name!r}")
+        points = bulk_vehicle_spawn.load_csv_path(path_file)
+        poses = bulk_vehicle_spawn.build_spawn_poses(
+            points,
+            count,
+            spacing=_BULK_VEHICLE_SPACING_M,
+            lane_offset=_BULK_LANE_OFFSET_M,
+        )
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        log.append(f"[Object] Bulk Create path error: {exc}", "ERROR")
+        return
+
+    _bulk_create_running = True
+    dpg.configure_item("co_bulk_create_btn", enabled=False)
+    log.append(
+        f"[Object] Bulk Create started count={count} map={map_name} path={path_file.name}",
+        "INFO",
+    )
+    threading.Thread(
+        target=_run_bulk_create,
+        args=(poses,),
+        daemon=True,
+        name="BulkVehicleCreate",
+    ).start()
+
+
+def _run_bulk_create(poses: list) -> None:
+    global _bulk_create_running
+    try:
+        for index, (pos_x, pos_y, pos_z, yaw) in enumerate(poses, start=1):
+            params = {
+                "entity_type": 1,
+                "pos_x": pos_x,
+                "pos_y": pos_y,
+                "pos_z": pos_z,
+                "rot_x": 0.0,
+                "rot_y": 0.0,
+                "rot_z": yaw,
+                "driving_mode": 2,
+                "ground_vehicle_model": 1,
+            }
+            _dispatch(
+                proto.MSG_TYPE_CREATE_OBJECT,
+                lambda rid, kwargs=params: tcp.send_create_object(_tcp_sock, rid, **kwargs),
+                on_registered=_register_bulk_create_request,
+            )
+            if index < len(poses):
+                time.sleep(_BULK_SEND_INTERVAL_SEC)
+        log.append(f"[Object] Bulk Create dispatched count={len(poses)}", "INFO")
+    except Exception as exc:
+        log.append(f"[Object] Bulk Create stopped: {exc}", "ERROR")
+    finally:
+        _bulk_create_running = False
+        ui_queue.post(lambda: dpg.configure_item("co_bulk_create_btn", enabled=True))
+
+
+def _register_bulk_create_request(request_id: int) -> None:
+    with _bulk_request_lock:
+        _bulk_create_pending.add(request_id)
+
+
+def on_create_object_response(request_id: int, parsed: dict) -> None:
+    with _bulk_request_lock:
+        if request_id not in _bulk_create_pending:
+            return
+        _bulk_create_pending.remove(request_id)
+        if parsed.get("result_code") == 0 and parsed.get("object_id"):
+            _bulk_created_ids.add(str(parsed["object_id"]))
+
+
+def _on_bulk_delete_objects() -> None:
+    global _bulk_delete_running
+    if _bulk_create_running:
+        log.append("[Object] Delete Created skipped: Bulk Create is still dispatching", "WARN")
+        return
+    with _bulk_request_lock:
+        create_pending_count = len(_bulk_create_pending)
+        delete_pending_count = len(_bulk_delete_pending)
+        entity_ids = sorted(_bulk_created_ids)
+    if create_pending_count:
+        log.append(
+            f"[Object] Delete Created skipped: waiting for {create_pending_count} create response(s)",
+            "WARN",
+        )
+        return
+    if _bulk_delete_running or delete_pending_count:
+        log.append("[Object] Delete Created is already running", "WARN")
+        return
+    if not entity_ids:
+        log.append("[Object] Delete Created skipped: no tracked vehicle IDs", "WARN")
+        return
+
+    _bulk_delete_running = True
+    dpg.configure_item("co_bulk_delete_btn", enabled=False)
+    log.append(f"[Object] Delete Created started count={len(entity_ids)}", "INFO")
+    threading.Thread(
+        target=_run_bulk_delete,
+        args=(entity_ids,),
+        daemon=True,
+        name="BulkVehicleDelete",
+    ).start()
+
+
+def _run_bulk_delete(entity_ids: list) -> None:
+    global _bulk_delete_running
+    try:
+        for index, entity_id in enumerate(entity_ids, start=1):
+            _dispatch(
+                proto.MSG_TYPE_DELETE_OBJECT,
+                lambda rid, eid=entity_id: tcp.send_delete_object(_tcp_sock, rid, eid),
+                on_registered=lambda rid, eid=entity_id: _register_bulk_delete_request(rid, eid),
+            )
+            if index < len(entity_ids):
+                time.sleep(_BULK_SEND_INTERVAL_SEC)
+        log.append(f"[Object] Delete Created dispatched count={len(entity_ids)}", "INFO")
+    except Exception as exc:
+        log.append(f"[Object] Delete Created stopped: {exc}", "ERROR")
+    finally:
+        _bulk_delete_running = False
+        ui_queue.post(lambda: dpg.configure_item("co_bulk_delete_btn", enabled=True))
+
+
+def _register_bulk_delete_request(request_id: int, entity_id: str) -> None:
+    with _bulk_request_lock:
+        _bulk_delete_pending[request_id] = entity_id
+
+
+def on_delete_object_response(
+    request_id: int,
+    result_code: Optional[int],
+    detail_code: Optional[int],
+) -> None:
+    with _bulk_request_lock:
+        entity_id = _bulk_delete_pending.pop(request_id, None)
+        if entity_id is None:
+            return
+        if result_code == 0:
+            _bulk_created_ids.discard(entity_id)
+            remaining = len(_bulk_created_ids)
+        else:
+            remaining = len(_bulk_created_ids)
+    if result_code != 0:
+        log.append(
+            f"[Object] Delete Created failed id={entity_id} "
+            f"result={result_code} detail={detail_code}",
+            "WARN",
+        )
+    elif remaining == 0:
+        log.append("[Object] Delete Created completed", "INFO")
 
 
 def _on_delete_object() -> None:
@@ -308,6 +552,8 @@ def _save_state() -> None:
             "co_rot_z": dpg.get_value("co_rot_z"),
             "co_driving_mode": dpg.get_value("co_driving_mode"),
             "co_ground_vehicle_model": dpg.get_value("co_ground_vehicle_model"),
+            "co_bulk_count": dpg.get_value("co_bulk_count"),
+            "co_bulk_map": dpg.get_value("co_bulk_map"),
             "mc_thr": dpg.get_value("mc_thr"),
             "mc_brk": dpg.get_value("mc_brk"),
             "mc_steer": dpg.get_value("mc_steer"),
@@ -352,6 +598,8 @@ def _load_state() -> None:
             "co_rot_x",
             "co_rot_y",
             "co_rot_z",
+            "co_bulk_count",
+            "co_bulk_map",
             "mc_thr",
             "mc_brk",
             "mc_steer",
@@ -401,3 +649,13 @@ def _section(label: str) -> None:
     dpg.add_text(label, color=(200, 200, 100, 255))
     dpg.add_separator()
     dpg.add_spacer(height=2)
+
+
+def _subsection(label: str) -> None:
+    dpg.add_spacer(height=10)
+    dpg.add_text(
+        f"[ {label.upper()} ]",
+        color=(105, 175, 235, 255),
+    )
+    dpg.add_separator()
+    dpg.add_spacer(height=4)

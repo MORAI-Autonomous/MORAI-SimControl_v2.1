@@ -612,6 +612,7 @@ class InterfaceConsoleState:
                         on_disconnect=self._on_disconnect,
                         on_response=self._on_tcp_response,
                         on_vehicle_info=self._on_vehicle_info_response,
+                        on_create_object=self._on_create_object_response,
                     )
                     self.receiver.start()
                     cmd_panel.init(
@@ -707,12 +708,21 @@ class InterfaceConsoleState:
     ) -> None:
         if msg_type == MSG_TYPE_LOAD_SUITE:
             cmd_panel.on_load_suite_response(request_id, result_code, detail_code)
+        elif msg_type == MSG_TYPE_DELETE_OBJECT:
+            obj_panel.on_delete_object_response(
+                request_id,
+                result_code,
+                detail_code,
+            )
 
     def _on_vehicle_info_response(self, request_id: int, parsed: dict) -> None:
         for runner in list(self.ad_runners) + list(self.step_ad_runners):
             handler = getattr(runner, "handle_vehicle_info_response", None)
             if handler and handler(request_id, parsed):
                 return
+
+    def _on_create_object_response(self, request_id: int, parsed: dict) -> None:
+        obj_panel.on_create_object_response(request_id, parsed)
 
 
 # ============================================================
