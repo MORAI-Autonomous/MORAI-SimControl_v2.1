@@ -369,23 +369,34 @@ def _on_bulk_delete_objects() -> None:
         return
     with _bulk_request_lock:
         create_pending_count = len(_bulk_create_pending)
-        delete_pending_count = len(_bulk_delete_pending)
         entity_ids = sorted(_bulk_created_ids)
-    if create_pending_count:
+        if _bulk_delete_running:
+            log.append("[Object] Delete Created is already running", "WARN")
+            return
+        if create_pending_count:
+            log.append(
+                f"[Object] Delete Created skipped: waiting for "
+                f"{create_pending_count} create response(s)",
+                "WARN",
+            )
+            return
+        if not entity_ids:
+            log.append("[Object] Delete Created skipped: no tracked vehicle IDs", "WARN")
+            return
+
+        # A previous run may have finished dispatching without receiving every
+        # response. Those request IDs must not block a retry of the tracked IDs.
+        stale_pending_count = len(_bulk_delete_pending)
+        _bulk_delete_pending.clear()
+        _bulk_delete_running = True
+
+    dpg.configure_item("co_bulk_delete_btn", enabled=False)
+    if stale_pending_count:
         log.append(
-            f"[Object] Delete Created skipped: waiting for {create_pending_count} create response(s)",
+            f"[Object] Delete Created retrying; cleared "
+            f"{stale_pending_count} stale response(s)",
             "WARN",
         )
-        return
-    if _bulk_delete_running or delete_pending_count:
-        log.append("[Object] Delete Created is already running", "WARN")
-        return
-    if not entity_ids:
-        log.append("[Object] Delete Created skipped: no tracked vehicle IDs", "WARN")
-        return
-
-    _bulk_delete_running = True
-    dpg.configure_item("co_bulk_delete_btn", enabled=False)
     log.append(f"[Object] Delete Created started count={len(entity_ids)}", "INFO")
     threading.Thread(
         target=_run_bulk_delete,
