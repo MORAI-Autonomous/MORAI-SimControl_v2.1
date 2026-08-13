@@ -86,6 +86,7 @@ config/                          Local runtime state
 
 - [`docs/architecture.md`](docs/architecture.md): Application structure and integration patterns
 - [`docs/camera-sensor.md`](docs/camera-sensor.md): Camera and depth rendering notes
+- [`docs/lockstep-network-latency.md`](docs/lockstep-network-latency.md): FixedStep timing and save-mode protocol notes
 - [`docs/tcp-interface-checklist.md`](docs/tcp-interface-checklist.md): TCP API change checklist
 - [`docs/workflow.md`](docs/workflow.md): Development workflow and recurring rules
 
