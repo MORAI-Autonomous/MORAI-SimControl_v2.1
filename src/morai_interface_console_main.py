@@ -301,7 +301,11 @@ class InterfaceConsoleState:
                 log_panel.append(f"Send error: {e}", "ERROR")
         threading.Thread(target=_send, daemon=True).start()
 
-    def toggle_auto(self, max_calls: int = MAX_CALL_NUM) -> bool:
+    def toggle_auto(
+        self,
+        max_calls: int = MAX_CALL_NUM,
+        save_mode: int = SAVE_MODE_DEFAULT,
+    ) -> bool:
         if self.auto_caller is None or not self.auto_caller.is_alive():
             self.auto_caller = ac.AutoCaller(
                 tcp_sock=self.tcp_sock,
@@ -315,6 +319,7 @@ class InterfaceConsoleState:
                 timeout_sec=AUTO_TIMEOUT_SEC,
                 delay_sec=AUTO_DELAY_BETWEEN_CMDS_SEC,
                 progress_every=50,
+                save_mode=save_mode,
             )
             def _on_done(s=self):
                 s.auto_caller = None
@@ -483,7 +488,7 @@ class InterfaceConsoleState:
         if updated:
             log_panel.append(f"[AD:{entity_id}] max speed updated -> {max_speed_kph:.0f} km/h", "INFO")
 
-    def start_step_ad(self, vehicles: list, save_data: bool = False,
+    def start_step_ad(self, vehicles: list, save_mode: int = SAVE_MODE_SKIP,
                       collision_cfg: dict = None) -> None:
         if self.step_ad_runners:
             log_panel.append("[StepAD] already running.", "WARN")
@@ -501,7 +506,7 @@ class InterfaceConsoleState:
                 pending_add_fn = pending_add,
                 pending_pop_fn = pending_pop,
                 timeout_sec    = AUTO_TIMEOUT_SEC,
-                save_data      = save_data,
+                save_mode      = save_mode,
                 log_fn         = lambda msg, level="INFO": log_panel.append(f"[StepAD] {msg}", level),
                 status_cb      = au_panel.update_status,
                 on_done        = _on_done,
@@ -510,7 +515,10 @@ class InterfaceConsoleState:
             runner.start()
             self.step_ad_runners.append(runner)
             ids = ", ".join(v["entity_id"] for v in vehicles)
-            log_panel.append(f"[StepAD] started (vehicles: {ids})")
+            save_mode_name = SAVE_MODE_MAP.get(save_mode, f"UNKNOWN({save_mode})")
+            log_panel.append(
+                f"[StepAD] started (vehicles: {ids}, save_mode: {save_mode_name})"
+            )
         except Exception as e:
             log_panel.append(f"[StepAD] start failed: {e}", "ERROR")
             au_panel.reset_ui()
@@ -718,7 +726,12 @@ def _patch_auto_caller(caller: ac.AutoCaller, on_done=None):
 
             rid = caller._next_rid()
             ev  = caller.pending_add(caller.pending, caller.lock, rid, MSG_TYPE_FIXED_STEP)
-            tcp.send_fixed_step(caller.tcp_sock, rid, step_count=caller.step_count)
+            tcp.send_fixed_step(
+                caller.tcp_sock,
+                rid,
+                step_count=caller.step_count,
+                save_mode=caller.save_mode,
+            )
             if not caller._wait_or_stop(ev):
                 caller.pending_pop(caller.pending, caller.lock, rid, MSG_TYPE_FIXED_STEP)
                 log_panel.append(f"[AUTO][TIMEOUT] FixedStep i={i} rid={rid}", "WARN")
@@ -726,20 +739,6 @@ def _patch_auto_caller(caller: ac.AutoCaller, on_done=None):
             caller.pending_pop(caller.pending, caller.lock, rid, MSG_TYPE_FIXED_STEP)
             if caller.delay_sec > 0:
                 time.sleep(caller.delay_sec)
-            if caller._stop_event.is_set():
-                break
-
-            rid = caller._next_rid()
-            ev  = caller.pending_add(caller.pending, caller.lock, rid, MSG_TYPE_SAVE_DATA)
-            tcp.send_save_data(caller.tcp_sock, rid)
-            if not caller._wait_or_stop(ev):
-                caller.pending_pop(caller.pending, caller.lock, rid, MSG_TYPE_SAVE_DATA)
-                log_panel.append(f"[AUTO][TIMEOUT] SaveData i={i} rid={rid}", "WARN")
-                break
-            caller.pending_pop(caller.pending, caller.lock, rid, MSG_TYPE_SAVE_DATA)
-            if caller.delay_sec > 0:
-                time.sleep(caller.delay_sec)
-
             if caller.progress_every > 0 and (i + 1) % caller.progress_every == 0:
                 cmd_panel.update_auto_progress(i + 1, caller.max_calls)
                 log_panel.append(f"progress {i+1}/{caller.max_calls}", "AUTO")

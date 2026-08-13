@@ -6,9 +6,21 @@ from typing import Callable, Optional
 import dearpygui.dearpygui as dpg
 import utils.ui_queue as ui_queue
 import panels.log as log
+import transport.protocol_defs as proto
 
 _start_fn: Optional[Callable] = None
 _stop_fn:  Optional[Callable] = None
+
+_SAVE_MODE_ITEMS = (
+    "Skip (0)",
+    "Default (1)",
+    "Force (2)",
+)
+_SAVE_MODE_VALUES = {
+    "Skip (0)": proto.SAVE_MODE_SKIP,
+    "Default (1)": proto.SAVE_MODE_DEFAULT,
+    "Force (2)": proto.SAVE_MODE_FORCE,
+}
 
 
 def init(start_step_ad_fn: Callable, stop_step_ad_fn: Callable) -> None:
@@ -52,8 +64,19 @@ def build(parent) -> None:
 
         dpg.add_spacer(height=4)
         with dpg.group(horizontal=True):
-            dpg.add_text("SaveData  :", color=(180, 180, 180, 255))
-            dpg.add_checkbox(tag="sad_save_data", default_value=False)
+            dpg.add_text("Save Mode :", color=(180, 180, 180, 255))
+            dpg.add_combo(
+                tag="sad_save_mode",
+                items=_SAVE_MODE_ITEMS,
+                default_value=_SAVE_MODE_ITEMS[0],
+                width=120,
+            )
+            with dpg.tooltip("sad_save_mode"):
+                dpg.add_text(
+                    "Skip: do not save this step.\n"
+                    "Default: respect each interface save option.\n"
+                    "Force: save all interfaces."
+                )
 
         dpg.add_spacer(height=4)
         with dpg.group(horizontal=True):
@@ -113,11 +136,14 @@ def _on_start() -> None:
     if not vehicles:
         log.append("[StepAD] entity_id가 없습니다. 차량 ID를 입력해 주세요.", level="WARN")
         return
-    save_data = dpg.get_value("sad_save_data")
+    save_mode = _SAVE_MODE_VALUES.get(
+        dpg.get_value("sad_save_mode"),
+        proto.SAVE_MODE_SKIP,
+    )
     dpg.configure_item("sad_btn_start", enabled=False)
     dpg.set_value("sad_status", "● Running")
     dpg.configure_item("sad_status", color=(100, 220, 100, 255))
-    _start_fn(vehicles, save_data)
+    _start_fn(vehicles, save_mode)
 
 
 def _on_stop() -> None:

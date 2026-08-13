@@ -70,6 +70,16 @@ _RTF_VALUES = {
     "Real-Time": 1,
     "Unlimited": 2,
 }
+_SAVE_MODE_ITEMS = (
+    "Skip (0)",
+    "Default (1)",
+    "Force (2)",
+)
+_SAVE_MODE_VALUES = {
+    "Skip (0)": proto.SAVE_MODE_SKIP,
+    "Default (1)": proto.SAVE_MODE_DEFAULT,
+    "Force (2)": proto.SAVE_MODE_FORCE,
+}
 
 def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
     global _tcp_sock, _dispatch, _toggle_auto
@@ -255,6 +265,21 @@ def build(parent: int | str) -> None:
         # ── Fixed Step ─────────────────────────────────────
         _section("FIXED STEP")
 
+        with dpg.group(horizontal=True):
+            dpg.add_text("Save Mode :", color=(180, 180, 180, 255))
+            dpg.add_combo(
+                tag="fs_save_mode",
+                items=_SAVE_MODE_ITEMS,
+                default_value="Default (1)",
+                width=120,
+            )
+            with dpg.tooltip("fs_save_mode"):
+                dpg.add_text(
+                    "Skip: do not save this step.\n"
+                    "Default: respect each interface save option.\n"
+                    "Force: save all interfaces."
+                )
+
         # Step : count [input] [FixedStep]
         with dpg.group(horizontal=True):
             dpg.add_text("Step      :", color=(180, 180, 180, 255))
@@ -312,21 +337,19 @@ def reset_auto_ui() -> None:
 
 def _on_fixed_step_once() -> None:
     step_count = dpg.get_value("fs_step_count")
-
-    def _send_save_data(_fixed_step_rid: int) -> None:
-        _dispatch(
-            proto.MSG_TYPE_SAVE_DATA,
-            lambda rid: tcp.send_save_data(_tcp_sock, rid),
-        )
+    save_mode = _SAVE_MODE_VALUES.get(
+        dpg.get_value("fs_save_mode"),
+        proto.SAVE_MODE_SKIP,
+    )
 
     _dispatch(
         proto.MSG_TYPE_FIXED_STEP,
-        lambda rid, count=step_count: tcp.send_fixed_step(
+        lambda rid, count=step_count, mode=save_mode: tcp.send_fixed_step(
             _tcp_sock,
             rid,
             step_count=count,
+            save_mode=mode,
         ),
-        on_sent=_send_save_data,
     )
 
 
@@ -334,8 +357,12 @@ def _on_auto_toggle() -> None:
     if _toggle_auto is None:
         return
     max_calls = dpg.get_value("auto_max_calls")
+    save_mode = _SAVE_MODE_VALUES.get(
+        dpg.get_value("fs_save_mode"),
+        proto.SAVE_MODE_SKIP,
+    )
     dpg.set_value("auto_total_text", str(max_calls))
-    running = _toggle_auto(max_calls)
+    running = _toggle_auto(max_calls, save_mode)
     label = "■ Stop" if running else "▶▶ AutoCaller"
     dpg.configure_item("btn_auto", label=label)
 

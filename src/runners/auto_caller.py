@@ -8,7 +8,7 @@ import transport.tcp_transport as tcp
 
 
 class AutoCaller(threading.Thread):
-    """Repeat FixedStep and SaveData calls with request/response synchronization."""
+    """Repeat FixedStep calls with request/response synchronization."""
 
     def __init__(
         self,
@@ -20,10 +20,14 @@ class AutoCaller(threading.Thread):
         pending_add_fn,
         pending_pop_fn,
         step_count: int = 1,
+        save_mode: int = proto.SAVE_MODE_DEFAULT,
         timeout_sec: float = 3.0,
         delay_sec: float = 0.0,
         progress_every: int = 50,
     ):
+        if save_mode not in proto.SAVE_MODE_MAP:
+            raise ValueError(f"Unsupported save mode: {save_mode}")
+
         super().__init__(daemon=True)
         self.tcp_sock = tcp_sock
         self.pending = pending
@@ -33,6 +37,7 @@ class AutoCaller(threading.Thread):
         self.pending_add = pending_add_fn
         self.pending_pop = pending_pop_fn
         self.step_count = step_count
+        self.save_mode = save_mode
         self.timeout_sec = timeout_sec
         self.delay_sec = delay_sec
         self.progress_every = progress_every
@@ -58,29 +63,18 @@ class AutoCaller(threading.Thread):
 
             rid_step = self._next_rid()
             ev_step = self.pending_add(self.pending, self.lock, rid_step, proto.MSG_TYPE_FIXED_STEP)
-            tcp.send_fixed_step(self.tcp_sock, rid_step, step_count=self.step_count)
+            tcp.send_fixed_step(
+                self.tcp_sock,
+                rid_step,
+                step_count=self.step_count,
+                save_mode=self.save_mode,
+            )
 
             if not self._wait_or_stop(ev_step):
                 self.pending_pop(self.pending, self.lock, rid_step, proto.MSG_TYPE_FIXED_STEP)
                 print(f"[AUTO][TIMEOUT/STOP] FixedStep. i={index} rid={rid_step}")
                 break
             self.pending_pop(self.pending, self.lock, rid_step, proto.MSG_TYPE_FIXED_STEP)
-
-            if self.delay_sec > 0.0:
-                time.sleep(self.delay_sec)
-
-            if self._stop_event.is_set():
-                break
-
-            rid_save = self._next_rid()
-            ev_save = self.pending_add(self.pending, self.lock, rid_save, proto.MSG_TYPE_SAVE_DATA)
-            tcp.send_save_data(self.tcp_sock, rid_save)
-
-            if not self._wait_or_stop(ev_save):
-                self.pending_pop(self.pending, self.lock, rid_save, proto.MSG_TYPE_SAVE_DATA)
-                print(f"[AUTO][TIMEOUT/STOP] SaveData. i={index} rid={rid_save}")
-                break
-            self.pending_pop(self.pending, self.lock, rid_save, proto.MSG_TYPE_SAVE_DATA)
 
             if self.delay_sec > 0.0:
                 time.sleep(self.delay_sec)

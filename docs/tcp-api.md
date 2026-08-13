@@ -1,8 +1,8 @@
 # TCP API Reference
 
-> 이 문서는 자동 생성됩니다. Confluence에서 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.
+> 이 Markdown/HTML 문서는 자동 생성됩니다. 생성된 문서를 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.
 >
-> - 생성 시각: `2026-07-24 18:16 +0900`
+> - 생성 시각: `2026-08-04 13:29 +0900`
 > - 기준 브랜치: `main`
 
 ## Common Header
@@ -30,20 +30,20 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | [`0x1002`](#api-0x1002) | [`GetSimulatorMode`](#api-0x1002) | `0 bytes` | `12 bytes` |
 | [`0x1003`](#api-0x1003) | [`SetSimulatorMode`](#api-0x1003) | `4 bytes` | `8 bytes` |
 | [`0x1004`](#api-0x1004) | [`LoadMap`](#api-0x1004) | `4 + N bytes (N = map_name UTF-8 byte length)` | `8 bytes` |
-| [`0x1005`](#api-0x1005) | [`ShutdownSimulator`](#api-0x1005) | `1 bytes` | `8 bytes` |
+| [`0x1005`](#api-0x1005) | [`ShutdownSimulator`](#api-0x1005) | `1 byte` | `8 bytes` |
 | [`0x1101`](#api-0x1101) | [`GetSimulationTimeStatus`](#api-0x1101) | `0 bytes` | `48 bytes` |
 | [`0x1102`](#api-0x1102) | [`SetSimulationTimeModeCommand`](#api-0x1102) | `20 bytes` | `20 bytes` |
-| [`0x1201`](#api-0x1201) | [`FixedStep`](#api-0x1201) | `4 bytes` | `8 bytes` |
+| [`0x1201`](#api-0x1201) | [`FixedStep`](#api-0x1201) | `4, 5, or 21 bytes` | `8 bytes` |
 | [`0x1202`](#api-0x1202) | [`SaveData`](#api-0x1202) | `0 bytes` | `8 bytes` |
 | [`0x1301`](#api-0x1301) | [`CreateObject`](#api-0x1301) | `36 bytes` | `8 + 4 + N bytes (N = object_id UTF-8 byte length)` |
 | [`0x1302`](#api-0x1302) | [`ManualControlById`](#api-0x1302) | `4 + N + 24 bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
 | [`0x1303`](#api-0x1303) | [`TransformControlById`](#api-0x1303) | `4 + N + 36 bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
 | [`0x1304`](#api-0x1304) | [`SetTrajectory`](#api-0x1304) | `4 + N1 + 4 + 4 + N2 + 4 bytes (N1 = entity_id UTF-8 byte length, N2 = trajectory_name UTF-8 byte length) + 32 bytes * item_count` | `8 bytes` |
 | [`0x1305`](#api-0x1305) | [`DeleteObject`](#api-0x1305) | `N bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
-| [`0x1306`](#api-0x1306) | [`GetVehicleInfo`](#api-0x1306) | `4 + N bytes (N = entity_id UTF-8 byte length)` | `20 + 4 + N + 72 bytes (N = entity_id UTF-8 byte length)` |
+| [`0x1306`](#api-0x1306) | [`GetVehicleInfo`](#api-0x1306) | `4 + N bytes (N = entity_id UTF-8 byte length)` | `8 bytes on failure; 96 + N bytes on success (N = entity_id UTF-8 byte length)` |
 | [`0x1401`](#api-0x1401) | [`ActiveSuiteStatus`](#api-0x1401) | `0 bytes` | `8 + 4 + N1 + 4 + N2 + 4 bytes (N1 = active_suite_name UTF-8 byte length, N2 = active_scenario_name UTF-8 byte length) + variable bytes * item_count` |
 | [`0x1402`](#api-0x1402) | [`LoadSuite`](#api-0x1402) | `4 + N bytes (N = suite_path UTF-8 byte length)` | `8 bytes` |
-| [`0x1504`](#api-0x1504) | [`ScenarioStatus`](#api-0x1504) | `0 bytes` | `12 + 4 + N bytes (N = name UTF-8 byte length)` |
+| [`0x1504`](#api-0x1504) | [`ScenarioStatus`](#api-0x1504) | `0 bytes` | `12 bytes for legacy responses; 16 + N bytes with name (N = name UTF-8 byte length)` |
 | [`0x1505`](#api-0x1505) | [`ScenarioControl`](#api-0x1505) | `4 + 4 + N bytes (N = scenario_name UTF-8 byte length)` | `8 bytes` |
 | [`0x1601`](#api-0x1601) | [`LoadTrafficScenario`](#api-0x1601) | `4 + N bytes (N = file_path UTF-8 byte length)` | `8 bytes` |
 | [`0x1602`](#api-0x1602) | [`TrafficGenerate`](#api-0x1602) | `8 bytes` | `8 bytes` |
@@ -60,12 +60,7 @@ Every TCP packet uses this 16-byte header before the payload described below.
 
 Query the current simulator frontend lifecycle state.
 
-Wire layout: variant-specific
-
-This message has no payload.
-
-Notes:
-- No payload.
+Wire layout: `(no payload)`
 
 ### Resp
 
@@ -78,22 +73,22 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 state]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 | `state` | `uint32` | 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY |
 
 ### Noti
 
-- Payload: `4 bytes`
+- Payload: `protobuf variable size (2 bytes for current state values)`
 - Parser: `tcp.parse_get_simulator_status_notification_payload()`
 
 Push the current simulator frontend lifecycle state without a preceding request.
 
-Wire layout: `[uint32 state]`
+Wire layout: `[field #1: varint state]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `state` | `uint32` | Protobuf enum value. 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY |
+| `state` | `protobuf varint` | Enum value. 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY |
 
 Notes:
 - Header uses msg_class = 0x03 (NOTI).
@@ -110,12 +105,7 @@ Notes:
 
 Query the current simulator functional mode.
 
-Wire layout: variant-specific
-
-This message has no payload.
-
-Notes:
-- No payload.
+Wire layout: `(no payload)`
 
 ### Resp
 
@@ -128,8 +118,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 mode]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 | `mode` | `uint32` | 0=UNSPECIFIED, 1=SCENARIO, 2=REPLAY, 3=TRAFFIC, 4=MONITORING, 5=COMPETITION |
 
 <a id="api-0x1003"></a>
@@ -159,8 +149,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1004"></a>
 ## `0x1004` LoadMap
@@ -193,15 +183,15 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1005"></a>
 ## `0x1005` ShutdownSimulator
 
 ### Req
 
-- Payload: `1 bytes`
+- Payload: `1 byte`
 - Builder: `tcp.send_shutdown_simulator()`
 
 Request graceful or forced simulator shutdown.
@@ -223,8 +213,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1101"></a>
 ## `0x1101` GetSimulationTimeStatus
@@ -236,12 +226,7 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 Query current simulation time mode and timing state.
 
-Wire layout: variant-specific
-
-This message has no payload.
-
-Notes:
-- No payload.
+Wire layout: `(no payload)`
 
 ### Resp
 
@@ -311,16 +296,29 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 mode] [float32 f
 
 ### Req
 
-- Payload: `4 bytes`
+- Payload: `4, 5, or 21 bytes`
 - Builder: `tcp.send_fixed_step()`
 
 Advance the simulator by a fixed number of steps.
 
-Wire layout: `[uint32 step_count]`
+Wire layout: `[uint32 step_count] [uint8 save_mode] [uint64 client_recv_ns] [uint64 client_send_ns]`
 
 | Field | Type | Description |
 |------|------|-------------|
 | `step_count` | `uint32` | Number of simulation steps to execute |
+| `save_mode` | `uint8` | 0=SAVE_MODE_SKIP, 1=SAVE_MODE_DEFAULT, 2=SAVE_MODE_FORCE |
+| `client_recv_ns` | `uint64` | Client monotonic timestamp after the previous FixedStep response was fully received |
+| `client_send_ns` | `uint64` | Client monotonic timestamp immediately before this FixedStep request is sent |
+
+Notes:
+- Uses layout A: save_mode is independent of the optional performance timestamps.
+- Legacy 4-byte payloads contain only step_count and imply SAVE_MODE_SKIP with no timestamps.
+- A 5-byte payload adds save_mode without timestamps.
+- A 21-byte payload contains step_count, save_mode, client_recv_ns, and client_send_ns.
+- SAVE_MODE_SKIP does not save this step, regardless of interface save options.
+- SAVE_MODE_DEFAULT respects each interface save option and is equivalent to SaveDataCommand.
+- SAVE_MODE_FORCE saves all interfaces, ignoring their individual save options.
+- For the first timestamped request, client_recv_ns equals client_send_ns.
 
 ### Resp
 
@@ -333,8 +331,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1202"></a>
 ## `0x1202` SaveData
@@ -346,12 +344,10 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 Trigger simulator-side data capture.
 
-Wire layout: variant-specific
-
-This message has no payload.
+Wire layout: `(no payload)`
 
 Notes:
-- No payload.
+- Retained for compatibility; its behavior is equivalent to FixedStep SAVE_MODE_DEFAULT.
 
 ### Resp
 
@@ -364,8 +360,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1301"></a>
 ## `0x1301` CreateObject
@@ -382,12 +378,12 @@ Wire layout: `[int32 entity_type] [float32 pos_x] [float32 pos_y] [float32 pos_z
 | Field | Type | Description |
 |------|------|-------------|
 | `entity_type` | `int32` | EntityType enum value |
-| `pos_x` | `float32` | - |
-| `pos_y` | `float32` | - |
-| `pos_z` | `float32` | - |
-| `rot_x` | `float32` | - |
-| `rot_y` | `float32` | - |
-| `rot_z` | `float32` | - |
+| `pos_x` | `float32` | Position X component |
+| `pos_y` | `float32` | Position Y component |
+| `pos_z` | `float32` | Position Z component |
+| `rot_x` | `float32` | Rotation X component |
+| `rot_y` | `float32` | Rotation Y component |
+| `rot_z` | `float32` | Rotation Z component |
 | `driving_mode` | `int32` | VehicleDrivingMode enum value |
 | `ground_vehicle_model` | `int32` | GroundVehicleModel enum value |
 
@@ -402,10 +398,10 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 object_id_len][u
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 | `object_id_len` | `uint32` | object_id UTF-8 byte length |
-| `object_id` | `utf-8 bytes` | - |
+| `object_id` | `utf-8 bytes` | Created object ID |
 
 <a id="api-0x1302"></a>
 ## `0x1302` ManualControlById
@@ -438,8 +434,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1303"></a>
 ## `0x1303` TransformControlById
@@ -456,14 +452,14 @@ Wire layout: `[uint32 entity_id_len][utf-8 * entity_id_len] [float32 pos_x] [flo
 | Field | Type | Description |
 |------|------|-------------|
 | `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
-| `entity_id` | `utf-8 bytes` | - |
-| `pos_x` | `float32` | - |
-| `pos_y` | `float32` | - |
-| `pos_z` | `float32` | - |
-| `rot_x` | `float32` | - |
-| `rot_y` | `float32` | - |
-| `rot_z` | `float32` | - |
-| `steer_angle` | `float32` | - |
+| `entity_id` | `utf-8 bytes` | Target entity ID |
+| `pos_x` | `float32` | Position X component |
+| `pos_y` | `float32` | Position Y component |
+| `pos_z` | `float32` | Position Z component |
+| `rot_x` | `float32` | Rotation X component |
+| `rot_y` | `float32` | Rotation Y component |
+| `rot_z` | `float32` | Rotation Z component |
+| `steer_angle` | `float32` | Steering angle value |
 | `speed` | `float64` | Currently derived from Vehicle Info local velocity in m/s |
 
 ### Resp
@@ -477,8 +473,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1304"></a>
 ## `0x1304` SetTrajectory
@@ -495,20 +491,20 @@ Wire layout: `[uint32 entity_id_len][utf-8 * entity_id_len] [int32 follow_mode] 
 | Field | Type | Description |
 |------|------|-------------|
 | `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
-| `entity_id` | `utf-8 bytes` | - |
+| `entity_id` | `utf-8 bytes` | Target entity ID |
 | `follow_mode` | `int32` | 1 = POSITION, 2 = FOLLOW |
 | `trajectory_name_len` | `uint32` | trajectory_name UTF-8 byte length |
-| `trajectory_name` | `utf-8 bytes` | - |
-| `point_count` | `uint32` | - |
+| `trajectory_name` | `utf-8 bytes` | Trajectory identifier |
+| `point_count` | `uint32` | Number of trajectory points that follow |
 
 Repeat layout:
 
 | Field | Type | Description |
 |------|------|-------------|
-| `points[].x` | `float64` | - |
-| `points[].y` | `float64` | - |
-| `points[].z` | `float64` | - |
-| `points[].time` | `float64` | - |
+| `points[].x` | `float64` | Trajectory point X component |
+| `points[].y` | `float64` | Trajectory point Y component |
+| `points[].z` | `float64` | Trajectory point Z component |
+| `points[].time` | `float64` | Trajectory point time value |
 
 Notes:
 - Each trajectory point is serialized as four float64 values.
@@ -524,8 +520,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1305"></a>
 ## `0x1305` DeleteObject
@@ -557,8 +553,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1306"></a>
 ## `0x1306` GetVehicleInfo
@@ -582,7 +578,7 @@ Notes:
 
 ### Resp
 
-- Payload: `20 + 4 + N + 72 bytes (N = entity_id UTF-8 byte length)`
+- Payload: `8 bytes on failure; 96 + N bytes on success (N = entity_id UTF-8 byte length)`
 - Parser: `tcp.parse_get_vehicle_info_payload()`
 
 Return the current transform, motion, and control state of one ground vehicle.
@@ -591,30 +587,30 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [int64 seconds] [int32 n
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 | `seconds` | `int64` | Simulation timestamp seconds |
 | `nanos` | `int32` | Simulation timestamp nanoseconds remainder |
 | `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
 | `entity_id` | `utf-8 bytes` | Echoed ground vehicle Entity ID |
-| `pos_x` | `float32` | - |
-| `pos_y` | `float32` | - |
-| `pos_z` | `float32` | - |
-| `rot_x` | `float32` | - |
-| `rot_y` | `float32` | - |
-| `rot_z` | `float32` | - |
-| `vel_x` | `float32` | - |
-| `vel_y` | `float32` | - |
-| `vel_z` | `float32` | - |
-| `accel_x` | `float32` | - |
-| `accel_y` | `float32` | - |
-| `accel_z` | `float32` | - |
-| `ang_vel_x` | `float32` | - |
-| `ang_vel_y` | `float32` | - |
-| `ang_vel_z` | `float32` | - |
-| `throttle` | `float32` | - |
-| `brake` | `float32` | - |
-| `steer_angle` | `float32` | - |
+| `pos_x` | `float32` | Vehicle position X component |
+| `pos_y` | `float32` | Vehicle position Y component |
+| `pos_z` | `float32` | Vehicle position Z component |
+| `rot_x` | `float32` | Vehicle rotation X component |
+| `rot_y` | `float32` | Vehicle rotation Y component |
+| `rot_z` | `float32` | Vehicle rotation Z component |
+| `vel_x` | `float32` | Vehicle local velocity X component |
+| `vel_y` | `float32` | Vehicle local velocity Y component |
+| `vel_z` | `float32` | Vehicle local velocity Z component |
+| `accel_x` | `float32` | Vehicle acceleration X component |
+| `accel_y` | `float32` | Vehicle acceleration Y component |
+| `accel_z` | `float32` | Vehicle acceleration Z component |
+| `ang_vel_x` | `float32` | Vehicle angular velocity X component |
+| `ang_vel_y` | `float32` | Vehicle angular velocity Y component |
+| `ang_vel_z` | `float32` | Vehicle angular velocity Z component |
+| `throttle` | `float32` | Current throttle control value |
+| `brake` | `float32` | Current brake control value |
+| `steer_angle` | `float32` | Current steering angle value |
 
 Notes:
 - Failure responses contain only result_code and detail_code (8 bytes).
@@ -630,12 +626,7 @@ Notes:
 
 Query the active suite and scenario list.
 
-Wire layout: variant-specific
-
-This message has no payload.
-
-Notes:
-- No payload.
+Wire layout: `(no payload)`
 
 ### Resp
 
@@ -648,20 +639,20 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 active_suite_nam
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 | `active_suite_name_len` | `uint32` | active_suite_name UTF-8 byte length |
-| `active_suite_name` | `utf-8 bytes` | - |
+| `active_suite_name` | `utf-8 bytes` | Active suite name |
 | `active_scenario_name_len` | `uint32` | active_scenario_name UTF-8 byte length |
-| `active_scenario_name` | `utf-8 bytes` | - |
-| `scenario_list_size` | `uint32` | - |
+| `active_scenario_name` | `utf-8 bytes` | Active scenario name |
+| `scenario_list_size` | `uint32` | Number of scenario names that follow |
 
 Repeat layout:
 
 | Field | Type | Description |
 |------|------|-------------|
 | `scenario_list[].name_len` | `uint32` | scenario_list[].name UTF-8 byte length |
-| `scenario_list[].name` | `utf-8 bytes` | - |
+| `scenario_list[].name` | `utf-8 bytes` | Scenario name |
 
 <a id="api-0x1402"></a>
 ## `0x1402` LoadSuite
@@ -678,7 +669,7 @@ Wire layout: `[uint32 suite_path_len][utf-8 * suite_path_len]`
 | Field | Type | Description |
 |------|------|-------------|
 | `suite_path_len` | `uint32` | suite_path UTF-8 byte length |
-| `suite_path` | `utf-8 bytes` | - |
+| `suite_path` | `utf-8 bytes` | MORAI suite file path |
 
 ### Resp
 
@@ -691,8 +682,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1504"></a>
 ## `0x1504` ScenarioStatus
@@ -704,16 +695,11 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 Query current scenario execution state.
 
-Wire layout: variant-specific
-
-This message has no payload.
-
-Notes:
-- No payload.
+Wire layout: `(no payload)`
 
 ### Resp
 
-- Payload: `12 + 4 + N bytes (N = name UTF-8 byte length)`
+- Payload: `12 bytes for legacy responses; 16 + N bytes with name (N = name UTF-8 byte length)`
 - Parser: `tcp.parse_scenario_status_payload()`
 
 Return result code, current scenario execution state, and scenario name.
@@ -722,8 +708,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code] [uint32 state] [uint32 n
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 | `state` | `uint32` | 1=Play, 2=Pause, 3=Stop, 4=Completed |
 | `name_len` | `uint32` | name UTF-8 byte length |
 | `name` | `utf-8 bytes` | Current scenario name |
@@ -734,18 +720,17 @@ Notes:
 
 ### Noti
 
-- Payload: `4 + 4 + N bytes (N = name UTF-8 byte length)`
+- Payload: `protobuf variable size (typically 4 + N bytes for current values)`
 - Parser: `tcp.parse_scenario_status_notification_payload()`
 
 Push the current scenario execution state and scenario name without a preceding request.
 
-Wire layout: `[uint32 state] [uint32 name_len][utf-8 * name_len]`
+Wire layout: `[field #1: varint state] [field #2: length-delimited UTF-8 name]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `state` | `uint32` | Protobuf enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed |
-| `name_len` | `uint32` | name UTF-8 byte length |
-| `name` | `utf-8 bytes` | Current scenario name |
+| `state` | `protobuf varint` | Enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed |
+| `name` | `protobuf length-delimited UTF-8` | Current scenario name |
 
 Notes:
 - Header uses msg_class = 0x03 (NOTI).
@@ -768,7 +753,7 @@ Wire layout: `[uint32 command] [uint32 scenario_name_len][utf-8 * scenario_name_
 |------|------|-------------|
 | `command` | `uint32` | 1=Play, 2=Pause, 3=Stop, 4=Prev, 5=Next |
 | `scenario_name_len` | `uint32` | scenario_name UTF-8 byte length |
-| `scenario_name` | `utf-8 bytes` | - |
+| `scenario_name` | `utf-8 bytes` | Optional target scenario name |
 
 ### Resp
 
@@ -781,8 +766,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1601"></a>
 ## `0x1601` LoadTrafficScenario
@@ -812,8 +797,8 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1602"></a>
 ## `0x1602` TrafficGenerate
@@ -843,5 +828,5 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 
 | Field | Type | Description |
 |------|------|-------------|
-| `result_code` | `uint32` | - |
-| `detail_code` | `uint32` | - |
+| `result_code` | `uint32` | 0=success; nonzero values indicate failure |
+| `detail_code` | `uint32` | Additional result detail |

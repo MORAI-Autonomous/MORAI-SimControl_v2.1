@@ -8,6 +8,7 @@ from typing import Callable, Optional
 import dearpygui.dearpygui as dpg
 import utils.ui_queue as ui_queue
 import panels.log as log
+import transport.protocol_defs as proto
 from utils.project_paths import ROOT_DIR, SRC_DIR
 
 _MAP_DIR = os.path.join(
@@ -34,6 +35,16 @@ _INTERFACE_TCP = "TCP"
 _INTERFACE_ROS2 = "ROS2"
 _DEFAULT_ROS2_VI_TOPIC = "/VehicleInfo"
 _DEFAULT_ROS2_CTRL_TOPIC = "/ManualControl"
+_SAVE_MODE_ITEMS = (
+    "Skip (0)",
+    "Default (1)",
+    "Force (2)",
+)
+_SAVE_MODE_VALUES = {
+    "Skip (0)": proto.SAVE_MODE_SKIP,
+    "Default (1)": proto.SAVE_MODE_DEFAULT,
+    "Force (2)": proto.SAVE_MODE_FORCE,
+}
 
 _start_ad_fn:      Optional[Callable] = None
 _stop_ad_fn:       Optional[Callable] = None
@@ -79,8 +90,25 @@ def build(parent) -> None:
                              default_value=False,
                              callback=_on_fixed_step_toggle)
             dpg.add_spacer(width=16)
-            dpg.add_checkbox(tag="au_save_data", label="Save Data",
-                             default_value=False, show=False)
+            dpg.add_text(
+                "Save Mode :",
+                tag="au_save_mode_label",
+                color=(180, 180, 180, 255),
+                show=False,
+            )
+            dpg.add_combo(
+                tag="au_save_mode",
+                items=_SAVE_MODE_ITEMS,
+                default_value="Default (1)",
+                width=120,
+                show=False,
+            )
+            with dpg.tooltip("au_save_mode"):
+                dpg.add_text(
+                    "Skip: do not save this step.\n"
+                    "Default: respect each interface save option.\n"
+                    "Force: save all interfaces."
+                )
 
         dpg.add_spacer(height=6)
         with dpg.group(horizontal=True):
@@ -285,9 +313,10 @@ def _on_interface_change(sender=None, app_data=None) -> None:
         for tag in (f"au_vi_port_label_{i}", f"au_vi_port_{i}"):
             if dpg.does_item_exist(tag):
                 dpg.configure_item(tag, show=not is_tcp)
-    if dpg.does_item_exist("au_save_data"):
+    if dpg.does_item_exist("au_save_mode"):
         show_save = dpg.does_item_exist("au_fixed_step") and dpg.get_value("au_fixed_step")
-        dpg.configure_item("au_save_data", show=show_save)
+        dpg.configure_item("au_save_mode_label", show=show_save)
+        dpg.configure_item("au_save_mode", show=show_save)
     _save_state()
 
 
@@ -340,9 +369,10 @@ def reset_ui() -> None:
 # ── Internal ──────────────────────────────────────────────────
 
 def _on_fixed_step_toggle(sender, app_data) -> None:
-    dpg.configure_item("au_save_data", show=app_data)
+    dpg.configure_item("au_save_mode_label", show=app_data)
+    dpg.configure_item("au_save_mode", show=app_data)
     if app_data:
-        dpg.set_value("au_save_data", True)
+        dpg.set_value("au_save_mode", "Default (1)")
 
 
 def _build_collision_cfg() -> Optional[dict]:
@@ -427,7 +457,11 @@ def _on_start() -> None:
         if _start_step_ad_fn is None:
             log.append("[AD] 초기화되지 않았습니다.", level="ERROR")
             return
-        _start_step_ad_fn(vehicles, dpg.get_value("au_save_data"), collision_cfg)
+        save_mode = _SAVE_MODE_VALUES.get(
+            dpg.get_value("au_save_mode"),
+            proto.SAVE_MODE_SKIP,
+        )
+        _start_step_ad_fn(vehicles, save_mode, collision_cfg)
     else:
         if _start_ad_fn is None:
             log.append("[AD] 초기화되지 않았습니다.", level="ERROR")

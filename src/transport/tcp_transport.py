@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import socket
 import struct
+import threading
+import time
 from typing import Any, Dict, List, Optional, Tuple
+import weakref
 
 from transport.message_schema import (
     get_response_message,
@@ -11,6 +14,10 @@ from transport.message_schema import (
     unpack_message_payload,
 )
 import transport.protocol_defs as proto
+
+
+_fixed_step_timing_lock = threading.Lock()
+_fixed_step_recv_ns: weakref.WeakKeyDictionary[Any, int] = weakref.WeakKeyDictionary()
 
 
 # ============================================================
@@ -59,6 +66,9 @@ def recv_packet(sock: socket.socket) -> Tuple[int, int, int, int, int, bytes]:
         raise ValueError(f"Invalid payload_size: {payload_size}")
 
     payload = recv_exact(sock, payload_size) if payload_size > 0 else b""
+    if msg_class == proto.MSG_CLASS_RESP and msg_type == proto.MSG_TYPE_FIXED_STEP:
+        with _fixed_step_timing_lock:
+            _fixed_step_recv_ns[sock] = time.perf_counter_ns()
     return msg_class, msg_type, payload_size, request_id, flag, payload
 
 
@@ -279,10 +289,27 @@ def send_simulation_time_mode_command(
     )
 
 
-def send_fixed_step(sock: socket.socket, request_id: int, step_count: int) -> None:
-    payload = pack_message_payload(
-        proto.MSG_TYPE_FIXED_STEP,
-        {"step_count": step_count},
+def send_fixed_step(
+    sock: socket.socket,
+    request_id: int,
+    step_count: int,
+    save_mode: int = proto.SAVE_MODE_SKIP,
+) -> None:
+    if save_mode not in proto.SAVE_MODE_MAP:
+        raise ValueError(f"Unsupported save mode: {save_mode}")
+
+    with _fixed_step_timing_lock:
+        client_recv_ns = _fixed_step_recv_ns.get(sock)
+        client_send_ns = time.perf_counter_ns()
+    if client_recv_ns is None:
+        client_recv_ns = client_send_ns
+
+    payload = struct.pack(
+        "<IBQQ",
+        step_count,
+        save_mode,
+        client_recv_ns,
+        client_send_ns,
     )
     _send_packet(sock, request_id, proto.MSG_TYPE_FIXED_STEP, payload)
 

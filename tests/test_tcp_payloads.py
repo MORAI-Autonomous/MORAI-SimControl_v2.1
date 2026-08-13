@@ -5,6 +5,7 @@ import contextlib
 import io
 import struct
 import sys
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,109 @@ import transport.tcp_transport as tcp
 
 
 class TcpPayloadGoldenTests(unittest.TestCase):
+    def test_fixed_step_payload_includes_monotonic_timestamps(self) -> None:
+        sent = []
+
+        class FakeSocket:
+            def sendall(self, data: bytes) -> None:
+                sent.append(data)
+
+        sock = FakeSocket()
+        before_ns = time.perf_counter_ns()
+        tcp.send_fixed_step(sock, 23, step_count=2)
+        after_ns = time.perf_counter_ns()
+
+        packet = sent[0]
+        _, msg_class, msg_type, payload_size, request_id, flag = struct.unpack(
+            proto.HEADER_FMT,
+            packet[:proto.HEADER_SIZE],
+        )
+        step_count, save_mode, client_recv_ns, client_send_ns = struct.unpack(
+            "<IBQQ",
+            packet[proto.HEADER_SIZE:],
+        )
+        self.assertEqual(msg_class, proto.MSG_CLASS_REQ)
+        self.assertEqual(msg_type, proto.MSG_TYPE_FIXED_STEP)
+        self.assertEqual(payload_size, 21)
+        self.assertEqual(request_id, 23)
+        self.assertEqual(flag, proto.FLAG)
+        self.assertEqual(step_count, 2)
+        self.assertEqual(save_mode, proto.SAVE_MODE_SKIP)
+        self.assertEqual(client_recv_ns, client_send_ns)
+        self.assertLessEqual(before_ns, client_send_ns)
+        self.assertLessEqual(client_send_ns, after_ns)
+
+    def test_fixed_step_uses_previous_response_receive_timestamp(self) -> None:
+        response_payload = struct.pack("<II", 0, 0)
+        response = (
+            tcp.build_header(
+                proto.MSG_CLASS_RESP,
+                proto.MSG_TYPE_FIXED_STEP,
+                len(response_payload),
+                request_id=41,
+                flag=proto.FLAG,
+            )
+            + response_payload
+        )
+
+        class FakeSocket:
+            def __init__(self) -> None:
+                self.received = bytearray(response)
+                self.sent = []
+
+            def recv(self, size: int) -> bytes:
+                chunk = bytes(self.received[:size])
+                del self.received[:size]
+                return chunk
+
+            def sendall(self, data: bytes) -> None:
+                self.sent.append(data)
+
+        sock = FakeSocket()
+        before_recv_ns = time.perf_counter_ns()
+        tcp.recv_packet(sock)
+        after_recv_ns = time.perf_counter_ns()
+        tcp.send_fixed_step(sock, 42, step_count=1)
+
+        step_count, save_mode, client_recv_ns, client_send_ns = struct.unpack(
+            "<IBQQ",
+            sock.sent[0][proto.HEADER_SIZE:],
+        )
+        self.assertEqual(step_count, 1)
+        self.assertEqual(save_mode, proto.SAVE_MODE_SKIP)
+        self.assertLessEqual(before_recv_ns, client_recv_ns)
+        self.assertLessEqual(client_recv_ns, after_recv_ns)
+        self.assertLessEqual(client_recv_ns, client_send_ns)
+
+    def test_fixed_step_payload_accepts_save_mode(self) -> None:
+        sent = []
+
+        class FakeSocket:
+            def sendall(self, data: bytes) -> None:
+                sent.append(data)
+
+        tcp.send_fixed_step(
+            FakeSocket(),
+            24,
+            step_count=1,
+            save_mode=proto.SAVE_MODE_FORCE,
+        )
+
+        step_count, save_mode, _, _ = struct.unpack(
+            "<IBQQ",
+            sent[0][proto.HEADER_SIZE:],
+        )
+        self.assertEqual(step_count, 1)
+        self.assertEqual(save_mode, proto.SAVE_MODE_FORCE)
+
+    def test_fixed_step_rejects_unknown_save_mode(self) -> None:
+        class FakeSocket:
+            def sendall(self, _data: bytes) -> None:
+                pass
+
+        with self.assertRaisesRegex(ValueError, "Unsupported save mode"):
+            tcp.send_fixed_step(FakeSocket(), 25, step_count=1, save_mode=3)
+
     def test_shutdown_simulator_payload_is_one_byte(self) -> None:
         self.assertEqual(
             pack_message_payload(

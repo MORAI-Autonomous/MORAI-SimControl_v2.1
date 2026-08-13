@@ -55,6 +55,16 @@ MSG_TYPE_SET_SIMULATION_TIME_MODE_COMMAND = 0x1102
 MSG_TYPE_FIXED_STEP                    = 0x1201
 MSG_TYPE_SAVE_DATA                     = 0x1202
 
+SAVE_MODE_SKIP                         = 0
+SAVE_MODE_DEFAULT                      = 1
+SAVE_MODE_FORCE                        = 2
+
+SAVE_MODE_MAP = {
+    SAVE_MODE_SKIP: "SKIP",
+    SAVE_MODE_DEFAULT: "DEFAULT",
+    SAVE_MODE_FORCE: "FORCE",
+}
+
 # Object Control
 MSG_TYPE_CREATE_OBJECT                 = 0x1301
 MSG_TYPE_MANUAL_CONTROL_BY_ID_COMMAND  = 0x1302

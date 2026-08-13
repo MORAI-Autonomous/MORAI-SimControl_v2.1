@@ -56,7 +56,7 @@ def render_generation_note(revision_root: Path = ROOT, revision_ref: str | None 
         branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], revision_root)
         revision = branch if branch != "unknown" else "unknown"
     return [
-        "> \uc774 \ubb38\uc11c\ub294 \uc790\ub3d9 \uc0dd\uc131\ub429\ub2c8\ub2e4. Confluence\uc5d0\uc11c \uc9c1\uc811 \ud3b8\uc9d1\ud558\uc9c0 \ub9d0\uace0 \ucf54\ub4dc\uc640 \uc2a4\ud06c\ub9bd\ud2b8\uc5d0\uc11c \uc218\uc815\ud55c \ub4a4 \ub2e4\uc2dc \uc0dd\uc131\ud558\uc138\uc694.",
+        "> 이 Markdown/HTML 문서는 자동 생성됩니다. 생성된 문서를 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.",
         ">",
         f"> - \uc0dd\uc131 \uc2dc\uac01: `{generated_at}`",
         f"> - \uae30\uc900 \ube0c\ub79c\uce58: `{revision}`",
@@ -84,7 +84,7 @@ def validate_schema_against_protocol_defs() -> None:
 
     msg_1201 = get_message(0x1201)
     _expect(proto.SET_TRAJECTORY_FOLLOW_MODE_SIZE == 4, "internal protocol size invariant changed")
-    _expect(get_min_payload_size(msg_1201) == 4, "0x1201 min size mismatch")
+    _expect(get_min_payload_size(msg_1201) == 21, "0x1201 payload size mismatch")
 
     msg_1302 = get_message(0x1302)
     _expect(proto.MANUAL_CONTROL_BY_ID_VALUES_FMT.endswith("ddd"), "0x1302 format mismatch")
@@ -173,6 +173,51 @@ def validate_schema_against_protocol_defs() -> None:
     _expect(proto.RESULT_SIZE == get_min_payload_size(resp_1602), "0x1602 response size mismatch")
 
 
+_DEFAULT_FIELD_DESCRIPTIONS = {
+    "result_code": "0=success; nonzero values indicate failure",
+    "detail_code": "Additional result detail",
+    "entity_id": "Target entity ID",
+    "object_id": "Created object ID",
+    "pos_x": "Position X component",
+    "pos_y": "Position Y component",
+    "pos_z": "Position Z component",
+    "rot_x": "Rotation X component",
+    "rot_y": "Rotation Y component",
+    "rot_z": "Rotation Z component",
+    "steer_angle": "Steering angle value",
+    "trajectory_name": "Trajectory identifier",
+    "point_count": "Number of trajectory points that follow",
+    "points[].x": "Trajectory point X component",
+    "points[].y": "Trajectory point Y component",
+    "points[].z": "Trajectory point Z component",
+    "points[].time": "Trajectory point time value",
+    "suite_path": "MORAI suite file path",
+    "active_suite_name": "Active suite name",
+    "active_scenario_name": "Active scenario name",
+    "scenario_list_size": "Number of scenario names that follow",
+    "scenario_list[].name": "Scenario name",
+    "scenario_name": "Optional target scenario name",
+}
+
+
+def _field_description(field: FieldSpec) -> str:
+    return field.description or _DEFAULT_FIELD_DESCRIPTIONS.get(field.name, "-")
+
+
+def _wire_layout(message: MessageSpec) -> str:
+    if message.wire_layout:
+        return message.wire_layout
+    if message.fields:
+        return render_struct_format(message.fields)
+    if message.variants:
+        return "variant-specific"
+    return "(no payload)"
+
+
+def _render_notes(message: MessageSpec) -> list[str]:
+    return [note for note in message.notes if note.strip().lower() != "no payload."]
+
+
 def append_field_table(lines: list[str], fields: Sequence[FieldSpec]) -> None:
     lines.extend(
         [
@@ -181,7 +226,7 @@ def append_field_table(lines: list[str], fields: Sequence[FieldSpec]) -> None:
         ]
     )
     for field in fields:
-        desc = field.description or "-"
+        desc = _field_description(field)
         if field.field_type == "string_u32":
             lines.append(f"| `{field.name}_len` | `uint32` | {field.name} UTF-8 byte length |")
             lines.append(f"| `{field.name}` | `utf-8 bytes` | {desc} |")
@@ -202,14 +247,12 @@ def render_message_section(message: MessageSpec) -> str:
         "",
         message.summary,
         "",
-        f"Wire layout: `{render_struct_format(message.fields)}`" if message.fields else "Wire layout: variant-specific",
+        f"Wire layout: `{_wire_layout(message)}`",
         "",
     ]
 
     if message.fields:
         append_field_table(lines, message.fields)
-    elif not message.variants:
-        lines.append("This message has no payload.\n")
 
     if message.variants:
         lines.append("Variants:")
@@ -233,9 +276,10 @@ def render_message_section(message: MessageSpec) -> str:
         )
         append_field_table(lines, message.repeat_fields)
 
-    if message.notes:
+    notes = _render_notes(message)
+    if notes:
         lines.append("Notes:")
-        for note in message.notes:
+        for note in notes:
             lines.append(f"- {note}")
         lines.append("")
 
@@ -253,14 +297,12 @@ def render_endpoint_section(title: str, message) -> list[str]:
         "",
         message.summary,
         "",
-        f"Wire layout: `{render_struct_format(message.fields)}`" if message.fields else "Wire layout: variant-specific",
+        f"Wire layout: `{_wire_layout(message)}`",
         "",
     ]
 
     if message.fields:
         append_field_table(lines, message.fields)
-    elif not message.variants:
-        lines.append("This message has no payload.\n")
 
     if message.variants:
         lines.append("Variants:")
@@ -284,9 +326,10 @@ def render_endpoint_section(title: str, message) -> list[str]:
         )
         append_field_table(lines, message.repeat_fields)
 
-    if message.notes:
+    notes = _render_notes(message)
+    if notes:
         lines.append("Notes:")
-        for note in message.notes:
+        for note in notes:
             lines.append(f"- {note}")
         lines.append("")
 

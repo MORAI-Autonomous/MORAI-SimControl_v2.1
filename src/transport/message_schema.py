@@ -33,6 +33,8 @@ class MessageSpec:
     handler: str = ""
     parser: str = ""
     notes: tuple[str, ...] = ()
+    payload_size: str = ""
+    wire_layout: str = ""
 
     @property
     def has_payload(self) -> bool:
@@ -49,6 +51,8 @@ TYPE_LABELS: Dict[str, str] = {
     "float64": "float64",
     "string_u32": "uint32 length + utf-8 bytes",
     "string_raw": "utf-8 bytes",
+    "protobuf_varint": "protobuf varint",
+    "protobuf_string": "protobuf length-delimited UTF-8",
 }
 
 TYPE_SIZES: Dict[str, Optional[int]] = {
@@ -61,6 +65,8 @@ TYPE_SIZES: Dict[str, Optional[int]] = {
     "float64": 8,
     "string_u32": None,
     "string_raw": None,
+    "protobuf_varint": None,
+    "protobuf_string": None,
 }
 
 STRUCT_FORMAT_CHARS: Dict[str, str] = {
@@ -175,7 +181,35 @@ MESSAGES: tuple[MessageSpec, ...] = (
         direction="request",
         summary="Advance the simulator by a fixed number of steps.",
         handler="tcp.send_fixed_step()",
-        fields=(FieldSpec("step_count", "uint32", "Number of simulation steps to execute"),),
+        fields=(
+            FieldSpec("step_count", "uint32", "Number of simulation steps to execute"),
+            FieldSpec(
+                "save_mode",
+                "uint8",
+                "0=SAVE_MODE_SKIP, 1=SAVE_MODE_DEFAULT, 2=SAVE_MODE_FORCE",
+            ),
+            FieldSpec(
+                "client_recv_ns",
+                "uint64",
+                "Client monotonic timestamp after the previous FixedStep response was fully received",
+            ),
+            FieldSpec(
+                "client_send_ns",
+                "uint64",
+                "Client monotonic timestamp immediately before this FixedStep request is sent",
+            ),
+        ),
+        notes=(
+            "Uses layout A: save_mode is independent of the optional performance timestamps.",
+            "Legacy 4-byte payloads contain only step_count and imply SAVE_MODE_SKIP with no timestamps.",
+            "A 5-byte payload adds save_mode without timestamps.",
+            "A 21-byte payload contains step_count, save_mode, client_recv_ns, and client_send_ns.",
+            "SAVE_MODE_SKIP does not save this step, regardless of interface save options.",
+            "SAVE_MODE_DEFAULT respects each interface save option and is equivalent to SaveDataCommand.",
+            "SAVE_MODE_FORCE saves all interfaces, ignoring their individual save options.",
+            "For the first timestamped request, client_recv_ns equals client_send_ns.",
+        ),
+        payload_size="4, 5, or 21 bytes",
     ),
     MessageSpec(
         msg_type=0x1202,
@@ -183,7 +217,10 @@ MESSAGES: tuple[MessageSpec, ...] = (
         direction="request",
         summary="Trigger simulator-side data capture.",
         handler="tcp.send_save_data()",
-        notes=("No payload.",),
+        notes=(
+            "No payload.",
+            "Retained for compatibility; its behavior is equivalent to FixedStep SAVE_MODE_DEFAULT.",
+        ),
     ),
     MessageSpec(
         msg_type=0x1301,
@@ -539,29 +576,30 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
             FieldSpec("seconds", "int64", "Simulation timestamp seconds"),
             FieldSpec("nanos", "int32", "Simulation timestamp nanoseconds remainder"),
             FieldSpec("entity_id", "string_u32", "Echoed ground vehicle Entity ID"),
-            FieldSpec("pos_x", "float32"),
-            FieldSpec("pos_y", "float32"),
-            FieldSpec("pos_z", "float32"),
-            FieldSpec("rot_x", "float32"),
-            FieldSpec("rot_y", "float32"),
-            FieldSpec("rot_z", "float32"),
-            FieldSpec("vel_x", "float32"),
-            FieldSpec("vel_y", "float32"),
-            FieldSpec("vel_z", "float32"),
-            FieldSpec("accel_x", "float32"),
-            FieldSpec("accel_y", "float32"),
-            FieldSpec("accel_z", "float32"),
-            FieldSpec("ang_vel_x", "float32"),
-            FieldSpec("ang_vel_y", "float32"),
-            FieldSpec("ang_vel_z", "float32"),
-            FieldSpec("throttle", "float32"),
-            FieldSpec("brake", "float32"),
-            FieldSpec("steer_angle", "float32"),
+            FieldSpec("pos_x", "float32", "Vehicle position X component"),
+            FieldSpec("pos_y", "float32", "Vehicle position Y component"),
+            FieldSpec("pos_z", "float32", "Vehicle position Z component"),
+            FieldSpec("rot_x", "float32", "Vehicle rotation X component"),
+            FieldSpec("rot_y", "float32", "Vehicle rotation Y component"),
+            FieldSpec("rot_z", "float32", "Vehicle rotation Z component"),
+            FieldSpec("vel_x", "float32", "Vehicle local velocity X component"),
+            FieldSpec("vel_y", "float32", "Vehicle local velocity Y component"),
+            FieldSpec("vel_z", "float32", "Vehicle local velocity Z component"),
+            FieldSpec("accel_x", "float32", "Vehicle acceleration X component"),
+            FieldSpec("accel_y", "float32", "Vehicle acceleration Y component"),
+            FieldSpec("accel_z", "float32", "Vehicle acceleration Z component"),
+            FieldSpec("ang_vel_x", "float32", "Vehicle angular velocity X component"),
+            FieldSpec("ang_vel_y", "float32", "Vehicle angular velocity Y component"),
+            FieldSpec("ang_vel_z", "float32", "Vehicle angular velocity Z component"),
+            FieldSpec("throttle", "float32", "Current throttle control value"),
+            FieldSpec("brake", "float32", "Current brake control value"),
+            FieldSpec("steer_angle", "float32", "Current steering angle value"),
         ),
         notes=(
             "Failure responses contain only result_code and detail_code (8 bytes).",
             "Success responses contain 96 bytes plus the UTF-8 entity ID byte length.",
         ),
+        payload_size="8 bytes on failure; 96 + N bytes on success (N = entity_id UTF-8 byte length)",
     ),
     MessageSpec(
         msg_type=0x1401,
@@ -605,6 +643,7 @@ RESPONSE_MESSAGES: tuple[MessageSpec, ...] = (
             "Parser currently accepts both the new payload (result_code/detail_code/state/name) and the legacy 12-byte payload (result_code/detail_code/state).",
             "When the legacy payload is received, `name` is returned as an empty string.",
         ),
+        payload_size="12 bytes for legacy responses; 16 + N bytes with name (N = name UTF-8 byte length)",
     ),
     MessageSpec(
         msg_type=0x1505,
@@ -650,14 +689,16 @@ NOTIFICATION_MESSAGES: tuple[MessageSpec, ...] = (
         summary="Push the current scenario execution state and scenario name without a preceding request.",
         parser="tcp.parse_scenario_status_notification_payload()",
         fields=(
-            FieldSpec("state", "uint32", "Protobuf enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed"),
-            FieldSpec("name", "string_u32", "Current scenario name"),
+            FieldSpec("state", "protobuf_varint", "Enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed"),
+            FieldSpec("name", "protobuf_string", "Current scenario name"),
         ),
         notes=(
             "Header uses msg_class = 0x03 (NOTI).",
             "Payload is assumed to be protobuf-encoded scenario status data, not the raw request/response layout.",
             "Current parser expects field #1 = varint state, field #2 = length-delimited utf-8 scenario name.",
         ),
+        payload_size="protobuf variable size (typically 4 + N bytes for current values)",
+        wire_layout="[field #1: varint state] [field #2: length-delimited UTF-8 name]",
     ),
     MessageSpec(
         msg_type=0x1001,
@@ -666,13 +707,15 @@ NOTIFICATION_MESSAGES: tuple[MessageSpec, ...] = (
         summary="Push the current simulator frontend lifecycle state without a preceding request.",
         parser="tcp.parse_get_simulator_status_notification_payload()",
         fields=(
-            FieldSpec("state", "uint32", "Protobuf enum value. 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY"),
+            FieldSpec("state", "protobuf_varint", "Enum value. 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY"),
         ),
         notes=(
             "Header uses msg_class = 0x03 (NOTI).",
             "Payload is protobuf-encoded datamodel::SimulatorStatus, not the raw 12-byte response layout.",
             "Current parser expects minimal wire format: 0x08 <varint(state)>.",
         ),
+        payload_size="protobuf variable size (2 bytes for current state values)",
+        wire_layout="[field #1: varint state]",
     ),
 )
 
@@ -798,6 +841,8 @@ def _format_payload_size_for_fields(fields: Sequence[FieldSpec]) -> str:
 
 
 def describe_payload_size(message: MessageSpec) -> str:
+    if message.payload_size:
+        return message.payload_size
     if message.variants:
         variant_desc = []
         for variant in message.variants:
@@ -806,7 +851,8 @@ def describe_payload_size(message: MessageSpec) -> str:
         return " / ".join(variant_desc)
     static_size = get_static_payload_size(message)
     if static_size is not None:
-        return f"{static_size} bytes"
+        unit = "byte" if static_size == 1 else "bytes"
+        return f"{static_size} {unit}"
     base = _format_payload_size_for_fields(message.fields)
     if message.repeat_fields:
         per_item_sizes = [TYPE_SIZES[field.field_type] for field in message.repeat_fields]

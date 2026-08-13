@@ -45,9 +45,9 @@ blockquote {
 </head>
 <body>
 <h1>TCP API Reference</h1>
-<blockquote>이 문서는 자동 생성됩니다. Confluence에서 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.</blockquote>
+<blockquote>이 Markdown/HTML 문서는 자동 생성됩니다. 생성된 문서를 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.</blockquote>
 <p>&gt;</p>
-<blockquote>- 생성 시각: <code>2026-07-24 18:16 +0900</code></blockquote>
+<blockquote>- 생성 시각: <code>2026-08-04 13:29 +0900</code></blockquote>
 <blockquote>- 기준 브랜치: <code>main</code></blockquote>
 <h2>Common Header</h2>
 <p>Every TCP packet uses this 16-byte header before the payload described below.</p>
@@ -72,20 +72,20 @@ blockquote {
 <tr><td><a href="#api-0x1002"><code>0x1002</code></a></td><td><a href="#api-0x1002"><code>GetSimulatorMode</code></a></td><td><code>0 bytes</code></td><td><code>12 bytes</code></td></tr>
 <tr><td><a href="#api-0x1003"><code>0x1003</code></a></td><td><a href="#api-0x1003"><code>SetSimulatorMode</code></a></td><td><code>4 bytes</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1004"><code>0x1004</code></a></td><td><a href="#api-0x1004"><code>LoadMap</code></a></td><td><code>4 + N bytes (N = map_name UTF-8 byte length)</code></td><td><code>8 bytes</code></td></tr>
-<tr><td><a href="#api-0x1005"><code>0x1005</code></a></td><td><a href="#api-0x1005"><code>ShutdownSimulator</code></a></td><td><code>1 bytes</code></td><td><code>8 bytes</code></td></tr>
+<tr><td><a href="#api-0x1005"><code>0x1005</code></a></td><td><a href="#api-0x1005"><code>ShutdownSimulator</code></a></td><td><code>1 byte</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1101"><code>0x1101</code></a></td><td><a href="#api-0x1101"><code>GetSimulationTimeStatus</code></a></td><td><code>0 bytes</code></td><td><code>48 bytes</code></td></tr>
 <tr><td><a href="#api-0x1102"><code>0x1102</code></a></td><td><a href="#api-0x1102"><code>SetSimulationTimeModeCommand</code></a></td><td><code>20 bytes</code></td><td><code>20 bytes</code></td></tr>
-<tr><td><a href="#api-0x1201"><code>0x1201</code></a></td><td><a href="#api-0x1201"><code>FixedStep</code></a></td><td><code>4 bytes</code></td><td><code>8 bytes</code></td></tr>
+<tr><td><a href="#api-0x1201"><code>0x1201</code></a></td><td><a href="#api-0x1201"><code>FixedStep</code></a></td><td><code>4, 5, or 21 bytes</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1202"><code>0x1202</code></a></td><td><a href="#api-0x1202"><code>SaveData</code></a></td><td><code>0 bytes</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1301"><code>0x1301</code></a></td><td><a href="#api-0x1301"><code>CreateObject</code></a></td><td><code>36 bytes</code></td><td><code>8 + 4 + N bytes (N = object_id UTF-8 byte length)</code></td></tr>
 <tr><td><a href="#api-0x1302"><code>0x1302</code></a></td><td><a href="#api-0x1302"><code>ManualControlById</code></a></td><td><code>4 + N + 24 bytes (N = entity_id UTF-8 byte length)</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1303"><code>0x1303</code></a></td><td><a href="#api-0x1303"><code>TransformControlById</code></a></td><td><code>4 + N + 36 bytes (N = entity_id UTF-8 byte length)</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1304"><code>0x1304</code></a></td><td><a href="#api-0x1304"><code>SetTrajectory</code></a></td><td><code>4 + N1 + 4 + 4 + N2 + 4 bytes (N1 = entity_id UTF-8 byte length, N2 = trajectory_name UTF-8 byte length) + 32 bytes * item_count</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1305"><code>0x1305</code></a></td><td><a href="#api-0x1305"><code>DeleteObject</code></a></td><td><code>N bytes (N = entity_id UTF-8 byte length)</code></td><td><code>8 bytes</code></td></tr>
-<tr><td><a href="#api-0x1306"><code>0x1306</code></a></td><td><a href="#api-0x1306"><code>GetVehicleInfo</code></a></td><td><code>4 + N bytes (N = entity_id UTF-8 byte length)</code></td><td><code>20 + 4 + N + 72 bytes (N = entity_id UTF-8 byte length)</code></td></tr>
+<tr><td><a href="#api-0x1306"><code>0x1306</code></a></td><td><a href="#api-0x1306"><code>GetVehicleInfo</code></a></td><td><code>4 + N bytes (N = entity_id UTF-8 byte length)</code></td><td><code>8 bytes on failure; 96 + N bytes on success (N = entity_id UTF-8 byte length)</code></td></tr>
 <tr><td><a href="#api-0x1401"><code>0x1401</code></a></td><td><a href="#api-0x1401"><code>ActiveSuiteStatus</code></a></td><td><code>0 bytes</code></td><td><code>8 + 4 + N1 + 4 + N2 + 4 bytes (N1 = active_suite_name UTF-8 byte length, N2 = active_scenario_name UTF-8 byte length) + variable bytes * item_count</code></td></tr>
 <tr><td><a href="#api-0x1402"><code>0x1402</code></a></td><td><a href="#api-0x1402"><code>LoadSuite</code></a></td><td><code>4 + N bytes (N = suite_path UTF-8 byte length)</code></td><td><code>8 bytes</code></td></tr>
-<tr><td><a href="#api-0x1504"><code>0x1504</code></a></td><td><a href="#api-0x1504"><code>ScenarioStatus</code></a></td><td><code>0 bytes</code></td><td><code>12 + 4 + N bytes (N = name UTF-8 byte length)</code></td></tr>
+<tr><td><a href="#api-0x1504"><code>0x1504</code></a></td><td><a href="#api-0x1504"><code>ScenarioStatus</code></a></td><td><code>0 bytes</code></td><td><code>12 bytes for legacy responses; 16 + N bytes with name (N = name UTF-8 byte length)</code></td></tr>
 <tr><td><a href="#api-0x1505"><code>0x1505</code></a></td><td><a href="#api-0x1505"><code>ScenarioControl</code></a></td><td><code>4 + 4 + N bytes (N = scenario_name UTF-8 byte length)</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1601"><code>0x1601</code></a></td><td><a href="#api-0x1601"><code>LoadTrafficScenario</code></a></td><td><code>4 + N bytes (N = file_path UTF-8 byte length)</code></td><td><code>8 bytes</code></td></tr>
 <tr><td><a href="#api-0x1602"><code>0x1602</code></a></td><td><a href="#api-0x1602"><code>TrafficGenerate</code></a></td><td><code>8 bytes</code></td><td><code>8 bytes</code></td></tr>
@@ -99,12 +99,7 @@ blockquote {
 <li>Builder: <code>tcp.send_get_simulator_status()</code></li>
 </ul>
 <p>Query the current simulator frontend lifecycle state.</p>
-<p>Wire layout: variant-specific</p>
-<p>This message has no payload.</p>
-<p>Notes:</p>
-<ul>
-<li>No payload.</li>
-</ul>
+<p>Wire layout: <code>(no payload)</code></p>
 <h3>Resp</h3>
 <ul>
 <li>Payload: <code>12 bytes</code></li>
@@ -114,20 +109,20 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code] [uint32 state]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 <tr><td><code>state</code></td><td><code>uint32</code></td><td>0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY</td></tr>
 </table>
 <h3>Noti</h3>
 <ul>
-<li>Payload: <code>4 bytes</code></li>
+<li>Payload: <code>protobuf variable size (2 bytes for current state values)</code></li>
 <li>Parser: <code>tcp.parse_get_simulator_status_notification_payload()</code></li>
 </ul>
 <p>Push the current simulator frontend lifecycle state without a preceding request.</p>
-<p>Wire layout: <code>[uint32 state]</code></p>
+<p>Wire layout: <code>[field #1: varint state]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>state</code></td><td><code>uint32</code></td><td>Protobuf enum value. 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY</td></tr>
+<tr><td><code>state</code></td><td><code>protobuf varint</code></td><td>Enum value. 0=UNSPECIFIED, 1=PRE_LOGIN, 2=HOME, 3=LOADING, 4=READY</td></tr>
 </table>
 <p>Notes:</p>
 <ul>
@@ -143,12 +138,7 @@ blockquote {
 <li>Builder: <code>tcp.send_get_simulator_mode()</code></li>
 </ul>
 <p>Query the current simulator functional mode.</p>
-<p>Wire layout: variant-specific</p>
-<p>This message has no payload.</p>
-<p>Notes:</p>
-<ul>
-<li>No payload.</li>
-</ul>
+<p>Wire layout: <code>(no payload)</code></p>
 <h3>Resp</h3>
 <ul>
 <li>Payload: <code>12 bytes</code></li>
@@ -158,8 +148,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code] [uint32 mode]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 <tr><td><code>mode</code></td><td><code>uint32</code></td><td>0=UNSPECIFIED, 1=SCENARIO, 2=REPLAY, 3=TRAFFIC, 4=MONITORING, 5=COMPETITION</td></tr>
 </table>
 <a id="api-0x1003"></a>
@@ -184,8 +174,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1004"></a>
 <h2><code>0x1004</code> LoadMap</h2>
@@ -214,14 +204,14 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1005"></a>
 <h2><code>0x1005</code> ShutdownSimulator</h2>
 <h3>Req</h3>
 <ul>
-<li>Payload: <code>1 bytes</code></li>
+<li>Payload: <code>1 byte</code></li>
 <li>Builder: <code>tcp.send_shutdown_simulator()</code></li>
 </ul>
 <p>Request graceful or forced simulator shutdown.</p>
@@ -239,8 +229,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1101"></a>
 <h2><code>0x1101</code> GetSimulationTimeStatus</h2>
@@ -250,12 +240,7 @@ blockquote {
 <li>Builder: <code>tcp.send_get_status()</code></li>
 </ul>
 <p>Query current simulation time mode and timing state.</p>
-<p>Wire layout: variant-specific</p>
-<p>This message has no payload.</p>
-<p>Notes:</p>
-<ul>
-<li>No payload.</li>
-</ul>
+<p>Wire layout: <code>(no payload)</code></p>
 <h3>Resp</h3>
 <ul>
 <li>Payload: <code>48 bytes</code></li>
@@ -317,15 +302,29 @@ blockquote {
 <h2><code>0x1201</code> FixedStep</h2>
 <h3>Req</h3>
 <ul>
-<li>Payload: <code>4 bytes</code></li>
+<li>Payload: <code>4, 5, or 21 bytes</code></li>
 <li>Builder: <code>tcp.send_fixed_step()</code></li>
 </ul>
 <p>Advance the simulator by a fixed number of steps.</p>
-<p>Wire layout: <code>[uint32 step_count]</code></p>
+<p>Wire layout: <code>[uint32 step_count] [uint8 save_mode] [uint64 client_recv_ns] [uint64 client_send_ns]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
 <tr><td><code>step_count</code></td><td><code>uint32</code></td><td>Number of simulation steps to execute</td></tr>
+<tr><td><code>save_mode</code></td><td><code>uint8</code></td><td>0=SAVE_MODE_SKIP, 1=SAVE_MODE_DEFAULT, 2=SAVE_MODE_FORCE</td></tr>
+<tr><td><code>client_recv_ns</code></td><td><code>uint64</code></td><td>Client monotonic timestamp after the previous FixedStep response was fully received</td></tr>
+<tr><td><code>client_send_ns</code></td><td><code>uint64</code></td><td>Client monotonic timestamp immediately before this FixedStep request is sent</td></tr>
 </table>
+<p>Notes:</p>
+<ul>
+<li>Uses layout A: save_mode is independent of the optional performance timestamps.</li>
+<li>Legacy 4-byte payloads contain only step_count and imply SAVE_MODE_SKIP with no timestamps.</li>
+<li>A 5-byte payload adds save_mode without timestamps.</li>
+<li>A 21-byte payload contains step_count, save_mode, client_recv_ns, and client_send_ns.</li>
+<li>SAVE_MODE_SKIP does not save this step, regardless of interface save options.</li>
+<li>SAVE_MODE_DEFAULT respects each interface save option and is equivalent to SaveDataCommand.</li>
+<li>SAVE_MODE_FORCE saves all interfaces, ignoring their individual save options.</li>
+<li>For the first timestamped request, client_recv_ns equals client_send_ns.</li>
+</ul>
 <h3>Resp</h3>
 <ul>
 <li>Payload: <code>8 bytes</code></li>
@@ -335,8 +334,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1202"></a>
 <h2><code>0x1202</code> SaveData</h2>
@@ -346,11 +345,10 @@ blockquote {
 <li>Builder: <code>tcp.send_save_data()</code></li>
 </ul>
 <p>Trigger simulator-side data capture.</p>
-<p>Wire layout: variant-specific</p>
-<p>This message has no payload.</p>
+<p>Wire layout: <code>(no payload)</code></p>
 <p>Notes:</p>
 <ul>
-<li>No payload.</li>
+<li>Retained for compatibility; its behavior is equivalent to FixedStep SAVE_MODE_DEFAULT.</li>
 </ul>
 <h3>Resp</h3>
 <ul>
@@ -361,8 +359,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1301"></a>
 <h2><code>0x1301</code> CreateObject</h2>
@@ -376,12 +374,12 @@ blockquote {
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
 <tr><td><code>entity_type</code></td><td><code>int32</code></td><td>EntityType enum value</td></tr>
-<tr><td><code>pos_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>pos_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>pos_z</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_z</code></td><td><code>float32</code></td><td>-</td></tr>
+<tr><td><code>pos_x</code></td><td><code>float32</code></td><td>Position X component</td></tr>
+<tr><td><code>pos_y</code></td><td><code>float32</code></td><td>Position Y component</td></tr>
+<tr><td><code>pos_z</code></td><td><code>float32</code></td><td>Position Z component</td></tr>
+<tr><td><code>rot_x</code></td><td><code>float32</code></td><td>Rotation X component</td></tr>
+<tr><td><code>rot_y</code></td><td><code>float32</code></td><td>Rotation Y component</td></tr>
+<tr><td><code>rot_z</code></td><td><code>float32</code></td><td>Rotation Z component</td></tr>
 <tr><td><code>driving_mode</code></td><td><code>int32</code></td><td>VehicleDrivingMode enum value</td></tr>
 <tr><td><code>ground_vehicle_model</code></td><td><code>int32</code></td><td>GroundVehicleModel enum value</td></tr>
 </table>
@@ -394,10 +392,10 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code] [uint32 object_id_len][utf-8 * object_id_len]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 <tr><td><code>object_id_len</code></td><td><code>uint32</code></td><td>object_id UTF-8 byte length</td></tr>
-<tr><td><code>object_id</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
+<tr><td><code>object_id</code></td><td><code>utf-8 bytes</code></td><td>Created object ID</td></tr>
 </table>
 <a id="api-0x1302"></a>
 <h2><code>0x1302</code> ManualControlById</h2>
@@ -425,8 +423,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1303"></a>
 <h2><code>0x1303</code> TransformControlById</h2>
@@ -440,14 +438,14 @@ blockquote {
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
 <tr><td><code>entity_id_len</code></td><td><code>uint32</code></td><td>entity_id UTF-8 byte length</td></tr>
-<tr><td><code>entity_id</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
-<tr><td><code>pos_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>pos_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>pos_z</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_z</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>steer_angle</code></td><td><code>float32</code></td><td>-</td></tr>
+<tr><td><code>entity_id</code></td><td><code>utf-8 bytes</code></td><td>Target entity ID</td></tr>
+<tr><td><code>pos_x</code></td><td><code>float32</code></td><td>Position X component</td></tr>
+<tr><td><code>pos_y</code></td><td><code>float32</code></td><td>Position Y component</td></tr>
+<tr><td><code>pos_z</code></td><td><code>float32</code></td><td>Position Z component</td></tr>
+<tr><td><code>rot_x</code></td><td><code>float32</code></td><td>Rotation X component</td></tr>
+<tr><td><code>rot_y</code></td><td><code>float32</code></td><td>Rotation Y component</td></tr>
+<tr><td><code>rot_z</code></td><td><code>float32</code></td><td>Rotation Z component</td></tr>
+<tr><td><code>steer_angle</code></td><td><code>float32</code></td><td>Steering angle value</td></tr>
 <tr><td><code>speed</code></td><td><code>float64</code></td><td>Currently derived from Vehicle Info local velocity in m/s</td></tr>
 </table>
 <h3>Resp</h3>
@@ -459,8 +457,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1304"></a>
 <h2><code>0x1304</code> SetTrajectory</h2>
@@ -474,19 +472,19 @@ blockquote {
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
 <tr><td><code>entity_id_len</code></td><td><code>uint32</code></td><td>entity_id UTF-8 byte length</td></tr>
-<tr><td><code>entity_id</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
+<tr><td><code>entity_id</code></td><td><code>utf-8 bytes</code></td><td>Target entity ID</td></tr>
 <tr><td><code>follow_mode</code></td><td><code>int32</code></td><td>1 = POSITION, 2 = FOLLOW</td></tr>
 <tr><td><code>trajectory_name_len</code></td><td><code>uint32</code></td><td>trajectory_name UTF-8 byte length</td></tr>
-<tr><td><code>trajectory_name</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
-<tr><td><code>point_count</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>trajectory_name</code></td><td><code>utf-8 bytes</code></td><td>Trajectory identifier</td></tr>
+<tr><td><code>point_count</code></td><td><code>uint32</code></td><td>Number of trajectory points that follow</td></tr>
 </table>
 <p>Repeat layout:</p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>points[].x</code></td><td><code>float64</code></td><td>-</td></tr>
-<tr><td><code>points[].y</code></td><td><code>float64</code></td><td>-</td></tr>
-<tr><td><code>points[].z</code></td><td><code>float64</code></td><td>-</td></tr>
-<tr><td><code>points[].time</code></td><td><code>float64</code></td><td>-</td></tr>
+<tr><td><code>points[].x</code></td><td><code>float64</code></td><td>Trajectory point X component</td></tr>
+<tr><td><code>points[].y</code></td><td><code>float64</code></td><td>Trajectory point Y component</td></tr>
+<tr><td><code>points[].z</code></td><td><code>float64</code></td><td>Trajectory point Z component</td></tr>
+<tr><td><code>points[].time</code></td><td><code>float64</code></td><td>Trajectory point time value</td></tr>
 </table>
 <p>Notes:</p>
 <ul>
@@ -501,8 +499,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1305"></a>
 <h2><code>0x1305</code> DeleteObject</h2>
@@ -530,8 +528,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1306"></a>
 <h2><code>0x1306</code> GetVehicleInfo</h2>
@@ -553,37 +551,37 @@ blockquote {
 </ul>
 <h3>Resp</h3>
 <ul>
-<li>Payload: <code>20 + 4 + N + 72 bytes (N = entity_id UTF-8 byte length)</code></li>
+<li>Payload: <code>8 bytes on failure; 96 + N bytes on success (N = entity_id UTF-8 byte length)</code></li>
 <li>Parser: <code>tcp.parse_get_vehicle_info_payload()</code></li>
 </ul>
 <p>Return the current transform, motion, and control state of one ground vehicle.</p>
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code] [int64 seconds] [int32 nanos] [uint32 entity_id_len][utf-8 * entity_id_len] [float32 pos_x] [float32 pos_y] [float32 pos_z] [float32 rot_x] [float32 rot_y] [float32 rot_z] [float32 vel_x] [float32 vel_y] [float32 vel_z] [float32 accel_x] [float32 accel_y] [float32 accel_z] [float32 ang_vel_x] [float32 ang_vel_y] [float32 ang_vel_z] [float32 throttle] [float32 brake] [float32 steer_angle]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 <tr><td><code>seconds</code></td><td><code>int64</code></td><td>Simulation timestamp seconds</td></tr>
 <tr><td><code>nanos</code></td><td><code>int32</code></td><td>Simulation timestamp nanoseconds remainder</td></tr>
 <tr><td><code>entity_id_len</code></td><td><code>uint32</code></td><td>entity_id UTF-8 byte length</td></tr>
 <tr><td><code>entity_id</code></td><td><code>utf-8 bytes</code></td><td>Echoed ground vehicle Entity ID</td></tr>
-<tr><td><code>pos_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>pos_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>pos_z</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>rot_z</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>vel_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>vel_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>vel_z</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>accel_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>accel_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>accel_z</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>ang_vel_x</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>ang_vel_y</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>ang_vel_z</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>throttle</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>brake</code></td><td><code>float32</code></td><td>-</td></tr>
-<tr><td><code>steer_angle</code></td><td><code>float32</code></td><td>-</td></tr>
+<tr><td><code>pos_x</code></td><td><code>float32</code></td><td>Vehicle position X component</td></tr>
+<tr><td><code>pos_y</code></td><td><code>float32</code></td><td>Vehicle position Y component</td></tr>
+<tr><td><code>pos_z</code></td><td><code>float32</code></td><td>Vehicle position Z component</td></tr>
+<tr><td><code>rot_x</code></td><td><code>float32</code></td><td>Vehicle rotation X component</td></tr>
+<tr><td><code>rot_y</code></td><td><code>float32</code></td><td>Vehicle rotation Y component</td></tr>
+<tr><td><code>rot_z</code></td><td><code>float32</code></td><td>Vehicle rotation Z component</td></tr>
+<tr><td><code>vel_x</code></td><td><code>float32</code></td><td>Vehicle local velocity X component</td></tr>
+<tr><td><code>vel_y</code></td><td><code>float32</code></td><td>Vehicle local velocity Y component</td></tr>
+<tr><td><code>vel_z</code></td><td><code>float32</code></td><td>Vehicle local velocity Z component</td></tr>
+<tr><td><code>accel_x</code></td><td><code>float32</code></td><td>Vehicle acceleration X component</td></tr>
+<tr><td><code>accel_y</code></td><td><code>float32</code></td><td>Vehicle acceleration Y component</td></tr>
+<tr><td><code>accel_z</code></td><td><code>float32</code></td><td>Vehicle acceleration Z component</td></tr>
+<tr><td><code>ang_vel_x</code></td><td><code>float32</code></td><td>Vehicle angular velocity X component</td></tr>
+<tr><td><code>ang_vel_y</code></td><td><code>float32</code></td><td>Vehicle angular velocity Y component</td></tr>
+<tr><td><code>ang_vel_z</code></td><td><code>float32</code></td><td>Vehicle angular velocity Z component</td></tr>
+<tr><td><code>throttle</code></td><td><code>float32</code></td><td>Current throttle control value</td></tr>
+<tr><td><code>brake</code></td><td><code>float32</code></td><td>Current brake control value</td></tr>
+<tr><td><code>steer_angle</code></td><td><code>float32</code></td><td>Current steering angle value</td></tr>
 </table>
 <p>Notes:</p>
 <ul>
@@ -598,12 +596,7 @@ blockquote {
 <li>Builder: <code>tcp.send_active_suite_status()</code></li>
 </ul>
 <p>Query the active suite and scenario list.</p>
-<p>Wire layout: variant-specific</p>
-<p>This message has no payload.</p>
-<p>Notes:</p>
-<ul>
-<li>No payload.</li>
-</ul>
+<p>Wire layout: <code>(no payload)</code></p>
 <h3>Resp</h3>
 <ul>
 <li>Payload: <code>8 + 4 + N1 + 4 + N2 + 4 bytes (N1 = active_suite_name UTF-8 byte length, N2 = active_scenario_name UTF-8 byte length) + variable bytes * item_count</code></li>
@@ -613,19 +606,19 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code] [uint32 active_suite_name_len][utf-8 * active_suite_name_len] [uint32 active_scenario_name_len][utf-8 * active_scenario_name_len] [uint32 scenario_list_size]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 <tr><td><code>active_suite_name_len</code></td><td><code>uint32</code></td><td>active_suite_name UTF-8 byte length</td></tr>
-<tr><td><code>active_suite_name</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
+<tr><td><code>active_suite_name</code></td><td><code>utf-8 bytes</code></td><td>Active suite name</td></tr>
 <tr><td><code>active_scenario_name_len</code></td><td><code>uint32</code></td><td>active_scenario_name UTF-8 byte length</td></tr>
-<tr><td><code>active_scenario_name</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
-<tr><td><code>scenario_list_size</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>active_scenario_name</code></td><td><code>utf-8 bytes</code></td><td>Active scenario name</td></tr>
+<tr><td><code>scenario_list_size</code></td><td><code>uint32</code></td><td>Number of scenario names that follow</td></tr>
 </table>
 <p>Repeat layout:</p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
 <tr><td><code>scenario_list[].name_len</code></td><td><code>uint32</code></td><td>scenario_list[].name UTF-8 byte length</td></tr>
-<tr><td><code>scenario_list[].name</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
+<tr><td><code>scenario_list[].name</code></td><td><code>utf-8 bytes</code></td><td>Scenario name</td></tr>
 </table>
 <a id="api-0x1402"></a>
 <h2><code>0x1402</code> LoadSuite</h2>
@@ -639,7 +632,7 @@ blockquote {
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
 <tr><td><code>suite_path_len</code></td><td><code>uint32</code></td><td>suite_path UTF-8 byte length</td></tr>
-<tr><td><code>suite_path</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
+<tr><td><code>suite_path</code></td><td><code>utf-8 bytes</code></td><td>MORAI suite file path</td></tr>
 </table>
 <h3>Resp</h3>
 <ul>
@@ -650,8 +643,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1504"></a>
 <h2><code>0x1504</code> ScenarioStatus</h2>
@@ -661,23 +654,18 @@ blockquote {
 <li>Builder: <code>tcp.send_scenario_status()</code></li>
 </ul>
 <p>Query current scenario execution state.</p>
-<p>Wire layout: variant-specific</p>
-<p>This message has no payload.</p>
-<p>Notes:</p>
-<ul>
-<li>No payload.</li>
-</ul>
+<p>Wire layout: <code>(no payload)</code></p>
 <h3>Resp</h3>
 <ul>
-<li>Payload: <code>12 + 4 + N bytes (N = name UTF-8 byte length)</code></li>
+<li>Payload: <code>12 bytes for legacy responses; 16 + N bytes with name (N = name UTF-8 byte length)</code></li>
 <li>Parser: <code>tcp.parse_scenario_status_payload()</code></li>
 </ul>
 <p>Return result code, current scenario execution state, and scenario name.</p>
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code] [uint32 state] [uint32 name_len][utf-8 * name_len]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 <tr><td><code>state</code></td><td><code>uint32</code></td><td>1=Play, 2=Pause, 3=Stop, 4=Completed</td></tr>
 <tr><td><code>name_len</code></td><td><code>uint32</code></td><td>name UTF-8 byte length</td></tr>
 <tr><td><code>name</code></td><td><code>utf-8 bytes</code></td><td>Current scenario name</td></tr>
@@ -689,16 +677,15 @@ blockquote {
 </ul>
 <h3>Noti</h3>
 <ul>
-<li>Payload: <code>4 + 4 + N bytes (N = name UTF-8 byte length)</code></li>
+<li>Payload: <code>protobuf variable size (typically 4 + N bytes for current values)</code></li>
 <li>Parser: <code>tcp.parse_scenario_status_notification_payload()</code></li>
 </ul>
 <p>Push the current scenario execution state and scenario name without a preceding request.</p>
-<p>Wire layout: <code>[uint32 state] [uint32 name_len][utf-8 * name_len]</code></p>
+<p>Wire layout: <code>[field #1: varint state] [field #2: length-delimited UTF-8 name]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>state</code></td><td><code>uint32</code></td><td>Protobuf enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed</td></tr>
-<tr><td><code>name_len</code></td><td><code>uint32</code></td><td>name UTF-8 byte length</td></tr>
-<tr><td><code>name</code></td><td><code>utf-8 bytes</code></td><td>Current scenario name</td></tr>
+<tr><td><code>state</code></td><td><code>protobuf varint</code></td><td>Enum value. 1=Play, 2=Pause, 3=Stop, 4=Completed</td></tr>
+<tr><td><code>name</code></td><td><code>protobuf length-delimited UTF-8</code></td><td>Current scenario name</td></tr>
 </table>
 <p>Notes:</p>
 <ul>
@@ -719,7 +706,7 @@ blockquote {
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
 <tr><td><code>command</code></td><td><code>uint32</code></td><td>1=Play, 2=Pause, 3=Stop, 4=Prev, 5=Next</td></tr>
 <tr><td><code>scenario_name_len</code></td><td><code>uint32</code></td><td>scenario_name UTF-8 byte length</td></tr>
-<tr><td><code>scenario_name</code></td><td><code>utf-8 bytes</code></td><td>-</td></tr>
+<tr><td><code>scenario_name</code></td><td><code>utf-8 bytes</code></td><td>Optional target scenario name</td></tr>
 </table>
 <h3>Resp</h3>
 <ul>
@@ -730,8 +717,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1601"></a>
 <h2><code>0x1601</code> LoadTrafficScenario</h2>
@@ -756,8 +743,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 <a id="api-0x1602"></a>
 <h2><code>0x1602</code> TrafficGenerate</h2>
@@ -782,8 +769,8 @@ blockquote {
 <p>Wire layout: <code>[uint32 result_code] [uint32 detail_code]</code></p>
 <table>
 <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>-</td></tr>
-<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>-</td></tr>
+<tr><td><code>result_code</code></td><td><code>uint32</code></td><td>0=success; nonzero values indicate failure</td></tr>
+<tr><td><code>detail_code</code></td><td><code>uint32</code></td><td>Additional result detail</td></tr>
 </table>
 </body>
 </html>

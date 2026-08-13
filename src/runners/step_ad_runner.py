@@ -105,9 +105,12 @@ class StepAdRunner:
         status_cb=None,
         on_done=None,
         collision_cfg: dict = None,
-        save_data: bool = False,
+        save_mode: int = proto.SAVE_MODE_SKIP,
         **kwargs,
     ):
+        if save_mode not in proto.SAVE_MODE_MAP:
+            raise ValueError(f"Unsupported save mode: {save_mode}")
+
         self._tcp_sock = tcp_sock
         self._pending = pending
         self._lock = lock
@@ -120,7 +123,7 @@ class StepAdRunner:
         self._on_done = on_done
         self._running = False
         self._collision_cfg = collision_cfg
-        self._save_data = save_data
+        self._save_mode = save_mode
         self._ctxs: list[_VehicleCtx] = []
         self._tcp_vi_requests: dict[int, _VehicleCtx] = {}
         self._tcp_vi_lock = threading.Lock()
@@ -382,7 +385,7 @@ class StepAdRunner:
         _t_total = []
 
         def _should_debug() -> bool:
-            return self._save_data and (step_index < 5 or step_index % self._STEP_DEBUG_INTERVAL == 0)
+            return step_index < 5 or step_index % self._STEP_DEBUG_INTERVAL == 0
 
         def _last_vi_age_text(ctx: _VehicleCtx) -> str:
             with ctx.lock:
@@ -462,17 +465,21 @@ class StepAdRunner:
                 self._log(f"[StepAD][step={step_index}] commands sent: {sent_text}", "INFO")
 
         def _presend_step():
+            for ctx in self._ctxs:
+                ctx.vi_event.clear()
             rid = self._rid.next()
             ev = self._pending_add(self._pending, self._lock, rid, proto.MSG_TYPE_FIXED_STEP)
-            tcp.send_fixed_step(self._tcp_sock, rid, step_count=1)
+            tcp.send_fixed_step(
+                self._tcp_sock,
+                rid,
+                step_count=1,
+                save_mode=self._save_mode,
+            )
             if _should_debug():
                 self._log(f"[StepAD][step={step_index}] presend FixedStep rid={rid}", "INFO")
             return ev, rid
 
         try:
-            for ctx in self._ctxs:
-                ctx.vi_event.clear()
-
             ev, rid = _presend_step()
             ack_wait_started = time.perf_counter()
             if not ev.wait(self._timeout_sec):
@@ -489,25 +496,22 @@ class StepAdRunner:
                 )
 
             tcp_ready_ids = self._request_tcp_vehicle_info()
-            if self._save_data:
-                save_rid = self._rid.next()
-                if _should_debug():
-                    self._log(f"[StepAD][init] SaveData send rid={save_rid}", "INFO")
-                tcp.send_save_data(self._tcp_sock, save_rid)
-                if not self._tcp_external:
-                    ready_ids = _wait_for_vi(
-                        timeout_sec=self._timeout_sec,
-                        phase="init",
-                        stop_on_timeout=True,
-                    )
-                    if len(ready_ids) < len(self._ctxs):
-                        stop_reason = "initial VehicleInfo timeout"
-                        return
+            if not self._tcp_external:
+                ready_ids = _wait_for_vi(
+                    timeout_sec=self._timeout_sec,
+                    phase="init",
+                    stop_on_timeout=True,
+                )
+                if len(ready_ids) < len(self._ctxs):
+                    stop_reason = "initial VehicleInfo timeout"
+                    return
 
-            initial_ready_ids = tcp_ready_ids if self._tcp_external else (ready_ids if self._save_data else None)
+            initial_ready_ids = (
+                tcp_ready_ids
+                if self._tcp_external
+                else ready_ids
+            )
             _send_all_cmds(initial_ready_ids)
-            for ctx in self._ctxs:
-                ctx.vi_event.clear()
             ev, rid = _presend_step()
 
             while self._running:
@@ -537,22 +541,20 @@ class StepAdRunner:
 
                 tcp_ready_ids = self._request_tcp_vehicle_info()
 
-                if self._save_data:
-                    try:
-                        save_rid = self._rid.next()
-                        if _should_debug():
-                            self._log(f"[StepAD][step={step_index}] SaveData send rid={save_rid}", "INFO")
-                        tcp.send_save_data(self._tcp_sock, save_rid)
-                    except OSError as exc:
-                        stop_reason = f"SaveData send error: {exc}"
-                        self._log(f"SaveData send error: {exc}", "ERROR")
-                        break
+                if not self._tcp_external:
+                    ready_ids = _wait_for_vi(
+                        timeout_sec=self._VI_STEP_WAIT_SEC,
+                        phase=f"step={step_index}",
+                        stop_on_timeout=False,
+                    )
 
+                t2 = time.perf_counter()
                 if self._tcp_external:
                     _send_all_cmds(tcp_ready_ids)
+                else:
+                    _send_all_cmds(ready_ids)
 
-                for ctx in self._ctxs:
-                    ctx.vi_event.clear()
+                t3 = time.perf_counter()
                 try:
                     ev, rid = _presend_step()
                 except OSError as exc:
@@ -560,23 +562,11 @@ class StepAdRunner:
                     self._log(f"FixedStep send error: {exc}", "ERROR")
                     break
 
-                t2 = time.perf_counter()
-
-                if self._save_data and not self._tcp_external:
-                    ready_ids = _wait_for_vi(
-                        timeout_sec=self._VI_STEP_WAIT_SEC,
-                        phase=f"step={step_index}",
-                        stop_on_timeout=False,
-                    )
-
-                t3 = time.perf_counter()
-                if not self._tcp_external:
-                    _send_all_cmds(ready_ids if self._save_data else None)
                 t4 = time.perf_counter()
 
                 _t_ack.append((t1 - t0) * 1000)
-                _t_vi.append((t3 - t2) * 1000)
-                _t_cmd.append((t4 - t3) * 1000)
+                _t_vi.append((t2 - t1) * 1000)
+                _t_cmd.append((t3 - t2) * 1000)
                 _t_total.append((t4 - t0) * 1000)
 
                 if len(_t_total) >= self._TIMING_INTERVAL:
