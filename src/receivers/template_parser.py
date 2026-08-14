@@ -90,9 +90,10 @@ class TemplateParser:
             seg_type = seg_raw.get("type", "FIELDS").upper()
             fields: List[FieldDef] = []
             for f in seg_raw.get("fieldList", []):
+                variable_name = f.get("variableName", f.get("name", ""))
                 fields.append(FieldDef(
-                    name          = f["name"],
-                    variable_name = f.get("variableName", f["name"]),
+                    name          = f.get("name") or variable_name,
+                    variable_name = variable_name,
                     var_type      = f.get("variableType", "FLOAT"),
                     length        = int(f.get("length", 0)),
                 ))
@@ -133,7 +134,7 @@ class TemplateParser:
             return raw.split(b"\x00", 1)[0].decode("utf-8", errors="ignore")
         return raw
 
-    def _find_count(self, fields_dict: Dict[str, Any]) -> int:
+    def _find_count(self, fields_dict: Dict[str, Any]) -> Optional[int]:
         """
         Locate the repeat-count value in the already-parsed FIELDS dict.
         Strategy:
@@ -143,7 +144,7 @@ class TemplateParser:
           3. Fall back to the last matching key.
         """
         if not self._repeat_seg:
-            return 0
+            return None
 
         rfn_last = self._repeat_seg.repeat_field_name.split(".")[-1]
         base = (rfn_last
@@ -154,7 +155,7 @@ class TemplateParser:
         candidates = {k: v for k, v in fields_dict.items()
                       if "count" in k.lower()}
         if not candidates:
-            return 0
+            return None
 
         # prefer key that also contains the base word
         for k, v in candidates.items():
@@ -219,10 +220,13 @@ class TemplateParser:
 
         # ── REPEAT segment ───────────────────────────────────────────
         if self._repeat_seg:
-            count    = min(self._find_count(result["fields"]), MAX_REPEAT_COUNT)
             seg      = self._repeat_seg
             row_size = seg.byte_size()
             row_fmt  = seg.build_fmt()
+            count = self._find_count(result["fields"])
+            if count is None:
+                count = (len(data) - offset) // row_size if row_size > 0 else 0
+            count = min(count, MAX_REPEAT_COUNT)
 
             for _ in range(count):
                 if len(data) < offset + row_size:

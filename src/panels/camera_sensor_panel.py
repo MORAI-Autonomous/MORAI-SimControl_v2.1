@@ -36,8 +36,18 @@ _TPL_RGB = "Camera RGB.tmpl"
 _TPL_DEPTH = "Camera Depth.tmpl"
 _TPL_SEMANTIC = "Camera Semantic.tmpl"
 _TPL_INSTANCE = "Instance Cam.tmpl"
+_TPL_BBOX_2D = "Camera 2D Bounding Box.tmpl"
+_TPL_BBOX_3D = "Camera 3D Bounding Box.tmpl"
 _TPL_RGB_BBOX = "Camera With 2D_3D Bounding Box.tmpl"
-_TEMPLATE_ITEMS = [_TPL_RGB, _TPL_DEPTH, _TPL_SEMANTIC, _TPL_INSTANCE, _TPL_RGB_BBOX]
+_TEMPLATE_ITEMS = [
+    _TPL_RGB,
+    _TPL_DEPTH,
+    _TPL_SEMANTIC,
+    _TPL_INSTANCE,
+    _TPL_BBOX_2D,
+    _TPL_BBOX_3D,
+    _TPL_RGB_BBOX,
+]
 _DEPTH_VIEW_SIMULATOR = "Simulator"
 _DEPTH_VIEW_GRAYSCALE = "Grayscale"
 _DEPTH_VIEW_TURBO = "Turbo"
@@ -47,6 +57,8 @@ _DEPTH_SCALE_RAW_32FC1 = "Raw 32FC1"
 _DEPTH_SCALE_ITEMS = [_DEPTH_SCALE_MORAI_255, _DEPTH_SCALE_RAW_32FC1]
 _DEPTH_SCALE_M = 200.0 / 255.0
 _TEMPLATE_PATHS = {
+    _TPL_BBOX_2D: resolve_template_path(_TPL_BBOX_2D),
+    _TPL_BBOX_3D: resolve_template_path(_TPL_BBOX_3D),
     _TPL_RGB_BBOX: resolve_template_path(_TPL_RGB_BBOX),
 }
 
@@ -282,12 +294,16 @@ def _start_slot(slot: int) -> None:
             on_packet=lambda packet, s=slot: _on_instance_packet(s, packet),
         )
     else:
-        state.receiver_kind = "bbox"
+        state.receiver_kind = {
+            _TPL_BBOX_2D: "bbox2d",
+            _TPL_BBOX_3D: "bbox3d",
+            _TPL_RGB_BBOX: "bbox",
+        }[template_name]
         state.receiver = CameraSensorReceiver(
             ip=ip,
             port=port,
             on_packet=lambda packet, s=slot: _on_bbox_packet(s, packet),
-            tmpl_path=_TEMPLATE_PATHS.get(_TPL_RGB_BBOX),
+            tmpl_path=_TEMPLATE_PATHS[template_name],
         )
 
     state.receiver.start()
@@ -383,6 +399,7 @@ def _on_bbox_packet(slot: int, packet: dict) -> None:
     fps = float(packet.get("fps", state.receiver.fps if state.receiver is not None else 0.0))
     object_count = int(packet.get("object_count", len(objects)))
     packet_seq = int(packet.get("packet_seq", 0))
+    bbox_type = _receiver_type_text(state.receiver_kind)
 
     if now - state.last_debug_log_t >= 1.0:
         state.last_debug_log_t = now
@@ -398,7 +415,7 @@ def _on_bbox_packet(slot: int, packet: dict) -> None:
         src_w=src_w,
         src_h=src_h,
         fps=fps,
-        type_text="RGB+BBox",
+        type_text=bbox_type,
         info_text=f"Objects: {object_count}",
         rx_t=now,
     )
@@ -607,6 +624,10 @@ def _visualize_depth(
 def _receiver_type_text(kind: str) -> str:
     if kind == "rgb":
         return "RGB"
+    if kind == "bbox2d":
+        return "BBox 2D"
+    if kind == "bbox3d":
+        return "BBox 3D"
     if kind == "bbox":
         return "RGB+BBox"
     if kind == "depth":
@@ -622,9 +643,9 @@ def _normalize_template(template_name: str) -> str:
     legacy_names = {
         "Camera Template.tmpl": _TPL_RGB,
         "Camera Depth Template.tmpl": _TPL_DEPTH,
-        "CameraSensorMessageTemplate.tmpl": _TPL_RGB_BBOX,
-        "CameraWithBboxMessageTemplate.tmpl": _TPL_RGB_BBOX,
-        "Camera With Bbox Message Template.tmpl": _TPL_RGB_BBOX,
+        "CameraSensorMessageTemplate.tmpl": _TPL_BBOX_2D,
+        "CameraWithBboxMessageTemplate.tmpl": _TPL_BBOX_2D,
+        "Camera With Bbox Message Template.tmpl": _TPL_BBOX_2D,
     }
     if template_name in legacy_names:
         return legacy_names[template_name]
