@@ -20,9 +20,6 @@ _TYPE_MAP: Dict[str, tuple] = {
     "ENUM":   ("I", 4),  # treated as UINT32
 }
 
-MAX_REPEAT_COUNT = 256  # safety cap against corrupt count fields
-
-
 # ── Field / Segment definitions ───────────────────────────────────────
 
 class FieldDef:
@@ -219,10 +216,11 @@ class TemplateParser:
 
         # ── REPEAT segment ───────────────────────────────────────────
         if self._repeat_seg:
-            count    = min(self._find_count(result["fields"]), MAX_REPEAT_COUNT)
             seg      = self._repeat_seg
             row_size = seg.byte_size()
             row_fmt  = seg.build_fmt()
+            available_count = (len(data) - offset) // row_size if row_size else 0
+            count = min(self._find_count(result["fields"]), available_count)
 
             for _ in range(count):
                 if len(data) < offset + row_size:

@@ -1,0 +1,78 @@
+{
+    "version": "1.0.0-alpha",
+    "messageTemplate": {
+        "name": "ARS540 Radar Detection List",
+        "isControl": false,
+        "isSensor": true,
+        "description": "UDP radar detections from the ARS540 radar sensor.",
+        "segmentList": [
+            {
+                "type": "FIELDS",
+                "relationName": "RadarEntity",
+                "fieldList": [
+                    {
+                        "name": "seconds",
+                        "relationName": "RadarEntity",
+                        "variableName": "time_stamp.seconds",
+                        "variableType": "INT64"
+                    },
+                    {
+                        "name": "nanos",
+                        "relationName": "RadarEntity",
+                        "variableName": "time_stamp.nanos",
+                        "variableType": "INT32"
+                    },
+                    {
+                        "name": "detection_count",
+                        "relationName": "RadarEntity",
+                        "variableName": "radar_attributes.radar_sensor_data.detection_count",
+                        "variableType": "UINT32"
+                    }
+                ]
+            },
+            {
+                "type": "REPEAT",
+                "relationName": "RadarEntity",
+                "repeatFieldName": "radar_attributes.radar_sensor_data.detections",
+                "fieldList": [
+                    {
+                        "name": "detection_id",
+                        "relationName": "RadarEntity",
+                        "variableName": "detection_id",
+                        "variableType": "UINT32"
+                    },
+                    {
+                        "name": "range_meters",
+                        "relationName": "RadarEntity",
+                        "variableName": "range_meters",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "azimuth_radians",
+                        "relationName": "RadarEntity",
+                        "variableName": "azimuth_radians",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "elevation_radians",
+                        "relationName": "RadarEntity",
+                        "variableName": "elevation_radians",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "doppler_velocity_meters_per_second",
+                        "relationName": "RadarEntity",
+                        "variableName": "doppler_velocity_meters_per_second",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "radar_cross_section_square_meters",
+                        "relationName": "RadarEntity",
+                        "variableName": "radar_cross_section_square_meters",
+                        "variableType": "FLOAT"
+                    }
+                ]
+            }
+        ]
+    }
+}
