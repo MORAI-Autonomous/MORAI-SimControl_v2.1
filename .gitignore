@@ -5,6 +5,10 @@ config/
 .vscode/launch.json
 debug/
 runs/
+
+# Generated UDP debug CSV logs
+/logs/*.csv
+
 # Added by code-review-graph
 .code-review-graph/
 

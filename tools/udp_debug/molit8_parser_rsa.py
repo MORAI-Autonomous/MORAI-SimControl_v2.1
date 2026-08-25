@@ -240,21 +240,25 @@ class FileLogger:
             self.writer.writerow(
                 [
                     "recv_time_iso",
-                    "remote_ip",
-                    "remote_port",
-                    "total_size",
-                    "type",
-                    "count",
-                    "idx",
                     "timestamp",
                     "region_id",
                     "vehicle_id",
+                    "key_type",
                     "speed",
                     "heading",
                     "lat",
                     "lon",
                     "alt",
+                    "vehicle_class",
+                    "",
+                    "Display Data",
+                    "vehicle_id",
                     "key_type",
+                    "speed",
+                    "heading",
+                    "lat",
+                    "lon",
+                    "alt",
                     "vehicle_class",
                 ]
             )
@@ -267,25 +271,29 @@ class FileLogger:
         now_iso = datetime.now().isoformat(timespec="milliseconds")
         ip, port = remote
         if self.mode == "csv":
-            for idx, payload in enumerate(packet.payloads):
+            for payload in packet.payloads:
                 self.writer.writerow(
                     [
                         now_iso,
-                        ip,
-                        port,
-                        packet.total_size,
-                        packet.type,
-                        packet.count,
-                        idx,
                         payload.timestamp,
                         payload.region_id,
                         payload.vehicle_id,
-                        f"{payload.speed:.6f}",
-                        payload.heading,
-                        f"{payload.lat:.6f}",
-                        f"{payload.lon:.6f}",
-                        f"{payload.alt:.6f}",
                         payload.key_type,
+                        payload.speed,
+                        payload.heading,
+                        payload.lat,
+                        payload.lon,
+                        payload.alt,
+                        payload.vehicle_class,
+                        "",
+                        "Display Data",
+                        payload.vehicle_id,
+                        payload.key_type,
+                        payload.speed,
+                        payload.heading,
+                        payload.lat,
+                        payload.lon,
+                        payload.alt,
                         payload.vehicle_class,
                     ]
                 )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import logging
 import socket
 import struct
@@ -8,6 +9,8 @@ import sys
 import threading
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
 from defaults import (
@@ -82,6 +85,78 @@ def parse_packet_v2(data: bytes) -> Packet:
         )
 
     return Packet(total_size=total_size, type=msg_type, count=count, payloads=payloads)
+
+
+class FileLogger:
+    def __init__(self, directory: str = "."):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base = Path(directory)
+        base.mkdir(parents=True, exist_ok=True)
+        self.path = base / f"pvd_udp_log_{timestamp}.csv"
+        self.fp = self.path.open("w", newline="", encoding="utf-8")
+        self.writer = csv.writer(self.fp)
+        self.writer.writerow(
+            [
+                "recv_time_iso",
+                "id",
+                "timestamp",
+                "key_type",
+                "lat",
+                "lon",
+                "alt",
+                "speed",
+                "heading",
+                "vehicle_class",
+                "",
+                "Display Data",
+                "id",
+                "key_type",
+                "lat",
+                "lon",
+                "alt",
+                "speed",
+                "heading",
+                "vehicle_class",
+            ]
+        )
+
+    def write_packet(self, packet: Packet) -> None:
+        now_iso = datetime.now().isoformat(timespec="milliseconds")
+        for payload in packet.payloads:
+            display_values = [
+                payload.id,
+                payload.key_type,
+                payload.lat,
+                payload.lon,
+                payload.alt,
+                payload.speed,
+                payload.heading,
+                payload.vehicle_class,
+            ]
+            self.writer.writerow(
+                [
+                    now_iso,
+                    payload.id,
+                    payload.timestamp,
+                    payload.key_type,
+                    payload.lat,
+                    payload.lon,
+                    payload.alt,
+                    payload.speed,
+                    payload.heading,
+                    payload.vehicle_class,
+                    "",
+                    "Display Data",
+                    *display_values,
+                ]
+            )
+        self.fp.flush()
+
+    def close(self) -> None:
+        try:
+            self.fp.close()
+        except Exception:
+            pass
 
 
 def parse_targets(items: List[str]) -> list[tuple[str, int]]:
@@ -181,6 +256,48 @@ def run_parse(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_record(args: argparse.Namespace) -> int:
+    stop_event = threading.Event()
+    logger = FileLogger(directory=args.log_dir)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((args.listen_ip, args.port))
+    sock.settimeout(0.5)
+
+    print(f"Logging to: {logger.path}")
+    print(f"UDP listening on {args.listen_ip}:{args.port}")
+    threading.Thread(target=wait_for_quit, args=(stop_event,), daemon=True).start()
+
+    try:
+        while not stop_event.is_set():
+            try:
+                data, addr = sock.recvfrom(args.bufsize)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+
+            try:
+                packet = parse_packet_v2(data)
+            except Exception as exc:
+                print(f"parse error: {exc}")
+                continue
+
+            if not args.no_packet_print:
+                print(f"\nReceived {len(data)} bytes from {addr[0]}:{addr[1]}")
+                print(f"Header -> total_size={packet.total_size}, type={packet.type}, count={packet.count}")
+                for idx, payload in enumerate(packet.payloads):
+                    print(f"  [#{idx}] {asdict(payload)}")
+            logger.write_packet(packet)
+    except KeyboardInterrupt:
+        stop_event.set()
+    finally:
+        sock.close()
+        logger.close()
+        print("UDP socket closed.")
+    return 0
+
+
 def _make_logger() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 
@@ -272,6 +389,14 @@ def build_parser() -> argparse.ArgumentParser:
     parse_cmd.add_argument("--port", type=int, default=PVD_DEFAULT_PORT)
     parse_cmd.add_argument("--bufsize", type=int, default=DEFAULT_PARSE_BUFSIZE)
     parse_cmd.set_defaults(func=run_parse)
+
+    record_cmd = sub.add_parser("record", help="Parse and record PVD UDP packets as CSV")
+    record_cmd.add_argument("--listen-ip", default=UDP_DEBUG_LISTEN_IP)
+    record_cmd.add_argument("--port", type=int, default=PVD_DEFAULT_PORT)
+    record_cmd.add_argument("--bufsize", type=int, default=DEFAULT_PARSE_BUFSIZE)
+    record_cmd.add_argument("--log-dir", default=".")
+    record_cmd.add_argument("--no-packet-print", action="store_true", help="suppress per-packet detail output")
+    record_cmd.set_defaults(func=run_record)
 
     bypass_cmd = sub.add_parser("bypass", help="Forward PVD UDP packets to one or more targets")
     bypass_cmd.add_argument("--listen-ip", default=UDP_DEBUG_LISTEN_IP)
