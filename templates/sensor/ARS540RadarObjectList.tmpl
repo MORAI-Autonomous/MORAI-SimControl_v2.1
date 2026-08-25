@@ -1,0 +1,108 @@
+{
+    "version": "1.0.0-alpha",
+    "messageTemplate": {
+        "name": "ARS540 Radar Object List",
+        "isControl": false,
+        "isSensor": true,
+        "description": "UDP radar object list from the ARS540 radar sensor.",
+        "segmentList": [
+            {
+                "type": "FIELDS",
+                "relationName": "RadarEntity",
+                "fieldList": [
+                    {
+                        "name": "seconds",
+                        "relationName": "RadarEntity",
+                        "variableName": "time_stamp.seconds",
+                        "variableType": "INT64"
+                    },
+                    {
+                        "name": "nanos",
+                        "relationName": "RadarEntity",
+                        "variableName": "time_stamp.nanos",
+                        "variableType": "INT32"
+                    },
+                    {
+                        "name": "object_count",
+                        "relationName": "RadarEntity",
+                        "variableName": "radar_attributes.radar_sensor_data.object_count",
+                        "variableType": "UINT32"
+                    }
+                ]
+            },
+            {
+                "type": "REPEAT",
+                "relationName": "RadarEntity",
+                "repeatFieldName": "radar_attributes.radar_sensor_data.object_list",
+                "fieldList": [
+                    {
+                        "name": "object_id",
+                        "relationName": "RadarEntity",
+                        "variableName": "object_id",
+                        "variableType": "UINT32"
+                    },
+                    {
+                        "name": "classification_color_hash_rgba",
+                        "relationName": "RadarEntity",
+                        "variableName": "classification_color_hash_rgba",
+                        "variableType": "UINT32"
+                    },
+                    {
+                        "name": "center_x_meters",
+                        "relationName": "RadarEntity",
+                        "variableName": "center_position_meters.x",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "center_y_meters",
+                        "relationName": "RadarEntity",
+                        "variableName": "center_position_meters.y",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "center_z_meters",
+                        "relationName": "RadarEntity",
+                        "variableName": "center_position_meters.z",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "velocity_x_meters_per_second",
+                        "relationName": "RadarEntity",
+                        "variableName": "velocity_meters_per_second.x",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "velocity_y_meters_per_second",
+                        "relationName": "RadarEntity",
+                        "variableName": "velocity_meters_per_second.y",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "velocity_z_meters_per_second",
+                        "relationName": "RadarEntity",
+                        "variableName": "velocity_meters_per_second.z",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "acceleration_x_meters_per_second_squared",
+                        "relationName": "RadarEntity",
+                        "variableName": "acceleration_meters_per_second_squared.x",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "acceleration_y_meters_per_second_squared",
+                        "relationName": "RadarEntity",
+                        "variableName": "acceleration_meters_per_second_squared.y",
+                        "variableType": "FLOAT"
+                    },
+                    {
+                        "name": "acceleration_z_meters_per_second_squared",
+                        "relationName": "RadarEntity",
+                        "variableName": "acceleration_meters_per_second_squared.z",
+                        "variableType": "FLOAT"
+                    }
+                ]
+            }
+        ]
+    }
+}
