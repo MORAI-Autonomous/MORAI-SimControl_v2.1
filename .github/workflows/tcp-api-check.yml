@@ -48,7 +48,7 @@ jobs:
 
       - name: Verify generated TCP API docs
         if: steps.changed.outputs.tcp_changed == 'true'
-        run: python tools/gen_tcp_docs.py --check
+        run: python tools/gen_tcp_docs.py --check --revision-ref "${{ github.head_ref || github.ref_name }}"
 
       - name: Run TCP payload golden tests
         if: steps.changed.outputs.tcp_changed == 'true'
