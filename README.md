@@ -100,3 +100,5 @@ python -m compileall -q morai_interface_console.py simulation_control.py cli sit
 
 Runtime state under `config/`, debug captures, editor settings, and local
 AI/MCP tool files are intentionally ignored by Git.
+
+---

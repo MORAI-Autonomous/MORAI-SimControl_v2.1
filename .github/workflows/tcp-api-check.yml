@@ -14,14 +14,42 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
+      - name: Check changed files
+        id: changed
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+          fi
+
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            BASE_SHA="$(git rev-list --max-parents=0 HEAD)"
+          fi
+
+          if git diff --name-only "$BASE_SHA" "${{ github.sha }}" | grep -E '^(src/transport/|tools/gen_tcp_docs\.py|docs/tcp-api\.(md|html)|tests/test_tcp_payloads\.py)' >/dev/null; then
+            echo "tcp_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tcp_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip TCP API check
+        if: steps.changed.outputs.tcp_changed != 'true'
+        run: echo "No TCP API files changed; skipping TCP API validation."
+
       - name: Verify generated TCP API docs
-        run: python tools/gen_tcp_docs.py --check
+        if: steps.changed.outputs.tcp_changed == 'true'
+        run: python tools/gen_tcp_docs.py --check --revision-ref "${{ github.head_ref || github.ref_name }}"
 
       - name: Run TCP payload golden tests
+        if: steps.changed.outputs.tcp_changed == 'true'
         run: python -m unittest tests.test_tcp_payloads
