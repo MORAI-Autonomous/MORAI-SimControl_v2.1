@@ -1,0 +1,17 @@
+name: Gemini Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Print Message
+        run: |
+          echo "Gemini Review Started!"

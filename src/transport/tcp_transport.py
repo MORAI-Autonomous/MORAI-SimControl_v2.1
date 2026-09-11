@@ -314,6 +314,12 @@ def send_fixed_step(
     _send_packet(sock, request_id, proto.MSG_TYPE_FIXED_STEP, payload)
 
 
+def send_legacy_fixed_step(sock: socket.socket, request_id: int, step_count: int) -> None:
+    """Send the pre-save-mode FixedStep payload for compatibility testing."""
+    payload = struct.pack("<I", step_count)
+    _send_packet(sock, request_id, proto.MSG_TYPE_FIXED_STEP, payload)
+
+
 def send_save_data(sock: socket.socket, request_id: int) -> None:
     _send_packet(sock, request_id, proto.MSG_TYPE_SAVE_DATA, b"")
 

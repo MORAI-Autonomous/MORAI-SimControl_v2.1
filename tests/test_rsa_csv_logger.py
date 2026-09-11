@@ -60,6 +60,7 @@ class RsaCsvLoggerTests(unittest.TestCase):
                 "lon",
                 "alt",
                 "vehicle_class",
+                "vehicle_class_name",
                 "",
                 "Display Data",
                 "vehicle_id",
@@ -70,13 +71,15 @@ class RsaCsvLoggerTests(unittest.TestCase):
                 "lon",
                 "alt",
                 "vehicle_class",
+                "vehicle_class_name",
             ],
         )
         self.assertEqual(rows[1][3:11], [
             "42", "3", "12.25", "91.5", "37.1234567", "126.7654321", "15.75", "2",
         ])
-        self.assertEqual(rows[1][11:13], ["", "Display Data"])
-        self.assertEqual(rows[1][13:], rows[1][3:11])
+        self.assertEqual(rows[1][11], "Car")
+        self.assertEqual(rows[1][12:14], ["", "Display Data"])
+        self.assertEqual(rows[1][14:], rows[1][3:12])
 
 
 if __name__ == "__main__":

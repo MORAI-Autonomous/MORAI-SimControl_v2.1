@@ -51,6 +51,27 @@ class TcpPayloadGoldenTests(unittest.TestCase):
         self.assertLessEqual(before_ns, client_send_ns)
         self.assertLessEqual(client_send_ns, after_ns)
 
+    def test_legacy_fixed_step_payload_has_only_step_count(self) -> None:
+        sent = []
+
+        class FakeSocket:
+            def sendall(self, data: bytes) -> None:
+                sent.append(data)
+
+        tcp.send_legacy_fixed_step(FakeSocket(), 24, step_count=3)
+
+        packet = sent[0]
+        _, msg_class, msg_type, payload_size, request_id, flag = struct.unpack(
+            proto.HEADER_FMT,
+            packet[:proto.HEADER_SIZE],
+        )
+        self.assertEqual(msg_class, proto.MSG_CLASS_REQ)
+        self.assertEqual(msg_type, proto.MSG_TYPE_FIXED_STEP)
+        self.assertEqual(payload_size, 4)
+        self.assertEqual(request_id, 24)
+        self.assertEqual(flag, proto.FLAG)
+        self.assertEqual(packet[proto.HEADER_SIZE:], struct.pack("<I", 3))
+
     def test_fixed_step_uses_previous_response_receive_timestamp(self) -> None:
         response_payload = struct.pack("<II", 0, 0)
         response = (

@@ -81,7 +81,11 @@ _SAVE_MODE_VALUES = {
     "Force (2)": proto.SAVE_MODE_FORCE,
 }
 
-def init(tcp_sock, dispatch_fn: Callable, toggle_auto_fn: Callable) -> None:
+def init(
+    tcp_sock,
+    dispatch_fn: Callable,
+    toggle_auto_fn: Callable,
+) -> None:
     global _tcp_sock, _dispatch, _toggle_auto
     _tcp_sock    = tcp_sock
     _dispatch    = dispatch_fn

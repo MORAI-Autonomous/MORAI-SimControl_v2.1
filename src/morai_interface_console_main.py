@@ -444,7 +444,7 @@ class InterfaceConsoleState:
                 runner = AdRunner(
                     tcp_sock              = self.tcp_sock,
                     entity_id             = v["entity_id"],
-                    vi_ip                 = "0.0.0.0",
+                    vi_ip                 = v.get("vi_ip", "0.0.0.0"),
                     vi_port               = v["vi_port"],
                     path_file             = v.get("path", "path_link.csv"),
                     map_name              = v.get("map_name"),
@@ -468,7 +468,7 @@ class InterfaceConsoleState:
                     role = f"Target ({speed_kph:.0f} km/h)"
                 else:
                     role = f"PathFollow (max={v.get('max_speed_kph', 0):.0f} km/h)"
-                source = "TCP 0x1306" if interface == "TCP" else f"UDP port={v['vi_port']}"
+                source = "TCP 0x1306" if interface == "TCP" else f"UDP {v.get('vi_ip', '0.0.0.0')}:{v['vi_port']}"
                 log_panel.append(f"[AD:{v['entity_id']}] started ({source}, {role})")
             except Exception as e:
                 log_panel.append(f"[AD:{v['entity_id']}] start failed: {e}", "ERROR")

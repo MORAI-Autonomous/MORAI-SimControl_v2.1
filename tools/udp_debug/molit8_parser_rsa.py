@@ -29,6 +29,18 @@ HDR_FMT = "<HBH"
 PL_FMT = "<QHIfHfffBH"
 HDR_SIZE = struct.calcsize(HDR_FMT)
 PL_SIZE = struct.calcsize(PL_FMT)
+VEHICLE_CLASS_NAMES = {
+    0: "Other",
+    1: "Bus",
+    2: "Car",
+    3: "Truck",
+    4: "Bicycle",
+    5: "Pedestrian",
+}
+
+
+def vehicle_class_name(vehicle_class: int) -> str:
+    return VEHICLE_CLASS_NAMES.get(vehicle_class, f"Unknown({vehicle_class})")
 
 
 @dataclass
@@ -250,6 +262,7 @@ class FileLogger:
                     "lon",
                     "alt",
                     "vehicle_class",
+                    "vehicle_class_name",
                     "",
                     "Display Data",
                     "vehicle_id",
@@ -260,6 +273,7 @@ class FileLogger:
                     "lon",
                     "alt",
                     "vehicle_class",
+                    "vehicle_class_name",
                 ]
             )
         else:
@@ -285,6 +299,7 @@ class FileLogger:
                         payload.lon,
                         payload.alt,
                         payload.vehicle_class,
+                        vehicle_class_name(payload.vehicle_class),
                         "",
                         "Display Data",
                         payload.vehicle_id,
@@ -295,6 +310,7 @@ class FileLogger:
                         payload.lon,
                         payload.alt,
                         payload.vehicle_class,
+                        vehicle_class_name(payload.vehicle_class),
                     ]
                 )
             self.fp.flush()
@@ -309,7 +325,9 @@ class FileLogger:
             "count": packet.count,
         }
         for idx, payload in enumerate(packet.payloads):
-            self.fp.write(json.dumps({**base, "idx": idx, **asdict(payload)}, ensure_ascii=False) + "\n")
+            payload_dict = asdict(payload)
+            payload_dict["vehicle_class_name"] = vehicle_class_name(payload.vehicle_class)
+            self.fp.write(json.dumps({**base, "idx": idx, **payload_dict}, ensure_ascii=False) + "\n")
         self.fp.flush()
 
     def close(self) -> None:
@@ -332,7 +350,7 @@ def print_packet(packet: Packet) -> None:
             f"  [#{idx}] ts={data['timestamp']} (UTC: {ts_utc_str}) region={data['region_id']} "
             f"vid={data['vehicle_id']} speed={data['speed']:.6f} heading={data['heading']} "
             f"lat={data['lat']:.6f} lon={data['lon']:.6f} alt={data['alt']:.6f} "
-            f"key_type={data['key_type']} class={data['vehicle_class']}"
+            f"key_type={data['key_type']} class={data['vehicle_class']}({vehicle_class_name(data['vehicle_class'])})"
         )
 
 
@@ -346,7 +364,8 @@ def _print_watched_vehicle(packet: Packet, watch_vehicle_ids: list[int]) -> None
             f"[WATCH][vehicle_id={vehicle_id}] "
             f"speed={payload.speed:.6f} heading={payload.heading:.6f} "
             f"lat={payload.lat:.6f} lon={payload.lon:.6f} alt={payload.alt:.6f} "
-            f"region={payload.region_id} key_type={payload.key_type} class={payload.vehicle_class}"
+            f"region={payload.region_id} key_type={payload.key_type} "
+            f"class={payload.vehicle_class}({vehicle_class_name(payload.vehicle_class)})"
         )
 
 

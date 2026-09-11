@@ -25,6 +25,18 @@ HDR_FMT = "<HBH"
 HDR_SIZE = struct.calcsize(HDR_FMT)
 PL2_FMT = "<16sQffffHBH"
 PL2_SIZE = struct.calcsize(PL2_FMT)
+VEHICLE_CLASS_NAMES = {
+    0: "Other",
+    1: "Bus",
+    2: "Car",
+    3: "Truck",
+    4: "Bicycle",
+    5: "Pedestrian",
+}
+
+
+def vehicle_class_name(vehicle_class: int) -> str:
+    return VEHICLE_CLASS_NAMES.get(vehicle_class, f"Unknown({vehicle_class})")
 
 
 @dataclass
@@ -107,6 +119,7 @@ class FileLogger:
                 "speed",
                 "heading",
                 "vehicle_class",
+                "vehicle_class_name",
                 "",
                 "Display Data",
                 "id",
@@ -117,6 +130,7 @@ class FileLogger:
                 "speed",
                 "heading",
                 "vehicle_class",
+                "vehicle_class_name",
             ]
         )
 
@@ -132,6 +146,7 @@ class FileLogger:
                 payload.speed,
                 payload.heading,
                 payload.vehicle_class,
+                vehicle_class_name(payload.vehicle_class),
             ]
             self.writer.writerow(
                 [
@@ -145,6 +160,7 @@ class FileLogger:
                     payload.speed,
                     payload.heading,
                     payload.vehicle_class,
+                    vehicle_class_name(payload.vehicle_class),
                     "",
                     "Display Data",
                     *display_values,
@@ -246,7 +262,8 @@ def run_parse(args: argparse.Namespace) -> int:
                     f"  [#{idx}] id='{data_dict['id']}' ts={data_dict['timestamp']}"
                     f" lat={data_dict['lat']:.6f} lon={data_dict['lon']:.6f} alt={data_dict['alt']:.6f}"
                     f" speed={data_dict['speed']:.6f} heading={data_dict['heading']}"
-                    f" key_type={data_dict['key_type']} class={data_dict['vehicle_class']}"
+                    f" key_type={data_dict['key_type']}"
+                    f" class={data_dict['vehicle_class']}({vehicle_class_name(data_dict['vehicle_class'])})"
                 )
     except KeyboardInterrupt:
         stop_event.set()
@@ -287,7 +304,9 @@ def run_record(args: argparse.Namespace) -> int:
                 print(f"\nReceived {len(data)} bytes from {addr[0]}:{addr[1]}")
                 print(f"Header -> total_size={packet.total_size}, type={packet.type}, count={packet.count}")
                 for idx, payload in enumerate(packet.payloads):
-                    print(f"  [#{idx}] {asdict(payload)}")
+                    data_dict = asdict(payload)
+                    data_dict["vehicle_class_name"] = vehicle_class_name(payload.vehicle_class)
+                    print(f"  [#{idx}] {data_dict}")
             logger.write_packet(packet)
     except KeyboardInterrupt:
         stop_event.set()

@@ -220,7 +220,7 @@ def build(parent) -> None:
 def _build_vehicles(count: int) -> None:
     """au_vehicles_area 내 차량 설정 위젯을 (재)생성한다."""
     dpg.delete_item("au_vehicles_area", children_only=True)
-    show_vi_port = not (
+    show_vi_udp = not (
         dpg.does_item_exist("au_interface")
         and dpg.get_value("au_interface") == _INTERFACE_TCP
     )
@@ -234,12 +234,18 @@ def _build_vehicles(count: int) -> None:
                                    default_value=f"Car_{i}", width=100,
                                    callback=lambda: _save_state())
                 dpg.add_spacer(width=10)
+                dpg.add_text("IP    :", tag=f"au_vi_ip_label_{i}",
+                             color=(180, 180, 180, 255), show=show_vi_udp)
+                dpg.add_input_text(tag=f"au_vi_ip_{i}",
+                                   default_value="0.0.0.0", width=110,
+                                   callback=lambda: _save_state(), show=show_vi_udp)
+                dpg.add_spacer(width=10, tag=f"au_vi_ip_spacer_{i}", show=show_vi_udp)
                 dpg.add_text("Port  :", tag=f"au_vi_port_label_{i}",
-                             color=(180, 180, 180, 255), show=show_vi_port)
+                             color=(180, 180, 180, 255), show=show_vi_udp)
                 dpg.add_input_int(tag=f"au_vi_port_{i}",
                                   default_value=9090 + i,
                                   min_value=1, max_value=65535, step=0, width=80,
-                                  callback=lambda: _save_state(), show=show_vi_port)
+                                  callback=lambda: _save_state(), show=show_vi_udp)
                 dpg.add_spacer(width=10)
                 dpg.add_text("Max Speed  :", color=(180, 180, 180, 255))
                 dpg.add_input_float(tag=f"au_max_speed_kph_{i}",
@@ -310,7 +316,13 @@ def _on_interface_change(sender=None, app_data=None) -> None:
     if dpg.does_item_exist("au_fixed_step"):
         dpg.configure_item("au_fixed_step", enabled=True)
     for i in range(1, _MAX_VEHICLES + 1):
-        for tag in (f"au_vi_port_label_{i}", f"au_vi_port_{i}"):
+        for tag in (
+            f"au_vi_ip_label_{i}",
+            f"au_vi_ip_{i}",
+            f"au_vi_ip_spacer_{i}",
+            f"au_vi_port_label_{i}",
+            f"au_vi_port_{i}",
+        ):
             if dpg.does_item_exist(tag):
                 dpg.configure_item(tag, show=not is_tcp)
     if dpg.does_item_exist("au_save_mode"):
@@ -426,6 +438,7 @@ def _on_start() -> None:
             "map_name":      map_name,
             "path":          "path_link.csv",
             "entity_id":     eid,
+            "vi_ip":         dpg.get_value(f"au_vi_ip_{i}").strip() or "0.0.0.0",
             "vi_port":       dpg.get_value(f"au_vi_port_{i}"),
             "interface":     interface,
             "ros2_vehicle_info_topic": ros2_vi_topic,
@@ -569,6 +582,7 @@ def _collect_vehicle_state() -> list:
     for i in range(1, count + 1):
         vehicles.append({
             "entity_id": dpg.get_value(f"au_entity_id_{i}") if dpg.does_item_exist(f"au_entity_id_{i}") else f"Car_{i}",
+            "vi_ip": dpg.get_value(f"au_vi_ip_{i}") if dpg.does_item_exist(f"au_vi_ip_{i}") else "0.0.0.0",
             "vi_port": dpg.get_value(f"au_vi_port_{i}") if dpg.does_item_exist(f"au_vi_port_{i}") else 9090 + i,
             "max_speed_kph": dpg.get_value(f"au_max_speed_kph_{i}") if dpg.does_item_exist(f"au_max_speed_kph_{i}") else _DEFAULT_MAX_SPEED_KPH,
         })
@@ -579,6 +593,8 @@ def _apply_vehicle_state(vehicles: list) -> None:
     for i, vehicle in enumerate(vehicles, start=1):
         if dpg.does_item_exist(f"au_entity_id_{i}"):
             dpg.set_value(f"au_entity_id_{i}", str(vehicle.get("entity_id", f"Car_{i}")))
+        if dpg.does_item_exist(f"au_vi_ip_{i}"):
+            dpg.set_value(f"au_vi_ip_{i}", str(vehicle.get("vi_ip", "0.0.0.0")))
         if dpg.does_item_exist(f"au_vi_port_{i}"):
             dpg.set_value(f"au_vi_port_{i}", int(vehicle.get("vi_port", 9090 + i)))
         if dpg.does_item_exist(f"au_max_speed_kph_{i}"):

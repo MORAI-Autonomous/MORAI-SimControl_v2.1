@@ -45,8 +45,9 @@ class PvdCsvLoggerTests(unittest.TestCase):
                 rows = list(csv.reader(stream))
 
         self.assertEqual(len(rows), 2)
-        self.assertEqual(rows[1][10:12], ["", "Display Data"])
-        self.assertEqual(rows[1][12:], rows[1][1:2] + rows[1][3:10])
+        self.assertEqual(rows[1][10], "Car")
+        self.assertEqual(rows[1][11:13], ["", "Display Data"])
+        self.assertEqual(rows[1][13:], rows[1][1:2] + rows[1][3:11])
 
 
 if __name__ == "__main__":
