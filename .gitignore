@@ -13,6 +13,8 @@ runs/
 .code-review-graph/
 
 # Local AI/MCP/editor integration files
+.agents/
+.codex/
 .mcp.json
 .opencode.json
 .vscode/mcp.json
