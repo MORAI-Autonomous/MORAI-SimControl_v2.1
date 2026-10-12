@@ -10,6 +10,7 @@ import numpy as np
 
 from receivers.camera_sensor_receiver import CameraSensorReceiver, _TYPE_MAP
 from utils.camera3d import focal_length
+from utils.tagging_rule import code_to_subclass
 
 # The 3D template carries camera-frame corners only, so intrinsics are assumed.
 _BBOX_3D_FOV_DEG = 90.0
@@ -82,10 +83,18 @@ def bbox_id_label(obj: dict) -> str:
     return f"S:{int(obj.get('class_id', 0)):06X} I:{int(obj.get('instance_id', 0)):06X}"
 
 
+def bbox_label(obj: dict) -> str:
+    """Multi-line label: semantic SubClass name (from the Tagging Rule) above the 24-bit codes."""
+    subclass = code_to_subclass(obj.get("class_id", 0), default="Unknown")
+    return "\n".join([subclass, *bbox_id_label(obj).split(" ")])
+
+
 def _put_label(canvas: np.ndarray, text: str, x: int, y: int, placed: List[Tuple[int, int, int, int]]) -> None:
-    """Draw a two-line label ending at `y` (above the box); shift down past labels already placed."""
-    lines = text.split(" ")
-    (text_w, text_h), baseline = cv2.getTextSize(lines[0], cv2.FONT_HERSHEY_SIMPLEX, _LABEL_SCALE, 1)
+    """Draw a multi-line label ending at `y` (above the box); shift down past labels already placed."""
+    lines = text.split("\n")
+    sizes = [cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, _LABEL_SCALE, 1) for line in lines]
+    text_w = max(size[0][0] for size in sizes)
+    text_h, baseline = sizes[0][0][1], sizes[0][1]
     line_h = text_h + baseline + 2
     w, h = text_w + 6, line_h * len(lines) + 4
     x = min(max(x, 0), max(0, canvas.shape[1] - w))
@@ -124,7 +133,7 @@ def draw_bbox_2d_canvas(objects: List[dict]) -> Tuple[np.ndarray, int]:
     for obj, x0, y0, x1, y1 in boxes:
         color = packed_rgb24_to_bgr(obj.get("class_id", 0))
         cv2.rectangle(canvas, (x0, y0), (x1, y1), color, 2)
-        _put_label(canvas, bbox_id_label(obj), x0, y0 - 2, placed)
+        _put_label(canvas, bbox_label(obj), x0, y0 - 2, placed)
     return canvas, len(boxes)
 
 
@@ -151,6 +160,6 @@ def draw_bbox_3d_canvas(objects: List[dict]) -> Tuple[np.ndarray, int]:
             color = packed_rgb24_to_bgr(obj.get("class_id", 0))
             for a, b in _EDGES_3D:
                 cv2.line(canvas, points[a], points[b], color, 1, cv2.LINE_AA)
-            _put_label(canvas, bbox_id_label(obj), min(p[0] for p in points), min(p[1] for p in points) - 2, placed)
+            _put_label(canvas, bbox_label(obj), min(p[0] for p in points), min(p[1] for p in points) - 2, placed)
             drawn += 1
     return canvas, drawn

@@ -83,6 +83,23 @@ class CameraBBoxReceiverTests(unittest.TestCase):
         self.assertEqual(bbox_id_label({"class_id": 10485760, "instance_id": 15269888}),
                          "S:A00000 I:E90000")
 
+    def test_label_leads_with_subclass_name_from_tagging_rule(self):
+        from receivers.camera_bbox_receiver import bbox_label
+
+        self.assertEqual(bbox_label({"class_id": 0xA00000, "instance_id": 0xE90000}),
+                         "Car\nS:A00000\nI:E90000")
+        self.assertEqual(bbox_label({"class_id": 0x010203, "instance_id": 0}).split("\n")[0], "Unknown")
+
+    def test_code_to_subclass_accepts_int_and_hex_text(self):
+        from utils.tagging_rule import code_to_subclass, code_to_tag
+
+        self.assertEqual(code_to_subclass(0xA00000), "Car")
+        self.assertEqual(code_to_subclass("#A00000"), "Car")
+        self.assertEqual(code_to_subclass(0x101010), "Paved")
+        self.assertEqual(code_to_tag(0x101010), "road_automobile_paved")
+        self.assertIsNone(code_to_subclass(0x010203))
+        self.assertEqual(code_to_subclass(0x010203, default="?"), "?")
+
     def test_labels_of_stacked_boxes_do_not_overlap(self):
         import numpy as np
         from receivers.camera_bbox_receiver import _put_label
@@ -90,7 +107,7 @@ class CameraBBoxReceiverTests(unittest.TestCase):
         canvas = np.zeros((480, 640, 3), dtype=np.uint8)
         placed = []
         for _ in range(3):
-            _put_label(canvas, "S:A00000 I:E90000", 100, 150, placed)
+            _put_label(canvas, "Car\nS:A00000\nI:E90000", 100, 150, placed)
 
         for i, (ax, ay, aw, ah) in enumerate(placed):
             for bx, by, bw, bh in placed[i + 1:]:
