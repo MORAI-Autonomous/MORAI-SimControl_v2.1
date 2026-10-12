@@ -208,8 +208,10 @@ class CameraSensorReceiver(threading.Thread):
             self._frame_count = 0
             self._fps_ts = now
         packet["fps"] = self.fps
+        frame = packet.get("frame")
+        frame_size = f"{frame.shape[1]}x{frame.shape[0]}" if frame is not None else "-"
         self._debug(
-            f"packet#{self._packet_seq} parsed raw={packet['raw_size']} image={packet['image_size']} objects={packet['object_count']} frame={packet['frame'].shape[1]}x{packet['frame'].shape[0]}",
+            f"packet#{self._packet_seq} parsed raw={packet['raw_size']} image={packet.get('image_size', 0)} objects={packet['object_count']} frame={frame_size}",
             key="parsed",
             interval_sec=1.0,
         )
