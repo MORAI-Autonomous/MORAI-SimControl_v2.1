@@ -1,0 +1,343 @@
+Group,Class,SubClass,Tag,Red,Green,Blue,Intensity,Code,Color,Description
+Ego,Ego,Ego,ego_ego_ego,0,0,0,0,#000000,,ego 차량
+Road,Road,Road,road_road_road,16,0,0,0.00293,#100000,,미분류 도로
+Road,Automobile,Automobile,road_automobile_automobile,16,16,0,0.00587,#101000,,미분류 Automobile 도로
+Road,Automobile,Paved,road_automobile_paved,16,16,16,0.0088,#101010,,아스팔트 도로
+Road,Automobile,SafetyZone,road_automobile_safetyzone,16,16,32,0.01173,#101020,,어린이/노인/장애인 등 보호구역의 도로
+Road,Automobile,Bus,road_automobile_bus,16,16,48,0.01466,#101030,,적갈색의 버스 전용 도로
+Road,Automobile,Unpaved,road_automobile_unpaved,16,16,64,0.0176,#101040,,비포장 도로
+Road,Bicycle,Bicycle,road_bicycle_bicycle,16,32,0,0.02053,#102000,,자전거 전용 도로
+Road,Pedestrian,Pedestrian,road_pedestrian_pedestrian,16,48,0,0.02346,#103000,,보행자 도로
+Line,Line,Line,line_line_line,32,0,0,0.02639,#200000,,미분류 선
+Line,WhiteLine,WhiteLine,line_whiteline_whiteline,32,16,0,0.02933,#201000,,미분류 백색선
+Line,WhiteLine,Broken,line_whiteline_broken,32,16,16,0.03226,#201010,,점선으로 되어 있는 백색 단선
+Line,WhiteLine,Solid,line_whiteline_solid,32,16,32,0.03519,#201020,,실선으로 되어 있는 백색 단선
+Line,WhiteLine,BSolid,line_whiteline_bsolid,32,16,48,0.03812,#201030,,점선(좌) 실선(우) 로 되어 있는 백색 복선
+Line,WhiteLine,SBroken,line_whiteline_sbroken,32,16,64,0.04106,#201040,,실선(좌) 점선(우) 로 되어 있는 백색 복선
+Line,WhiteLine,SSolid,line_whiteline_ssolid,32,16,80,0.04399,#201050,,백색 이중 실선
+Line,WhiteLine,BBroken,line_whiteline_bbroken,32,16,96,0.04692,#201060,,백색 이중 점선 (복점선)
+Line,WhiteLine,Zigzag,line_whiteline_zigzag,32,16,112,0.04985,#201070,,지그재그로 되어있는 실선
+Line,WhiteLine,Guide,line_whiteline_guide,32,16,128,0.05279,#201080,,교차로에서 차선을 유도하는 백색 점선
+Line,WhiteLine,Uturn,line_whiteline_uturn,32,16,144,0.05572,#201090,,유턴 구역에서 유턴 가능을 의미하는 백색 점선
+Line,YellowLine,YellowLine,line_yellowline_yellowline,32,32,0,0.05865,#202000,,미분류 황색선
+Line,YellowLine,Broken,line_yellowline_broken,32,32,16,0.06158,#202010,,점선으로 되어 있는 황색 단선
+Line,YellowLine,Solid,line_yellowline_solid,32,32,32,0.06452,#202020,,실선으로 되어 있는 황색 단선
+Line,YellowLine,BSolid,line_yellowline_bsolid,32,32,48,0.06745,#202030,,점선(좌) 실선(우) 로 되어 있는 황색 복선
+Line,YellowLine,SBroken,line_yellowline_sbroken,32,32,64,0.07038,#202040,,실선(좌) 점선(우) 로 되어 있는 황색 복선
+Line,YellowLine,SSolid,line_yellowline_ssolid,32,32,80,0.07331,#202050,,황색 이중 실선
+Line,YellowLine,BBroken,line_yellowline_bbroken,32,32,96,0.07625,#202060,,황색 이중 점선 (복점선)
+Line,YellowLine,Zigzag,line_yellowline_zigzag,32,32,112,0.07918,#202070,,지그재그로 되어있는 황색 실선
+Line,BlueLine,BlueLine,line_blueline_blueline,32,48,0,0.08211,#203000,,미분류 청색선
+Line,BlueLine,Broken,line_blueline_broken,32,48,16,0.08504,#203010,,점선의 버스 차로를 지시하는 청색 단선
+Line,BlueLine,Solid,line_blueline_solid,32,48,32,0.08798,#203020,,실선의 버스 차로를 지시하는 청색 단선
+Line,BlueLine,BSolid,line_blueline_bsolid,32,48,48,0.09091,#203030,,점선(좌) 실선(우) 로 되어 있는 청색 복선
+Line,BlueLine,SBroken,line_blueline_sbroken,32,48,64,0.09384,#203040,,실선(좌) 점선(우) 로 되어 있는 청색 복선
+Line,BlueLine,SSolid,line_blueline_ssolid,32,48,80,0.09677,#203050,,청색 이중 실선
+Line,BlueLine,BBroken,line_blueline_bbroken,32,48,96,0.09971,#203060,,청색 이중 점선 (복점선)
+Line,BlueLine,Zigzag,line_blueline_zigzag,32,48,112,0.10264,#203070,,지그재그로 되어있는 청색 실선
+Line,StopLine,StopLine,line_stopline_stopline,32,64,0,0.10557,#204000,,"정지선, 정지 신호에 따라 차량이 정지해야 하는 위치를 나타내는 선"
+Line,GuideLine,GuideLine,line_guideline_guideline,32,80,0,0.1085,#205000,,미분류 유도선
+Line,GuideLine,PinkLine,line_guideline_pinkline,32,80,16,0.11144,#205010,,"분홍색 유도선 (노면색깔유도선, 중앙선에서 먼 쪽(우측차로)의 경우 사용)"
+Line,GuideLine,GreenLine,line_guideline_greenline,32,80,32,0.11437,#205020,,"녹색 유도선 (노면색깔유도선, 중앙선에서 가까운 쪽(좌측차로)의 경우 연한 녹색 사용, 시인성이 나쁠 경우 녹색 사용)"
+Line,GuideLine,BlueLine,line_guideline_blueline,32,80,48,0.1173,#205030,,하늘색 유도선 (일반 하이패스 유도선)
+Line,GuideLine,OrangeLine,line_guideline_orangeline,32,80,64,0.12023,#205040,,주황색 유도선 (화물차용 하이패스 유도선)
+Zone,Zone,Zone,zone_zone_zone,48,0,0,0.12317,#300000,,미분류 영역
+Zone,Parking,Parking,zone_parking_parking,48,16,0,0.1261,#301000,,미분류 주차 영역 (Mark_523 과 세트)
+Zone,Parking,Genral,zone_parking_genral,48,16,16,0.12903,#301010,,일반 주차 영역 (Mark_523 과 세트)
+Zone,Parking,Truck,zone_parking_truck,48,16,32,0.13196,#301020,,화물차 전용 주차 영역(Mark_523 과 세트)
+Zone,Parking,Handicap,zone_parking_handicap,48,16,48,0.1349,#301030,,장애인 전용 주차 영역(Mark_523 과 세트)
+Zone,Parking,Women,zone_parking_women,48,16,64,0.13783,#301040,,여성 전용 주차 영역(Mark_523 과 세트)
+Zone,Parking,Bus,zone_parking_bus,48,16,80,0.14076,#301050,,버스 전용 주차 영역(Mark_523 과 세트)
+Zone,Parking,Electronic,zone_parking_electronic,48,16,96,0.1437,#301060,,전기차 전용 주차 영역(Mark_523 과 세트)
+Zone,Crosswalk,Crosswalk,zone_crosswalk_crosswalk,48,32,0,0.14663,#302000,,횡단보도 영역 (Mark_532 와 세트)
+Zone,SafetyZone,SafetyZone,zone_safetyzone_safetyzone,48,48,0,0.14956,#303000,,보행자의 안전 확보를 위해 도로 교통을 규제하기 위한 안전지대 영역 (Mark_531 과 세트)
+Zone,NoStopping,NoStopping,zone_nostopping_nostopping,48,64,0,0.15249,#304000,,소방안전 등을 위한 주정차 금지를 위한 정차금지지대 영역 (Mark_524 와 세트)
+Mark,Mark,Mark,mark_mark_mark,64,0,0,0.15543,#400000,,미분류 노면표시
+Mark,Restriction,Restriction,mark_restriction_restriction,64,16,0,0.15836,#401000,,미분류 규제 노면표시
+Mark,Restriction,NoRightTurn,mark_restriction_norightturn,64,16,16,0.16129,#401010,,교통안전표지일람표의 “우회전금지” 노면표시
+Mark,Restriction,NoLeftTurn,mark_restriction_noleftturn,64,16,32,0.16422,#401020,,교통안전표지일람표의 “좌회전금지” 노면표시
+Mark,Restriction,NoStraight,mark_restriction_nostraight,64,16,48,0.16716,#401030,,교통안전표지일람표의 “직진금지” 노면표시
+Mark,Restriction,NoTurn,mark_restriction_noturn,64,16,64,0.17009,#401040,,교통안전표지일람표의 “좌우회전금지” 노면표시
+Mark,Restriction,NoUTurn,mark_restriction_nouturn,64,16,80,0.17302,#401050,,교통안전표지일람표의 “유턴금지” 노면표시
+Mark,Restriction,SpeedLimit,mark_restriction_speedlimit,64,16,96,0.17595,#401060,,교통안전표지일람표의 “속도제한” 노면표시
+Mark,Restriction,SpeedLimitCircle,mark_restriction_speedlimitcircle,64,16,112,0.17889,#401070,,교통안전표지일람표의 “속도제한(어린이보호구역내)” 노면표시
+Mark,Restriction,Slow,mark_restriction_slow,64,16,128,0.18182,#401080,,교통안전표지일람표의 “서행(천천히)”(519) 노면표시
+Mark,Restriction,Stop,mark_restriction_stop,64,16,144,0.18475,#401090,,교통안전표지일람표의 “일시정지” 노면표시
+Mark,Restriction,Yield,mark_restriction_yield,64,16,160,0.18768,#4010A0,,교통안전표지일람표의 “양보” 노면표시
+Mark,Restriction,NoParking,mark_restriction_noparking,64,16,176,0.19062,#4010B0,,교통안전표지일람표의 “주차금지” “정주차금지” “주정차금지” 노면표시
+Mark,Restriction,NoStopping,mark_restriction_nostopping,64,16,192,0.19355,#4010C0,,"교통안전표지일람표의  ""정차금지지대"" ""정차금지구역"" 노면표시"
+Mark,Restriction,Obstacle,mark_restriction_obstacle,64,16,208,0.19648,#4010D0,,교통안전표지일람표의 “노상장애물” 노면표시
+Mark,Restriction,SafetyZone,mark_restriction_safetyzone,64,16,224,0.19941,#4010E0,,교통안전표지일람표의 “안전지대” 노면표시
+Mark,Indication,Indication,mark_indication_indication,64,32,0,0.20235,#402000,,미분류 지시 노면표시
+Mark,Indication,Parking,mark_indication_parking,64,32,16,0.20528,#402010,,"교통안전표지일람표의 “평행주차”, “직각주차”, “경사주차” 표시 중, “직각주차”표시 또는 그 외 주차표시"
+Mark,Indication,ParallelParking,mark_indication_parallelparking,64,32,32,0.20821,#402020,,"교통안전표지일람표의 “평행주차”, “직각주차”, “경사주차” 표시 중, “평행주차”표시"
+Mark,Indication,AngledParking,mark_indication_angledparking,64,32,48,0.21114,#402030,,"교통안전표지일람표의 “평행주차”, “직각주차”, “경사주차” 표시 중, “경사주차”표시"
+Mark,Indication,Roundabout,mark_indication_roundabout,64,32,64,0.21408,#402040,,교통안전표지일람표의 “유도(원형교차로)” 노면표시
+Mark,Indication,FourDirection,mark_indication_fourdirection,64,32,80,0.21701,#402050,,교통안전표지일람표의 “유도(비대칭의+형교차로)” 노면표시
+Mark,Indication,BiDirection,mark_indication_bidirection,64,32,96,0.21994,#402060,,교통안전표지일람표의 “유도(비대칭의ㅜ자형교차로)” 노면표시
+Mark,Indication,CrosswalkAhead,mark_indication_crosswalkahead,64,32,112,0.22287,#402070,,교통안전표지일람표의 “횡단보도예고” 노면표시
+Mark,Indication,Crosswalk,mark_indication_crosswalk,64,32,128,0.22581,#402080,,"교통안전표지일람표의 “횡단보도”, “대각선횡단보도” 표시 또는 기타 횡단보도"
+Mark,Indication,StaggeredCrosswalk,mark_indication_staggeredcrosswalk,64,32,144,0.22874,#402090,,교통안전표지일람표의 “스테커드횡단보도” 표시
+Mark,Indication,HighCrosswalk,mark_indication_highcrosswalk,64,32,160,0.23167,#4020A0,,교통안전표지일람표의 “고원식횡단보도” 노면표시
+Mark,Indication,BicycleCross,mark_indication_bicyclecross,64,32,176,0.2346,#4020B0,,교통안전표지일람표의 “자전거횡단보도” 노면표시
+Mark,Indication,BicycleOnly,mark_indication_bicycleonly,64,32,192,0.23754,#4020C0,,교통안전표지일람표의 “자전거전용도로” 노면표시
+Mark,Indication,Straight,mark_indication_straight,64,32,208,0.24047,#4020D0,,"교통안전표지일람표의 “직진”, “좌회전”, “우회전” 중, “직진”표시"
+Mark,Indication,LeftTurn,mark_indication_leftturn,64,32,224,0.2434,#4020E0,,"교통안전표지일람표의 “직진”, “좌회전”, “우회전” 중, “좌회전”표시"
+Mark,Indication,RightTurn,mark_indication_rightturn,64,32,240,0.24633,#4020F0,,"교통안전표지일람표의 “직진”, “좌회전”, “우회전” 중, “우회전”표시"
+Mark,Indication,Turn,mark_indication_turn,64,32,1,0.24927,#402001,,"교통안전표지일람표의 “직진”, “좌회전”, “우회전” 중, “좌/우회전”표시"
+Mark,Indication,AllDirection,mark_indication_alldirection,64,32,17,0.2522,#402011,,"교통안전표지일람표의 ""전방향"" 표시"
+Mark,Indication,StraightLeft,mark_indication_straightleft,64,32,33,0.25513,#402021,,"교통안전표지일람표의 “직진 및 좌회전”, “직진 및 우회전” 노면표시 중, “직진 및 좌회전” 표시"
+Mark,Indication,StraightRight,mark_indication_straightright,64,32,49,0.25806,#402031,,"교통안전표지일람표의 “직진 및 좌회전”, “직진 및 우회전” 노면표시 중, “직진 및 우회전” 표시"
+Mark,Indication,Uturn,mark_indication_uturn,64,32,65,0.261,#402041,,"교통안전표지일람표의 “유턴”, “좌회전 및 유턴” 노면표시 중, “유턴”표시"
+Mark,Indication,StraightUturn,mark_indication_straightuturn,64,32,81,0.26393,#402051,,"교통안전표지일람표의 ""직진 및 유턴"" 노면표시"
+Mark,Indication,LeftUTurn,mark_indication_leftuturn,64,32,97,0.26686,#402061,,"교통안전표지일람표의 “유턴”, “좌회전 및 유턴” 노면표시 중, “좌회전 및 유턴”표시"
+Mark,Indication,StraightText,mark_indication_straighttext,64,32,113,0.26979,#402071,,교통안전표지일람표의 “진행방향 및 방면(직진)” 노면표시 중 텍스트 부분
+Mark,Indication,LeftTurnText,mark_indication_leftturntext,64,32,129,0.27273,#402081,,교통안전표지일람표의 “진행방향 및 방면(좌회전)” 노면표시 중 텍스트 부분
+Mark,Indication,RightTurnText,mark_indication_rightturntext,64,32,145,0.27566,#402091,,교통안전표지일람표의 “진행방향 및 방면(우회전)” 노면표시 중 텍스트 부분
+Mark,Indication,UnprotectedLeftText,mark_indication_unprotectedlefttext,64,32,161,0.27859,#4020A1,,교통안전표지일람표의 “비보호좌회전” 노면표시 중 텍스트 부분
+Mark,Indication,MergeLeft,mark_indication_mergeleft,64,32,177,0.28152,#4020B1,,"교통안전표지일람표의 “차로변경” 노면표시 중 ""좌로합류"" 표시"
+Mark,Indication,MergeRight,mark_indication_mergeright,64,32,193,0.28446,#4020C1,,"교통안전표지일람표의 “차로변경” 노면표시 중 ""우로합류"" 표시"
+Mark,Indication,UpHill,mark_indication_uphill,64,32,209,0.28739,#4020D1,,교통안전표지일람표의 “오르막경사면” 노면표시
+Mark,Indication,SchoolZone,mark_indication_schoolzone,64,32,225,0.29032,#4020E1,,교통안전표지일람표의 “어린이보호구역” 노면표시
+TrafficSign,TrafficSign,TrafficSign,trafficsign_trafficsign_trafficsign,80,0,0,0.29326,#500000,,미분류 교통안전표지
+TrafficSign,Caution,Caution,trafficsign_caution_caution,80,16,0,0.29619,#501000,,미분류 주의표지
+TrafficSign,Caution,IntersectionCross,trafficsign_caution_intersectioncross,80,16,16,0.29912,#501010,,교통안전표지일람표의 “+자형교차로” 주의표지
+TrafficSign,Caution,IntersectionT,trafficsign_caution_intersectiont,80,16,32,0.30205,#501020,,교통안전표지일람표의 “T자형교차로” 주의표지
+TrafficSign,Caution,IntersectionY,trafficsign_caution_intersectiony,80,16,48,0.30499,#501030,,교통안전표지일람표의 “Y자형교차로” 주의표지
+TrafficSign,Caution,IntersectionSideRight,trafficsign_caution_intersectionsideright,80,16,64,0.30792,#501040,,교통안전표지일람표의 “ㅏ자형교차로” 주의표지
+TrafficSign,Caution,IntersectionSideLeft,trafficsign_caution_intersectionsideleft,80,16,80,0.31085,#501050,,교통안전표지일람표의 “ㅓ자형교차로” 주의표지
+TrafficSign,Caution,IntersectionRoundabout,trafficsign_caution_intersectionroundabout,80,16,96,0.31378,#501060,,교통안전표지일람표의 “회전형교차로” 주의표지
+TrafficSign,Caution,CurveRight,trafficsign_caution_curveright,80,16,112,0.31672,#501070,,교통안전표지일람표의 “우로굽은도로” 주의표지
+TrafficSign,Caution,CurveLeft,trafficsign_caution_curveleft,80,16,128,0.31965,#501080,,교통안전표지일람표의 “좌로굽은도로” 주의표지
+TrafficSign,Caution,CurveRightLeft,trafficsign_caution_curverightleft,80,16,144,0.32258,#501090,,교통안전표지일람표의 “우좌로이중굽은도로” 주의표지
+TrafficSign,Caution,CurveLeftRight,trafficsign_caution_curveleftright,80,16,160,0.32551,#5010A0,,교통안전표지일람표의 “좌우로이중굽은도로” 주의표지
+TrafficSign,Caution,UpHill,trafficsign_caution_uphill,80,16,176,0.32845,#5010B0,,교통안전표지일람표의 “오르막경사” 주의표지
+TrafficSign,Caution,DownHill,trafficsign_caution_downhill,80,16,192,0.33138,#5010C0,,교통안전표지일람표의 “내리막경사” 주의표지
+TrafficSign,Caution,Priority,trafficsign_caution_priority,80,16,208,0.33431,#5010D0,,교통안전표지일람표의 “우선도로” 주의표지
+TrafficSign,Caution,MergeFromRight,trafficsign_caution_mergefromright,80,16,224,0.33724,#5010E0,,교통안전표지일람표의 “우합류도로” 주의표지
+TrafficSign,Caution,MergeFromLeft,trafficsign_caution_mergefromleft,80,16,240,0.34018,#5010F0,,교통안전표지일람표의 “좌합류도로” 주의표지
+TrafficSign,Caution,NarrowAhead,trafficsign_caution_narrowahead,80,16,1,0.34311,#501001,,교통안전표지일람표의 “도로폭이좁아짐” 주의표지
+TrafficSign,Caution,RightLaneEnds,trafficsign_caution_rightlaneends,80,16,17,0.34604,#501011,,교통안전표지일람표의 “우측차로없어짐” 주의표지
+TrafficSign,Caution,LeftLaneEnds,trafficsign_caution_leftlaneends,80,16,33,0.34897,#501021,,교통안전표지일람표의 “좌측차로없어짐” 주의표지
+TrafficSign,Caution,BiDirection,trafficsign_caution_bidirection,80,16,49,0.35191,#501031,,교통안전표지일람표의 “2방향통행” 주의표지
+TrafficSign,Caution,KeepRight,trafficsign_caution_keepright,80,16,65,0.35484,#501041,,교통안전표지일람표의 “우측방통행” 주의표지
+TrafficSign,Caution,KeepEither,trafficsign_caution_keepeither,80,16,81,0.35777,#501051,,교통안전표지일람표의 “양측방통행” 주의표지
+TrafficSign,Caution,MedianStart,trafficsign_caution_medianstart,80,16,97,0.3607,#501061,,교통안전표지일람표의 “중앙분리대시작” 주의표지
+TrafficSign,Caution,MedianEnd,trafficsign_caution_medianend,80,16,113,0.36364,#501071,,교통안전표지일람표의 “중앙분리대끝남” 주의표지
+TrafficSign,Caution,Construction,trafficsign_caution_construction,80,16,129,0.36657,#501081,,교통안전표지일람표의 “도로공사중” 주의표지
+TrafficSign,Caution,Traffic,trafficsign_caution_traffic,80,16,145,0.3695,#501091,,교통안전표지일람표의 “상습정체구간” 주의표지
+TrafficSign,Caution,Railroad,trafficsign_caution_railroad,80,16,161,0.37243,#5010A1,,교통안전표지일람표의 “철길건널목” 주의표지
+TrafficSign,Caution,Signal,trafficsign_caution_signal,80,16,177,0.37537,#5010B1,,교통안전표지일람표의 “신호기” 주의표지
+TrafficSign,Caution,Tunnel,trafficsign_caution_tunnel,80,16,193,0.3783,#5010C1,,교통안전표지일람표의 “터널” 주의표지
+TrafficSign,Caution,Bridge,trafficsign_caution_bridge,80,16,209,0.38123,#5010D1,,교통안전표지일람표의 “교량” 주의표지
+TrafficSign,Caution,Crosswalk,trafficsign_caution_crosswalk,80,16,225,0.38416,#5010E1,,교통안전표지일람표의 “횡단보도” 주의표지
+TrafficSign,Caution,SchoolZone,trafficsign_caution_schoolzone,80,16,241,0.3871,#5010F1,,교통안전표지일람표의 “어린이보호” 주의표지
+TrafficSign,Caution,Bicycle,trafficsign_caution_bicycle,80,16,2,0.39003,#501002,,교통안전표지일람표의 “자전거” 주의표지
+TrafficSign,Caution,Slipery,trafficsign_caution_slipery,80,16,18,0.39296,#501012,,교통안전표지일람표의 “미끄러운도로” 주의표지
+TrafficSign,Caution,Uneven,trafficsign_caution_uneven,80,16,34,0.39589,#501022,,교통안전표지일람표의 “노면고르지못함” 주의표지
+TrafficSign,Caution,SpeedBump,trafficsign_caution_speedbump,80,16,50,0.39883,#501032,,교통안전표지일람표의 “과속방지턱” 주의표지
+TrafficSign,Caution,Riverside,trafficsign_caution_riverside,80,16,66,0.40176,#501042,,교통안전표지일람표의 “강변도로” 주의표지
+TrafficSign,Caution,Rockslide,trafficsign_caution_rockslide,80,16,82,0.40469,#501052,,교통안전표지일람표의 “낙석도로” 주의표지
+TrafficSign,Caution,Crosswind,trafficsign_caution_crosswind,80,16,98,0.40762,#501062,,교통안전표지일람표의 “횡풍” 주의표지
+TrafficSign,Caution,Airplane,trafficsign_caution_airplane,80,16,114,0.41056,#501072,,교통안전표지일람표의 “비행기” 주의표지
+TrafficSign,Caution,Animal,trafficsign_caution_animal,80,16,130,0.41349,#501082,,교통안전표지일람표의 “야생동물보호” 주의표지
+TrafficSign,Caution,Danger,trafficsign_caution_danger,80,16,146,0.41642,#501092,,교통안전표지일람표의 “위험” 주의표지
+TrafficSign,Restriction,Restriction,trafficsign_restriction_restriction,80,32,0,0.41935,#502000,,미분류 규제표지
+TrafficSign,Restriction,NoPassing,trafficsign_restriction_nopassing,80,32,16,0.42229,#502010,,교통안전표지일람표의 “통행금지” 규제표지
+TrafficSign,Restriction,NoCar,trafficsign_restriction_nocar,80,32,32,0.42522,#502020,,교통안전표지일람표의 “자동차 통행금지” 규제표지
+TrafficSign,Restriction,NoTruck,trafficsign_restriction_notruck,80,32,48,0.42815,#502030,,교통안전표지일람표의 “화물자동차 통행금지” 규제표지
+TrafficSign,Restriction,NoVan,trafficsign_restriction_novan,80,32,64,0.43109,#502040,,교통안전표지일람표의 “승합자동차 통행금지” 규제표지
+TrafficSign,Restriction,NoMotorcycle,trafficsign_restriction_nomotorcycle,80,32,80,0.43402,#502050,,교통안전표지일람표의 “이륜자동차 및 원동기장치 자전거 통행금지” 규제표지
+TrafficSign,Restriction,NoCarMotorcycle,trafficsign_restriction_nocarmotorcycle,80,32,96,0.43695,#502060,,교통안전표지일람표의 “자동차 이륜자동차 및 원동기장치 자전거 통행금지” 규제표지
+TrafficSign,Restriction,NoTractor,trafficsign_restriction_notractor,80,32,112,0.43988,#502070,,교통안전표지일람표의 “경운기트랙터 및 손수레 통행금지” 규제표지
+TrafficSign,Restriction,NoBicycle,trafficsign_restriction_nobicycle,80,32,128,0.44282,#502080,,교통안전표지일람표의 “자전거 통행금지” 규제표지
+TrafficSign,Restriction,NoDanger,trafficsign_restriction_nodanger,80,32,144,0.44575,#502090,,교통안전표지일람표의 “위험물적재차량 통행금지” 규제표지
+TrafficSign,Restriction,WeightLimit,trafficsign_restriction_weightlimit,80,32,160,0.44868,#5020A0,,교통안전표지일람표의 “차중량제한” 규제표지
+TrafficSign,Restriction,HeightLimit,trafficsign_restriction_heightlimit,80,32,176,0.45161,#5020B0,,교통안전표지일람표의 “차높이제한” 규제표지
+TrafficSign,Restriction,WidthLimit,trafficsign_restriction_widthlimit,80,32,192,0.45455,#5020C0,,교통안전표지일람표의 “차폭제한” 규제표지
+TrafficSign,Restriction,SafetyDistance,trafficsign_restriction_safetydistance,80,32,208,0.45748,#5020D0,,교통안전표지일람표의 “차간거리확보” 규제표지
+TrafficSign,Restriction,SpeedLimit,trafficsign_restriction_speedlimit,80,32,224,0.46041,#5020E0,,교통안전표지일람표의 “최고속도제한” 규제표지
+TrafficSign,Restriction,SpeedLowLimit,trafficsign_restriction_speedlowlimit,80,32,240,0.46334,#5020F0,,교통안전표지일람표의 “최저속도제한” 규제표지
+TrafficSign,Restriction,Slow,trafficsign_restriction_slow,80,32,1,0.46628,#502001,,교통안전표지일람표의 “서행” 규제표지
+TrafficSign,Restriction,Stop,trafficsign_restriction_stop,80,32,17,0.46921,#502011,,교통안전표지일람표의 “일시정지” 규제표지
+TrafficSign,Restriction,Yield,trafficsign_restriction_yield,80,32,33,0.47214,#502021,,교통안전표지일람표의 “양보” 규제표지
+TrafficSign,Restriction,NoEntering,trafficsign_restriction_noentering,80,32,49,0.47507,#502031,,교통안전표지일람표의 “진입금지” 규제표지
+TrafficSign,Restriction,NoStraight,trafficsign_restriction_nostraight,80,32,65,0.47801,#502041,,교통안전표지일람표의 “직진금지” 규제표지
+TrafficSign,Restriction,NoRightTurn,trafficsign_restriction_norightturn,80,32,81,0.48094,#502051,,교통안전표지일람표의 “우회전금지” 규제표지
+TrafficSign,Restriction,NoLeftTurn,trafficsign_restriction_noleftturn,80,32,97,0.48387,#502061,,교통안전표지일람표의 “좌회전금지” 규제표지
+TrafficSign,Restriction,NoUTurn,trafficsign_restriction_nouturn,80,32,113,0.4868,#502071,,교통안전표지일람표의 “유턴금지” 규제표지
+TrafficSign,Restriction,NoOvertaking,trafficsign_restriction_noovertaking,80,32,129,0.48974,#502081,,교통안전표지일람표의 “앞지르기금지” 규제표지
+TrafficSign,Restriction,NoStopping,trafficsign_restriction_nostopping,80,32,145,0.49267,#502091,,교통안전표지일람표의 “정차주차금지” 규제표지
+TrafficSign,Restriction,NoParking,trafficsign_restriction_noparking,80,32,161,0.4956,#5020A1,,교통안전표지일람표의 “주차금지” 규제표지
+TrafficSign,Restriction,NoPedestrian,trafficsign_restriction_nopedestrian,80,32,177,0.49853,#5020B1,,교통안전표지일람표의 “보행자 통행금지” 규제표지
+TrafficSign,Indication,Indication,trafficsign_indication_indication,80,48,0,0.50147,#503000,,미분류 지시표시
+TrafficSign,Indication,CarOnly,trafficsign_indication_caronly,80,48,16,0.5044,#503010,,교통안전표지일람표의 “자동차전용도로” 지시표지
+TrafficSign,Indication,BicycleOnly,trafficsign_indication_bicycleonly,80,48,32,0.50733,#503020,,교통안전표지일람표의 “자전거전용도로” 지시표지
+TrafficSign,Indication,BicyclePedOnly,trafficsign_indication_bicyclepedonly,80,48,48,0.51026,#503030,,교통안전표지일람표의 “자전거 및 보행자 겸용도로” 지시표지
+TrafficSign,Indication,BusOnly,trafficsign_indication_busonly,80,48,64,0.5132,#503040,,교통안전표지일람표의 “버스전용차로” 지시표지
+TrafficSign,Indication,VanOnly,trafficsign_indication_vanonly,80,48,80,0.51613,#503050,,교통안전표지일람표의 “다인승차량전용차로” 지시표지
+TrafficSign,Indication,Roundabout,trafficsign_indication_roundabout,80,48,96,0.51906,#503060,,교통안전표지일람표의 “회전교차로” 지시표지
+TrafficSign,Indication,Straight,trafficsign_indication_straight,80,48,112,0.52199,#503070,,교통안전표지일람표의 “직진” 지시표지
+TrafficSign,Indication,RightTurn,trafficsign_indication_rightturn,80,48,128,0.52493,#503080,,교통안전표지일람표의 “우회전” 지시표지
+TrafficSign,Indication,LeftTurn,trafficsign_indication_leftturn,80,48,144,0.52786,#503090,,교통안전표지일람표의 “좌회전” 지시표지
+TrafficSign,Indication,StraightRight,trafficsign_indication_straightright,80,48,160,0.53079,#5030A0,,교통안전표지일람표의 “직진 및 우회전” 지시표지
+TrafficSign,Indication,StraightLeft,trafficsign_indication_straightleft,80,48,176,0.53372,#5030B0,,교통안전표지일람표의 “직진 및 좌회전” 지시표지
+TrafficSign,Indication,LeftUturn,trafficsign_indication_leftuturn,80,48,192,0.53666,#5030C0,,교통안전표지일람표의 “좌회전 및 유턴” 지시표지
+TrafficSign,Indication,Turn,trafficsign_indication_turn,80,48,208,0.53959,#5030D0,,교통안전표지일람표의 “좌우회전” 지시표지
+TrafficSign,Indication,Uturn,trafficsign_indication_uturn,80,48,224,0.54252,#5030E0,,교통안전표지일람표의 “유턴” 지시표지
+TrafficSign,Indication,UnprotectedLeft,trafficsign_indication_unprotectedleft,80,48,240,0.54545,#5030F0,,교통안전표지일람표의 “비보호좌회전” 지시표지
+TrafficSign,Indication,KeepEither,trafficsign_indication_keepeither,80,48,1,0.54839,#503001,,교통안전표지일람표의 “양측방통행” 지시표지
+TrafficSign,Indication,KeepRight,trafficsign_indication_keepright,80,48,17,0.55132,#503011,,교통안전표지일람표의 “우측면통행” 지시표지
+TrafficSign,Indication,KeepLeft,trafficsign_indication_keepleft,80,48,33,0.55425,#503021,,교통안전표지일람표의 “좌측면통행” 지시표지
+TrafficSign,Indication,LaneDirections,trafficsign_indication_lanedirections,80,48,49,0.55718,#503031,,교통안전표지일람표의 “진행방향별 통행구분” 지시표지
+TrafficSign,Indication,SegregatedPath,trafficsign_indication_segregatedpath,80,48,65,0.56012,#503041,,교통안전표지일람표의 “자전거 및 보행자 통행구분” 지시표지
+TrafficSign,Indication,AbreastCycling,trafficsign_indication_abreastcycling,80,48,81,0.56305,#503051,,교통안전표지일람표의 “자전거나란히통행허용” 지시표지
+TrafficSign,Indication,PTurn,trafficsign_indication_pturn,80,48,97,0.56598,#503061,,교통안전표지일람표의 “우회로” 지시표지
+TrafficSign,Indication,Priority,trafficsign_indication_priority,80,48,113,0.56891,#503071,,교통안전표지일람표의 “통행우선” 지시표지
+TrafficSign,Indication,OnewayRight,trafficsign_indication_onewayright,80,48,129,0.57185,#503081,,교통안전표지일람표의 “일방통행(우측)” 지시표지
+TrafficSign,Indication,OnewayLeft,trafficsign_indication_onewayleft,80,48,145,0.57478,#503091,,교통안전표지일람표의 “일방통행(좌측)” 지시표지
+TrafficSign,Indication,Oneway,trafficsign_indication_oneway,80,48,161,0.57771,#5030A1,,교통안전표지일람표의 “일방통행(직진)” 지시표지
+TrafficSign,Indication,PedestrianOnly,trafficsign_indication_pedestrianonly,80,48,177,0.58065,#5030B1,,교통안전표지일람표의 “보행자 전용도로” 지시표지
+TrafficSign,Indication,Crosswalk,trafficsign_indication_crosswalk,80,48,193,0.58358,#5030C1,,교통안전표지일람표의 “횡단보도” 지시표지
+TrafficSign,Indication,ElderlyProtection,trafficsign_indication_elderlyprotection,80,48,209,0.58651,#5030D1,,교통안전표지일람표의 “노인보호(노인보호구역안)” 지시표지
+TrafficSign,Indication,SchoolZone,trafficsign_indication_schoolzone,80,48,225,0.58944,#5030E1,,교통안전표지일람표의 “어린이보호(어린이보호구역안)” 지시표지
+TrafficSign,Indication,DisabilityProtection,trafficsign_indication_disabilityprotection,80,48,241,0.59238,#5030F1,,교통안전표지일람표의 “장애인보호(장애인보호구역안)” 지시표지
+TrafficSign,Indication,BicycleCross,trafficsign_indication_bicyclecross,80,48,2,0.59531,#503002,,교통안전표지일람표의 “자전거횡단도” 지시표지
+TrafficSign,Indication,Parking,trafficsign_indication_parking,80,48,18,0.59824,#503012,,교통안전표지일람표의 “주차장” 지시표지
+TrafficSign,Indication,BicycleParking,trafficsign_indication_bicycleparking,80,48,34,0.60117,#503022,,교통안전표지일람표의 “자전거 주차장” 지시표지
+TrafficSign,Assistant,Assistant,trafficsign_assistant_assistant,80,64,0,0.60411,#504000,,미분류 보조표지
+TrafficSign,Assistant,SchoolZone,trafficsign_assistant_schoolzone,80,64,16,0.60704,#504010,,"교통안전표지일람표의 “어린이 보호구역"""
+TrafficSign,Assistant,DistanceFromAhead,trafficsign_assistant_distancefromahead,80,64,32,0.60997,#504020,,교통안전표지일람표의 “거리(앞부터)” 보조표지
+TrafficSign,Assistant,DistanceFromHere,trafficsign_assistant_distancefromhere,80,64,48,0.6129,#504030,,교통안전표지일람표의 “거리(여기부터)” 보조표지
+TrafficSign,Assistant,Zone,trafficsign_assistant_zone,80,64,64,0.61584,#504040,,교통안전표지일람표의 “구역” 보조표지
+TrafficSign,Assistant,Date,trafficsign_assistant_date,80,64,80,0.61877,#504050,,교통안전표지일람표의 “일자” 보조표지
+TrafficSign,Assistant,TimeRange,trafficsign_assistant_timerange,80,64,96,0.6217,#504060,,"교통안전표지일람표의 “시간(시작,끝)” 보조표지"
+TrafficSign,Assistant,TimeWithin,trafficsign_assistant_timewithin,80,64,112,0.62463,#504070,,교통안전표지일람표의 “시간(이내)” 보조표지
+TrafficSign,Assistant,TrafficSignal,trafficsign_assistant_trafficsignal,80,64,128,0.62757,#504080,,교통안전표지일람표의 “신호등화상태” 보조표지
+TrafficSign,Assistant,Priority,trafficsign_assistant_priority,80,64,144,0.6305,#504090,,교통안전표지일람표의 “전방우선도로” 보조표지
+TrafficSign,Assistant,SafetySpeed,trafficsign_assistant_safetyspeed,80,64,160,0.63343,#5040A0,,교통안전표지일람표의 “안전속도” 보조표지
+TrafficSign,Assistant,Weather,trafficsign_assistant_weather,80,64,176,0.63636,#5040B0,,교통안전표지일람표의 “기상상태” 보조표지
+TrafficSign,Assistant,Road,trafficsign_assistant_road,80,64,192,0.6393,#5040C0,,교통안전표지일람표의 “노면상태” 보조표지
+TrafficSign,Assistant,TrafficRestriction,trafficsign_assistant_trafficrestriction,80,64,208,0.64223,#5040D0,,교통안전표지일람표의 “교통규제” 보조표지
+TrafficSign,Assistant,PassingRestriction,trafficsign_assistant_passingrestriction,80,64,224,0.64516,#5040E0,,교통안전표지일람표의 “통행규제” 보조표지
+TrafficSign,Assistant,CarRestriction,trafficsign_assistant_carrestriction,80,64,240,0.64809,#5040F0,,교통안전표지일람표의 “차량한정” 보조표지
+TrafficSign,Assistant,PassingCaution,trafficsign_assistant_passingcaution,80,64,1,0.65103,#504001,,교통안전표지일람표의 “통행주의” 보조표지
+TrafficSign,Assistant,CollisionCaution,trafficsign_assistant_collisioncaution,80,64,17,0.65396,#504011,,교통안전표지일람표의 “충돌주의” 보조표지
+TrafficSign,Assistant,Information,trafficsign_assistant_information,80,64,33,0.65689,#504021,,교통안전표지일람표의 “표지설명” 보조표지
+TrafficSign,Assistant,SectionStart,trafficsign_assistant_sectionstart,80,64,49,0.65982,#504031,,교통안전표지일람표의 “구간시작” 보조표지
+TrafficSign,Assistant,Section,trafficsign_assistant_section,80,64,65,0.66276,#504041,,교통안전표지일람표의 “구간내” 보조표지
+TrafficSign,Assistant,SectionEnd,trafficsign_assistant_sectionend,80,64,81,0.66569,#504051,,교통안전표지일람표의 “구간끝” 보조표지
+TrafficSign,Assistant,Right,trafficsign_assistant_right,80,64,97,0.66862,#504061,,교통안전표지일람표의 “우방향” 보조표지
+TrafficSign,Assistant,Left,trafficsign_assistant_left,80,64,113,0.67155,#504071,,교통안전표지일람표의 “좌방향” 보조표지
+TrafficSign,Assistant,Straight,trafficsign_assistant_straight,80,64,129,0.67449,#504081,,교통안전표지일람표의 “전방” 보조표지
+TrafficSign,Assistant,Weight,trafficsign_assistant_weight,80,64,145,0.67742,#504091,,교통안전표지일람표의 “중량” 보조표지
+TrafficSign,Assistant,Width,trafficsign_assistant_width,80,64,161,0.68035,#5040A1,,교통안전표지일람표의 “노폭” 보조표지
+TrafficSign,Assistant,Distance3,trafficsign_assistant_distance3,80,64,177,0.68328,#5040B1,,교통안전표지일람표의 “거리” 보조표지
+TrafficSign,Assistant,End,trafficsign_assistant_end,80,64,193,0.68622,#5040C1,,교통안전표지일람표의 “해제” 보조표지
+TrafficSign,Assistant,Tow,trafficsign_assistant_tow,80,64,209,0.68915,#5040D1,,교통안전표지일람표의 “견인지역” 보조표지
+RoadSign,RoadSign,RoadSign,roadsign_roadsign_roadsign,96,0,0,0.69208,#600000,,이정표
+TrafficLight,TrafficLight,TrafficLight,trafficlight_trafficlight_trafficlight,112,0,0,0.69501,#700000,,미분류 신호등
+TrafficLight,TrafficLight,Horizontal,trafficlight_trafficlight_horizontal,112,0,16,0.69795,#700010,,차량횡형 신호등
+TrafficLight,TrafficLight,Vertical,trafficlight_trafficlight_vertical,112,0,32,0.70088,#700020,,차량종형 신호등
+TrafficLight,TrafficLight,Bus,trafficlight_trafficlight_bus,112,0,48,0.70381,#700030,,버스삼색등 신호등
+TrafficLight,TrafficLight,Dynamic,trafficlight_trafficlight_dynamic,112,0,64,0.70674,#700040,,가변형가변등 신호등
+TrafficLight,TrafficLight,Warning,trafficlight_trafficlight_warning,112,0,80,0.70968,#700050,,경보형가변등 신호등
+TrafficLight,TrafficLight,Pedestrian,trafficlight_trafficlight_pedestrian,112,0,96,0.71261,#700060,,보행등 신호등
+TrafficLight,TrafficLight,Bicycle,trafficlight_trafficlight_bicycle,112,0,112,0.71554,#700070,,자전거종형 신호등
+TrafficLight,TrafficLight,Auxiliary,trafficlight_trafficlight_auxiliary,112,0,128,0.71848,#700080,,차량보조등
+Construction,Construction,Construction,construction_construction_construction,128,0,0,0.72141,#800000,,미분류 건축물 또는 시설물
+Construction,Building,Building,construction_building_building,128,16,0,0.72434,#801000,,미분류 빌딩
+Construction,Building,Apartment,construction_building_apartment,128,16,16,0.72727,#801010,,아파트
+Construction,Building,Residential,construction_building_residential,128,16,32,0.73021,#801020,,아파트를 제외한 주거용 빌딩
+Construction,Building,Commercial,construction_building_commercial,128,16,48,0.73314,#801030,,"상업용 빌딩 (사무실, 상가, 쇼핑몰, 호텔, 카페, 마트, 백화점, ...)"
+Construction,Building,Industrial,construction_building_industrial,128,16,64,0.73607,#801040,,"산업용 빌딩 (공장, 창고, 물류센터)"
+Construction,Building,Educational,construction_building_educational,128,16,80,0.739,#801050,,"교육용 빌딩 (학교, 도서관)"
+Construction,Building,Religious,construction_building_religious,128,16,96,0.74194,#801060,,종교용 빌딩
+Construction,Building,MixedUse,construction_building_mixeduse,128,16,112,0.74487,#801070,,복합용 빌딩 (주상복합)
+Construction,Building,Transportation,construction_building_transportation,128,16,128,0.7478,#801080,,"교통시설 (공항, 기차역, 터미널, 항만)"
+Construction,Building,Special,construction_building_special,128,16,144,0.75073,#801090,,"경찰서, 소방서, 병원"
+Construction,Infrastructure,Infrastructure,construction_infrastructure_infrastructure,128,32,0,0.75367,#802000,,미분류 교통 시설물
+Construction,Infrastructure,Barrier,construction_infrastructure_barrier,128,32,16,0.7566,#802010,,"방음벽, 방풍벽, 교통차단벽 등 도로 주변에 설치된 벽"
+Construction,Infrastructure,Bollard,construction_infrastructure_bollard,128,32,32,0.75953,#802020,,기다란 원통 모양으로 된 설치형 볼라드
+Construction,Infrastructure,Bridge,construction_infrastructure_bridge,128,32,48,0.76246,#802030,,교량
+Construction,Infrastructure,BusStop,construction_infrastructure_busstop,128,32,64,0.7654,#802040,,버스 정류장
+Construction,Infrastructure,Curb,construction_infrastructure_curb,128,32,80,0.76833,#802050,,연석
+Construction,Infrastructure,Guardrail,construction_infrastructure_guardrail,128,32,96,0.77126,#802060,,가드레일
+Construction,Infrastructure,Pole,construction_infrastructure_pole,128,32,112,0.77419,#802070,,신호등 혹은 표지판 폴 대
+Construction,Infrastructure,Speedbump,construction_infrastructure_speedbump,128,32,128,0.77713,#802080,,과속방지턱
+Construction,Infrastructure,Tollgate,construction_infrastructure_tollgate,128,32,144,0.78006,#802090,,톨게이트
+Construction,Infrastructure,Tunnel,construction_infrastructure_tunnel,128,32,160,0.78299,#8020A0,,터널 구조물 / 시설물
+Construction,Indoor,Indoor,construction_indoor_indoor,128,48,0,0.78592,#803000,,미분류 실내 구조물
+Construction,Indoor,Ceiling,construction_indoor_ceiling,128,48,16,0.78886,#803010,,구조물 중 천장
+Construction,Indoor,Wall,construction_indoor_wall,128,48,32,0.79179,#803020,,구조물 중 벽
+Construction,Indoor,Floor,construction_indoor_floor,128,48,48,0.79472,#803030,,구조물 중 바닥
+Construction,Indoor,Column,construction_indoor_column,128,48,64,0.79765,#803040,,구조물 중 기둥
+Construction,Indoor,Window,construction_indoor_window,128,48,80,0.80059,#803050,,구조물 중 창
+Construction,Indoor,Door,construction_indoor_door,128,48,96,0.80352,#803060,,구조물 중 문
+Nature,Vegetation,Vegetation,nature_vegetation_vegetation,144,0,0,0.80645,#900000,,나무 등과 같은 높이값을 가지고 있는 자연물
+Nature,Terrain,Terrain,nature_terrain_terrain,144,16,0,0.80938,#901000,,흙 등과 같은 높이값을 가지고 있지 않은 자연물
+Nature,Sky,Sky,nature_sky_sky,144,32,0,0.81232,#902000,,하늘 영역을 의미하는 빈 공간
+Ground,Car,Car,ground_car_car,160,0,0,0.81525,#A00000,,"Sedan, SUV, Van 을 포함한 일반 차량 및 승합차"
+Ground,Bus,Bus,ground_bus_bus,160,16,0,0.81818,#A01000,,9인승 이상의 공공 및 기다란 차량 (표 정의)
+Ground,Bus,Bendy,ground_bus_bendy,160,16,16,0.82111,#A01010,,9인승 이상의 굴절 차량
+Ground,Bus,SchoolBus,ground_bus_schoolbus,160,16,32,0.82405,#A01020,,통학차량
+Ground,Truck,Truck,ground_truck_truck,160,32,0,0.82698,#A02000,,운전 칸과 구별되는 Back part 을 가지고 있는 차량 (표 정의)
+Ground,Trailer,Trailer,ground_trailer_trailer,160,48,0,0.82991,#A03000,,Truck과 일반 차량에 의해 끌리는 짐칸 (표 정의)
+Ground,Motorbike,Motorbike,ground_motorbike_motorbike,160,64,0,0.83284,#A04000,,이륜자동차 및 원동기장치 자전거
+Ground,Rail,Rail,ground_rail_rail,160,80,0,0.83578,#A05000,,미분류 레일 주행 이동체
+Ground,Rail,Tram,ground_rail_tram,160,80,16,0.83871,#A05010,,트램
+Ground,Rail,Train,ground_rail_train,160,80,32,0.84164,#A05020,,기차
+Ground,Special,Special,ground_special_special,160,96,0,0.84457,#A06000,,미분류 특수목적차량
+Ground,Special,Police,ground_special_police,160,96,16,0.84751,#A06010,,경찰차량
+Ground,Special,Ambulance,ground_special_ambulance,160,96,32,0.85044,#A06020,,구급차량
+Ground,Special,Construction,ground_special_construction,160,96,48,0.85337,#A06030,,공사 특수 차량
+Ground,Special,Towing,ground_special_towing,160,96,64,0.8563,#A06040,,렉카차량
+Ground,Special,Robot,ground_special_robot,160,96,80,0.85924,#A06050,,로봇
+Mobility,Wheeler,Wheeler,mobility_wheeler_wheeler,176,0,0,0.86217,#B00000,,미분류 개인 이동수단
+Mobility,Wheeler,Bicycle,mobility_wheeler_bicycle,176,0,16,0.8651,#B00010,,자전거
+Mobility,Wheeler,Kickboard,mobility_wheeler_kickboard,176,0,32,0.86804,#B00020,,킥보드
+Mobility,Wheeler,Wheelchair,mobility_wheeler_wheelchair,176,0,48,0.87097,#B00030,,휠체어
+Air,FixedWing,FixedWing,air_fixedwing_fixedwing,192,0,0,0.8739,#C00000,,고정익 항공기
+Air,RotaryWing,RotaryWing,air_rotarywing_rotarywing,192,16,0,0.87683,#C01000,,회전익 항공기
+Air,RotaryWIng,Drone,air_rotarywing_drone,192,16,16,0.87977,#C01010,,드론
+Air,Hybrid,Hybrid,air_hybrid_hybrid,192,32,0,0.8827,#C02000,,고정익+회전익 항공기
+Air,Hybrid,UAM,air_hybrid_uam,192,32,16,0.88563,#C02010,,UAM
+Air,Rocket,Rocket,air_rocket_rocket,192,48,0,0.88856,#C03000,,로켓추진 항공기
+Air,Nonpowered,Nonpowered,air_nonpowered_nonpowered,192,64,0,0.8915,#C04000,,무동력 항공기
+Human,Pedestrian,Man,human_pedestrian_man,208,0,0,0.89443,#D00000,,성인 남성 보행자
+Human,Pedestrian,Woman,human_pedestrian_woman,208,0,16,0.89736,#D00010,,성인 여성 보행자
+Human,Pedestrian,Boy,human_pedestrian_boy,208,0,32,0.90029,#D00020,,어린 남성 보행자
+Human,Pedestrian,Girl,human_pedestrian_girl,208,0,48,0.90323,#D00030,,어린 여성 보행자
+Human,Pedestrian,ElderlyMan,human_pedestrian_elderlyman,208,0,64,0.90616,#D00040,,노인 남성 보행자
+Human,Pedestrian,ElderlyWoman,human_pedestrian_elderlywoman,208,0,80,0.90909,#D00050,,노인 여성 보행자
+Human,Special,Special,human_special_special,208,16,0,0.91202,#D01000,,미분류 특수목적 종사자
+Human,Special,Construction,human_special_construction,208,16,16,0.91496,#D01010,,공사현장 인부
+Human,Special,Police,human_special_police,208,16,32,0.91789,#D01020,,경찰관
+Human,Special,Rescue,human_special_rescue,208,16,48,0.92082,#D01030,,구급대원
+Human,Special,Firefighter,human_special_firefighter,208,16,64,0.92375,#D01040,,소방관
+Human,Special,Soldier,human_special_soldier,208,16,80,0.92669,#D01050,,군인
+Animal,Animal,Animal,animal_animal_animal,224,0,0,0.92962,#E00000,,미분류 동물
+Animal,Animal,Dog,animal_animal_dog,224,0,16,0.93255,#E00010,,"개, 강아지"
+Animal,Animal,Cat,animal_animal_cat,224,0,32,0.93548,#E00020,,고양이
+Animal,Animal,Horse,animal_animal_horse,224,0,48,0.93842,#E00030,,말
+Animal,Animal,Deer,animal_animal_deer,224,0,64,0.94135,#E00040,,사슴
+Animal,Animal,Cow,animal_animal_cow,224,0,80,0.94428,#E00050,,소
+Animal,Animal,Bird,animal_animal_bird,224,0,96,0.94721,#E00060,,새
+Object,Object,Object,object_object_object,240,0,0,0.95015,#F00000,,미분류 물체
+Object,Object,Stroller,object_object_stroller,240,0,16,0.95308,#F00010,,유모차
+Object,Object,Cart,object_object_cart,240,0,32,0.95601,#F00020,,카트
+Object,Object,Cup,object_object_cup,240,0,48,0.95894,#F00030,,컵
+Object,Object,Mirror,object_object_mirror,240,0,64,0.96188,#F00040,,거울
+Object,Object,Picture,object_object_picture,240,0,80,0.96481,#F00050,,그림
+Object,Obstacle,Obstacle,object_obstacle_obstacle,240,16,0,0.96774,#F01000,,미분류 장애물
+Object,Obstacle,Cone,object_obstacle_cone,240,16,16,0.97067,#F01010,,꼬깔콘 모양으로 된 라바콘
+Object,Obstacle,Box,object_obstacle_box,240,16,32,0.97361,#F01020,,박스
+Object,Obstacle,Drum,object_obstacle_drum,240,16,48,0.97654,#F01030,,드럼통
+Object,Obstacle,Barricade,object_obstacle_barricade,240,16,64,0.97947,#F01040,,바리케이드
+Object,Obstacle,Debris,object_obstacle_debris,240,16,80,0.9824,#F01050,,잔해 뭉치
+Object,Furniture,Furniture,object_furniture_furniture,240,32,0,0.98534,#F02000,,미분류 가구
+Object,Furniture,Table,object_furniture_table,240,32,16,0.98827,#F02010,,테이블
+Object,Furniture,Chair,object_furniture_chair,240,32,32,0.9912,#F02020,,의자
+Object,Furniture,Bed,object_furniture_bed,240,32,48,0.99413,#F02030,,침대
+Object,Furniture,Sofa,object_furniture_sofa,240,32,64,0.99707,#F02040,,소파
+Object,Furniture,Bookcase,object_furniture_bookcase,240,32,80,1,#F02050,,책장
