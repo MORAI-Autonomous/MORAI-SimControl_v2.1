@@ -11,6 +11,11 @@ import dearpygui.dearpygui as dpg
 import numpy as np
 
 import panels.log as log
+from receivers.camera_bbox_receiver import (
+    CameraBBoxReceiver,
+    draw_bbox_2d_canvas,
+    draw_bbox_3d_canvas,
+)
 from receivers.camera_depth_receiver import CameraDepthReceiver
 from receivers.camera_receiver import CameraReceiver
 from receivers.camera_semantic_receiver import CameraSemanticReceiver
@@ -37,7 +42,11 @@ _TPL_DEPTH = "Camera Depth.tmpl"
 _TPL_SEMANTIC = "Camera Semantic.tmpl"
 _TPL_INSTANCE = "Instance Cam.tmpl"
 _TPL_RGB_BBOX = "Camera With 2D_3D Bounding Box.tmpl"
-_TEMPLATE_ITEMS = [_TPL_RGB, _TPL_DEPTH, _TPL_SEMANTIC, _TPL_INSTANCE, _TPL_RGB_BBOX]
+_TPL_BBOX_2D = "Camera Bounding Box 2D.tmpl"
+_TPL_BBOX_3D = "Camera Bounding Box 3D.tmpl"
+_TEMPLATE_ITEMS = [
+    _TPL_RGB, _TPL_DEPTH, _TPL_SEMANTIC, _TPL_INSTANCE, _TPL_RGB_BBOX, _TPL_BBOX_2D, _TPL_BBOX_3D,
+]
 _DEPTH_VIEW_SIMULATOR = "Simulator"
 _DEPTH_VIEW_GRAYSCALE = "Grayscale"
 _DEPTH_VIEW_TURBO = "Turbo"
@@ -48,6 +57,8 @@ _DEPTH_SCALE_ITEMS = [_DEPTH_SCALE_MORAI_255, _DEPTH_SCALE_RAW_32FC1]
 _DEPTH_SCALE_M = 200.0 / 255.0
 _TEMPLATE_PATHS = {
     _TPL_RGB_BBOX: resolve_template_path(_TPL_RGB_BBOX),
+    _TPL_BBOX_2D: resolve_template_path(_TPL_BBOX_2D),
+    _TPL_BBOX_3D: resolve_template_path(_TPL_BBOX_3D),
 }
 
 
@@ -281,6 +292,15 @@ def _start_slot(slot: int) -> None:
             port=port,
             on_packet=lambda packet, s=slot: _on_instance_packet(s, packet),
         )
+    elif template_name in (_TPL_BBOX_2D, _TPL_BBOX_3D):
+        mode = "2d" if template_name == _TPL_BBOX_2D else "3d"
+        state.receiver_kind = f"bbox{mode}"
+        state.receiver = CameraBBoxReceiver(
+            ip=ip,
+            port=port,
+            on_packet=lambda packet, s=slot, m=mode: _on_bbox_only_packet(s, packet, m),
+            tmpl_path=_TEMPLATE_PATHS.get(template_name),
+        )
     else:
         state.receiver_kind = "bbox"
         state.receiver = CameraSensorReceiver(
@@ -400,6 +420,31 @@ def _on_bbox_packet(slot: int, packet: dict) -> None:
         fps=fps,
         type_text="RGB+BBox",
         info_text=f"Objects: {object_count}",
+        rx_t=now,
+    )
+
+
+def _on_bbox_only_packet(slot: int, packet: dict, mode: str) -> None:
+    state = _slots[slot]
+    now = time.monotonic()
+    state.last_rx_t = now
+    if now - state.last_frame_t < _FRAME_INTERVAL:
+        return
+    state.last_frame_t = now
+
+    objects = packet.get("objects", [])
+    draw = draw_bbox_2d_canvas if mode == "2d" else draw_bbox_3d_canvas
+    canvas, drawn = draw(objects)
+    src_h, src_w = canvas.shape[:2]
+    fps = float(packet.get("fps", state.receiver.fps if state.receiver is not None else 0.0))
+    _render_slot_image(
+        slot=slot,
+        display_bgr=canvas,
+        src_w=src_w,
+        src_h=src_h,
+        fps=fps,
+        type_text=f"BBox {mode.upper()}",
+        info_text=f"Objects: {len(objects)} drawn: {drawn}",
         rx_t=now,
     )
 
@@ -609,6 +654,10 @@ def _receiver_type_text(kind: str) -> str:
         return "RGB"
     if kind == "bbox":
         return "RGB+BBox"
+    if kind == "bbox2d":
+        return "BBox 2D"
+    if kind == "bbox3d":
+        return "BBox 3D"
     if kind == "depth":
         return "32FC1"
     if kind == "semantic":
