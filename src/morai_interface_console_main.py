@@ -1269,12 +1269,19 @@ def main():
             dpg.bind_font(_font)
             break
 
-    # Convert PNG to ICO for the viewport icon when needed.
-    _ICO_PATH = os.path.join(_BASE_DIR, "assets", "logo.ico")
-    if os.path.exists(_LOGO_PATH) and not os.path.exists(_ICO_PATH):
+    # Inverted logo for the window/taskbar icon so the console is not mistaken
+    # for the simulator itself, which ships the black logo.
+    _ICON_SRC = os.path.join(_ASSET_DIR, "Logo_SIM_V2_1_Console_80X80.PNG")
+    _ICO_PATH = os.path.join(_ASSET_DIR, "logo_console.ico")
+    # Rebuild the ICO when it is missing or older than its PNG source;
+    # a staleness check keeps artwork edits from being silently ignored.
+    if os.path.exists(_ICON_SRC) and (
+        not os.path.exists(_ICO_PATH)
+        or os.path.getmtime(_ICO_PATH) < os.path.getmtime(_ICON_SRC)
+    ):
         try:
             from PIL import Image
-            Image.open(_LOGO_PATH).save(_ICO_PATH, format="ICO", sizes=[(32,32),(48,48),(64,64)])
+            Image.open(_ICON_SRC).save(_ICO_PATH, format="ICO", sizes=[(32,32),(48,48),(64,64)])
         except Exception:
             pass
 
