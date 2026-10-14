@@ -18,6 +18,19 @@
   - subcommand:
     - `parse`
     - `bypass`
+- `rsa_dummy_feed.py`
+  - RSA 더미 패킷 송신 도구 (수신이 아니라 송신)
+  - 상류 공급 없이 표출/필터를 검증할 때 사용
+  - 기본: 차종별 1대씩 정지 상태로 한 줄 배치
+  - `--population N`: 주행·교체(churn)·반경 밖 차량까지 포함한 트래픽 생성
+  - `--truth FILE`: 보낸 내용을 RsaLog_*.csv 와 같은 컬럼 순서로 기록
+- `rsa_compare_truth.py`
+  - `rsa_dummy_feed.py --truth` 출력과 시뮬레이터 RsaLog_*.csv 를 대조
+  - `(Timestamp, VehicleId)` 로 조인, Timestamp 교집합만 비교
+- `rsa_verify_display.py`
+  - 시뮬레이터 RsaLog_*.csv 를 오프라인에서 재생해 "그 순간 화면에 있어야 할 대수" 계산
+  - 렌더러 표시 규칙(Displayed / KeepAliveSec / id당 인스턴스 1개)을 그대로 재현
+  - `[RSA.Summary]` 의 liveTotal 과 대조할 기준값을 제공
 
 ## Run
 
@@ -28,6 +41,11 @@ python tools/udp_debug/molit8_parser_rsa.py bypass --target 127.0.0.1:50002
 
 python tools/udp_debug/molit8_parser_pvd.py parse
 python tools/udp_debug/molit8_parser_pvd.py bypass --target 127.0.0.1:50001
+
+python tools/udp_debug/rsa_dummy_feed.py
+python tools/udp_debug/rsa_dummy_feed.py --population 30 --outside 10 --truth sent.csv
+python tools/udp_debug/rsa_compare_truth.py sent.csv "RsaLog_*.csv"
+python tools/udp_debug/rsa_verify_display.py RsaLog_20260916_135543.csv
 ```
 
 ## Notes
