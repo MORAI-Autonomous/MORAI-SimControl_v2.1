@@ -119,6 +119,10 @@ def build(parent: int | str) -> None:
             dpg.add_combo(tag="simulator_map_combo", items=_SIMULATOR_MAP_ITEMS,
                           default_value=_SIMULATOR_MAP_ITEMS[0], width=210)
             dpg.add_button(label="Load", callback=_on_load_map)
+        with dpg.group(horizontal=True):
+            dpg.add_text("API       :", color=(180, 180, 180, 255))
+            dpg.add_button(label="Get", callback=_on_get_api_info)
+            dpg.add_text("-", tag="api_info_text", color=(140, 140, 140, 255))
 
         _section("SUITE")
 
@@ -793,6 +797,37 @@ def _on_load_map() -> None:
         proto.MSG_TYPE_LOAD_MAP,
         lambda rid, name=map_name: tcp.send_load_map(_tcp_sock, rid, name),
     )
+
+
+def _on_get_api_info() -> None:
+    """GetApiSchema + GetApiInfo (Proto opcodes) on a separate connection to the same simulator.
+    The legacy receiver drops Proto msg_types, so the shared socket cannot carry them."""
+    if _tcp_sock is None:
+        log.append("GetApiInfo: not connected", "WARN")
+        return
+    try:
+        host, port = _tcp_sock.getpeername()[:2]
+    except OSError as e:
+        log.append(f"GetApiInfo: not connected ({e})", "WARN")
+        return
+
+    def run() -> None:
+        try:
+            # Imported here so the legacy panels keep working without the protobuf package.
+            import transport.proto_client as proto_client
+            with proto_client.ProtoClient(host, port) as client:
+                client.load_schema()
+                lines = proto_client.format_api_info(client)
+            for line in lines:
+                log.append(f"GetApiInfo {line}", "RECV")
+            summary = (f"v{client.protocol_version}  {client.simulator_version or '-'}  "
+                       f"{len(client.opcodes)} opcodes")
+            ui_queue.post(lambda: dpg.set_value("api_info_text", summary))
+        except Exception as e:
+            log.append(f"GetApiInfo failed: {type(e).__name__}: {e}", "WARN")
+            ui_queue.post(lambda: dpg.set_value("api_info_text", "failed"))
+
+    threading.Thread(target=run, daemon=True).start()
 
 
 def _simulator_mode_label(mode: int) -> Optional[str]:

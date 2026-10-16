@@ -87,6 +87,23 @@ def connect_and_start_receiver(pending: dict, lock: threading.Lock):
 
 
 # ============================================================
+# Proto API
+# ============================================================
+
+def show_api_info():
+    """GetApiSchema + GetApiInfo on a separate connection (Proto opcodes, no generated code)."""
+    try:
+        # Imported here so the legacy commands keep working without the protobuf package.
+        import transport.proto_client as proto_client
+        with proto_client.ProtoClient(TCP_SERVER_IP, TCP_SERVER_PORT) as client:
+            client.load_schema()
+            for line in proto_client.format_api_info(client):
+                print(line)
+    except Exception as e:
+        print(f"[ERROR] GetApiInfo failed: {type(e).__name__}: {e}")
+
+
+# ============================================================
 # Key bindings help
 # ============================================================
 
@@ -115,6 +132,8 @@ def print_key_bindings():
     print("  [d] LoadSuite                    (TCP 0x1402)")
     print("  [h] LoadTrafficScenario          (TCP 0x1601)")
     print("  [i] TrafficGenerate              (TCP 0x1602)")
+    print("---- Proto API ---------------")
+    print("  [p] GetApiSchema + GetApiInfo    (TCP 0x01010002, 0x01010001)")
     print("---- ETC ---------------------")
     print(f" [W] Toggle AutoCall (FixedStep <-> SaveData) x {MAX_CALL_NUM}")
     print("  [Q] Quit\n")
@@ -282,6 +301,9 @@ def main():
                     params = prompt.prompt_traffic_generate()
                     dispatch(MSG_TYPE_TRAFFIC_GENERATE,
                              lambda rid: tcp.send_traffic_generate(tcp_sock, rid, **params))
+
+                elif key in ("p", "P"):
+                    show_api_info()
 
                 elif key in ("w", "W"):
                     toggle_auto_caller()
