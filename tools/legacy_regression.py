@@ -11,6 +11,7 @@ Phase A (default, safe in any simulator state; changes nothing):
   - every opcode with a payload gets a malformed one and must answer InvalidParam (102) with a bare
     8-byte ResultCode - checks the decoders reject bad input instead of executing or crashing
   - unknown ids / names, unknown opcodes (NotSupported 202)
+  - failures show their detail_code (ErrorReason); an unknown Proto opcode answers with a Reply
 
 Phase B (--scenario-run): plays a scenario in fixed-step mode and exercises the entity commands:
   (LoadSuite) -> SetSimulationTimeMode fixed -> Play -> FixedStep -> CreateObject -> GetVehicleInfo
@@ -36,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import transport.protocol_defs as proto  # noqa: E402
 import transport.tcp_transport as tcp    # noqa: E402
+from transport.proto_client import decode_reply  # noqa: E402
 
 OK, INVALID_STATE, INVALID_PARAM, FAILED, NOT_SUPPORTED = 0, 101, 102, 200, 202
 NONZERO = -1  # any failure code
@@ -132,6 +134,8 @@ class Report:
             return self._add(name, opcode, False, f"payload {len(payload)}B < ResultCode")
         rc, detail = struct.unpack_from(proto.RESULT_FMT, payload)
         got = f"{rc}({RESULT_NAMES.get(rc, '?')}) {len(payload)}B"
+        if detail != 0:
+            got += f" detail={detail}({proto.ERROR_REASON_MAP.get(detail, '?')})"
 
         allowed = want if isinstance(want, tuple) else (want,)
         if (want == NONZERO and rc == 0) or (want != NONZERO and rc not in allowed):
@@ -147,6 +151,18 @@ class Report:
         problem = verify(parsed) if verify else None
         self._add(name, opcode, problem is None, problem or got)
         return parsed
+
+    def check_reply(self, name: str, opcode: int, payload: Optional[bytes], want: int, want_reason: int) -> None:
+        """A Proto opcode answers with a datamodel.Reply instead of the 8-byte ResultCode."""
+        if payload is None:
+            return self._add(name, opcode, False, "no response (timeout)")
+        try:
+            code, reason, message, _body = decode_reply(payload)
+        except Exception as e:  # noqa: BLE001 - any parse error is a failed check
+            return self._add(name, opcode, False, f"not a Reply ({len(payload)}B): {e}")
+        got = (f"{code}({RESULT_NAMES.get(code, '?')}) "
+               f"reason={reason}({proto.ERROR_REASON_MAP.get(reason, '?')}) \"{message}\"")
+        return self._add(name, opcode, code == want and reason == want_reason, got)
 
     def _add(self, name: str, opcode: int, ok: bool, note: str) -> None:
         self.rows.append((ok, opcode, name, note))
@@ -215,7 +231,8 @@ def phase_a(c: Conn, r: Report) -> None:
     r.check("LoadMap unknown map", 0x1004,
             c.call(tcp.send_load_map, 0x1004, map_name="__regression_no_such_map__"), NONZERO)
     r.check("unknown legacy opcode 0x1999", 0x00001999, c.raw(0x00001999, b""), NOT_SUPPORTED)
-    r.check("unknown proto opcode 0x01019999", 0x01019999, c.raw(0x01019999, b""), NOT_SUPPORTED)
+    r.check_reply("unknown proto opcode 0x01019999", 0x01019999, c.raw(0x01019999, b""),
+                  NOT_SUPPORTED, 101)  # ERROR_REASON_UNKNOWN_API
 
 
 # ------------------------------------------------------------------------------------------------

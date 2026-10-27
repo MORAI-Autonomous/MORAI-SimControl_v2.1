@@ -2,8 +2,8 @@
 
 > 이 Markdown/HTML 문서는 자동 생성됩니다. 생성된 문서를 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.
 >
-> - 생성 시각: `2026-10-16 16:51 +0900`
-> - 기준 브랜치: `feature/hwjung/proto-dynamic-client`
+> - 생성 시각: `2026-10-27 17:11 +0900`
+> - 기준 브랜치: `feature/hwjung/msvm-3044_error_message`
 
 ## Common Header
 

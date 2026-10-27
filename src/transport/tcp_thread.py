@@ -15,6 +15,10 @@ import panels.commands as cmd_panel
 def result_to_string(code: int):
     return proto.RESULT_CODE_MAP.get(code, f"UNKNOWN({code})")
 
+def detail_to_string(code: int):
+    """detail_code with its ErrorReason name, e.g. "301(MAP_NOT_FOUND)"; plain "0" when unset."""
+    return str(code) if code == 0 else f"{code}({proto.ERROR_REASON_MAP.get(code, '?')})"
+
 def time_mode_to_string(mode: int):
     if mode == proto.TIME_MODE_VARIABLE:    return "VARIABLE"
     if mode == proto.TIME_MODE_FIXED:       return "FIXED"
@@ -141,7 +145,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"GetSimulatorStatus rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code} "
+                        f"detail={detail_to_string(detail_code)} "
                         f"state={state}({simulator_state_to_string(state)})",
                         level
                     )
@@ -161,7 +165,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"GetSimulatorMode rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code} "
+                        f"detail={detail_to_string(detail_code)} "
                         f"mode={mode}({simulator_mode_to_string(mode)})",
                         level
                     )
@@ -179,7 +183,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"SetSimulatorMode rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level
                     )
                 else:
@@ -194,7 +198,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"LoadMap rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level
                     )
                 else:
@@ -209,7 +213,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"ShutdownSimulator rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level,
                     )
                 else:
@@ -289,7 +293,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"SetTrajectory rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level
                     )
                 else:
@@ -307,7 +311,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"DeleteObject rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level
                     )
                 else:
@@ -329,7 +333,7 @@ class Receiver(threading.Thread):
                         log.append(
                             f"GetVehicleInfo rid={request_id} "
                             f"result={result_code}({result_to_string(result_code)}) "
-                            f"detail={detail_code}",
+                            f"detail={detail_to_string(detail_code)}",
                             "WARN",
                         )
                 else:
@@ -364,7 +368,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"LoadSuite rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level
                     )
                 else:
@@ -398,7 +402,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"ScenarioControl rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level,
                     )
                     cmd_panel.on_scenario_control_response(
@@ -422,7 +426,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"LoadTrafficScenario rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level,
                     )
                 else:
@@ -440,7 +444,7 @@ class Receiver(threading.Thread):
                     log.append(
                         f"TrafficGenerate rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
-                        f"detail={detail_code}",
+                        f"detail={detail_to_string(detail_code)}",
                         level,
                     )
                 else:
@@ -458,7 +462,7 @@ class Receiver(threading.Thread):
                             log.append(
                                 f"0x{msg_type:04X} rid={request_id} "
                                 f"result={result_code}({result_to_string(result_code)}) "
-                                f"detail={detail_code}",
+                                f"detail={detail_to_string(detail_code)}",
                                 "ERROR"
                             )
                     else:
