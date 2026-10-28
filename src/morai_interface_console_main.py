@@ -50,14 +50,27 @@ _INTERFACE_CONSOLE_STATE_FILE = os.path.join(
     "interface_console_state.json",
 )
 _DEFAULT_TAB = "udp"
-_TAB_KEYS = {
-    "udp", "udp_ctrl", "cam_sensor", "radar_sensor", "lidar_sensor",
-    "object_control", "traffic", "lc", "au", "fp", "tfp",
-}
+# (button tag, tab key, button label) in display order.
+_TAB_BUTTONS = [
+    ("tab_btn_udp",            "udp",            " UDP Monitor "),
+    ("tab_btn_udp_ctrl",       "udp_ctrl",       " UDP Control "),
+    ("tab_btn_cam_sensor",     "cam_sensor",     " Camera Sensor "),
+    ("tab_btn_radar_sensor",   "radar_sensor",   " Radar Sensor "),
+    ("tab_btn_lidar_sensor",   "lidar_sensor",   " LiDAR Sensor "),
+    ("tab_btn_object_control", "object_control", " Object Control "),
+    ("tab_btn_traffic",        "traffic",        " Traffic Scenario "),
+    ("tab_btn_lc",             "lc",             " Lane Control "),
+    ("tab_btn_au",             "au",             " Path Follow "),
+    ("tab_btn_fp",             "fp",             " File Playback "),
+    ("tab_btn_tfp",            "tfp",            " Transform Playback "),
+]
+_TAB_KEYS = {key for _tag, key, _label in _TAB_BUTTONS}
 CMD_W      = 400        # Fixed command panel width.
 LOG_H      = 280        # Fixed log panel height.
 TITLEBAR_H = 38         # Title bar plus separator height.
 PAD        = 12         # Horizontal and bottom padding.
+TAB_SPACING_X  = 6      # Matches mvStyleVar_ItemSpacing x in the global theme.
+TAB_ROW_MARGIN = 22     # mon_window border plus window padding, both sides.
 
 # Viewport size helpers used by responsive layout code.
 def _vp_w():  return dpg.get_viewport_width()
@@ -960,16 +973,64 @@ def build_ui(state: InterfaceConsoleState):
         dpg.configure_item("au_scroll",  show=(name == "au"))
         dpg.configure_item("fp_scroll",  show=(name == "fp"))
         dpg.configure_item("tfp_scroll", show=(name == "tfp"))
-        for tag, key in [("tab_btn_udp", "udp"), ("tab_btn_udp_ctrl", "udp_ctrl"),
-                         ("tab_btn_cam_sensor", "cam_sensor"),
-                         ("tab_btn_radar_sensor", "radar_sensor"),
-                         ("tab_btn_lidar_sensor", "lidar_sensor"),
-                         ("tab_btn_object_control", "object_control"),
-                         ("tab_btn_traffic", "traffic"),
-                         ("tab_btn_lc", "lc"),
-                         ("tab_btn_au", "au"), ("tab_btn_fp", "fp"),
-                         ("tab_btn_tfp", "tfp")]:
+        for tag, key, _label in _TAB_BUTTONS:
             dpg.bind_item_theme(tag, "theme_tab_active" if name == key else "theme_tab_inactive")
+
+    def _make_tab_callback(key: str):
+        return lambda: _select_tab(key)
+
+    # Button widths are measured once the first frame has been rendered, then
+    # cached: the labels never change, so the widths never change either.
+    _tab_wrap = {"widths": None, "rows": None}
+
+    def _wrap_tab_rows(avail_w: float) -> bool:
+        """Pack the tab buttons into as many rows as ``avail_w`` requires.
+
+        Returns False while the buttons have not been rendered yet, so the
+        caller can retry on a later frame.
+        """
+        widths = _tab_wrap["widths"]
+        if widths is None:
+            widths = []
+            for tag, _key, _label in _TAB_BUTTONS:
+                w = dpg.get_item_rect_size(tag)[0]
+                if w <= 0:
+                    return False
+                widths.append(w)
+            _tab_wrap["widths"] = widths
+
+        rows = []
+        row, row_w = [], 0.0
+        for (tag, _key, _label), w in zip(_TAB_BUTTONS, widths):
+            next_w = w if not row else row_w + TAB_SPACING_X + w
+            if row and next_w > avail_w:
+                rows.append(row)
+                row, row_w = [tag], w
+            else:
+                row.append(tag)
+                row_w = next_w
+        if row:
+            rows.append(row)
+
+        if rows == _tab_wrap["rows"]:
+            return True
+
+        prev_rows = len(_tab_wrap["rows"] or [])
+        for idx, row in enumerate(rows):
+            row_tag = "tab_row_%d" % idx
+            if not dpg.does_item_exist(row_tag):
+                dpg.add_group(horizontal=True, tag=row_tag, parent="tab_rows")
+            dpg.configure_item(row_tag, show=True)
+            # move_item appends, so moving every button keeps the order right.
+            for tag in row:
+                dpg.move_item(tag, parent=row_tag)
+        for idx in range(len(rows), prev_rows):
+            row_tag = "tab_row_%d" % idx
+            if dpg.does_item_exist(row_tag):
+                dpg.configure_item(row_tag, show=False)
+
+        _tab_wrap["rows"] = rows
+        return True
 
     with dpg.window(tag="app_info_modal", label="App Info", modal=True,
                     show=False, no_resize=True, width=420, height=180):
@@ -1085,30 +1146,13 @@ def build_ui(state: InterfaceConsoleState):
                                   width=_mon_w(), height=_top_h(),
                                   border=True,
                                   no_scrollbar=True, no_scroll_with_mouse=True):
-                # Custom tab button row
-                with dpg.group(horizontal=True):
-                    dpg.add_button(label=" UDP Monitor ", tag="tab_btn_udp",
-                                   callback=lambda: _select_tab("udp"))
-                    dpg.add_button(label=" UDP Control ", tag="tab_btn_udp_ctrl",
-                                   callback=lambda: _select_tab("udp_ctrl"))
-                    dpg.add_button(label=" Camera Sensor ", tag="tab_btn_cam_sensor",
-                                   callback=lambda: _select_tab("cam_sensor"))
-                    dpg.add_button(label=" Radar Sensor ", tag="tab_btn_radar_sensor",
-                                   callback=lambda: _select_tab("radar_sensor"))
-                    dpg.add_button(label=" LiDAR Sensor ", tag="tab_btn_lidar_sensor",
-                                   callback=lambda: _select_tab("lidar_sensor"))
-                    dpg.add_button(label=" Object Control ", tag="tab_btn_object_control",
-                                   callback=lambda: _select_tab("object_control"))
-                    dpg.add_button(label=" Traffic Scenario ", tag="tab_btn_traffic",
-                                   callback=lambda: _select_tab("traffic"))
-                    dpg.add_button(label=" Lane Control ", tag="tab_btn_lc",
-                                   callback=lambda: _select_tab("lc"))
-                    dpg.add_button(label=" Path Follow ", tag="tab_btn_au",
-                                   callback=lambda: _select_tab("au"))
-                    dpg.add_button(label=" File Playback ", tag="tab_btn_fp",
-                                   callback=lambda: _select_tab("fp"))
-                    dpg.add_button(label=" Transform Playback ", tag="tab_btn_tfp",
-                                   callback=lambda: _select_tab("tfp"))
+                # Custom tab buttons. They start on one row and _wrap_tab_rows()
+                # re-packs them into more rows when mon_window gets narrow.
+                with dpg.group(tag="tab_rows"):
+                    with dpg.group(horizontal=True, tag="tab_row_0"):
+                        for _tag, _key, _label in _TAB_BUTTONS:
+                            dpg.add_button(label=_label, tag=_tag,
+                                           callback=_make_tab_callback(_key))
                 dpg.add_separator()
 
                 # Tab content; only one child is visible at a time.
@@ -1213,6 +1257,9 @@ def build_ui(state: InterfaceConsoleState):
             dpg.configure_item("cmd_window", height=top_h)
         if dpg.does_item_exist("mon_window"):
             dpg.configure_item("mon_window", width=mon_w, height=top_h)
+            # Retry next frame while the buttons have not been rendered yet.
+            if not _wrap_tab_rows(max(mon_w - TAB_ROW_MARGIN, 80)):
+                _layout_state["dirty"] = True
         if dpg.does_item_exist("log_window"):
             dpg.configure_item("log_window", width=vp_w - PAD)
         save_due_at = _layout_state["save_due_at"]
