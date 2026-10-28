@@ -124,6 +124,26 @@ RESULT_CODE_MAP = {
     202: "Not Supported",
 }
 
+# ErrorReason (datamodel.ErrorReason in api_info.proto): why a request failed. Legacy responses carry
+# it in detail_code, Proto responses in Reply.reason.
+ERROR_REASON_MAP = {
+    0: "UNSPECIFIED",
+    101: "UNKNOWN_API",
+    102: "MALFORMED_REQUEST",
+    103: "MISSING_FIELD",
+    104: "OUT_OF_RANGE",
+    201: "NOT_LOGGED_IN",
+    202: "NO_MAP_OPEN",
+    203: "BUSY",
+    204: "WRONG_MODE",
+    205: "NOTHING_LOADED",
+    301: "MAP_NOT_FOUND",
+    302: "MODEL_NOT_FOUND",
+    303: "ENTITY_NOT_FOUND",
+    304: "FILE_NOT_FOUND",
+    901: "INTERNAL",
+}
+
 SIMULATOR_STATE_MAP = {
     0: "UNSPECIFIED",
     1: "PRE_LOGIN",
