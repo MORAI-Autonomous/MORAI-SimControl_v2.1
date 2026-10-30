@@ -108,6 +108,19 @@ def main() -> int:
             "SetEntitySettings", entity_id=name, sensor_config={"settings_json": json.dumps(settings)}))
         cam_keys = ("resolutionX", "resolutionY", "frameRate")
 
+        print("[0] Catalog defaults (SensorDefaults.json, written by tools/export_sensor_defaults.py)")
+        objects = client.call("GetObjectCatalog", types=["ENTITY_TYPE_SENSOR"]).get("objects", [])
+        camera = next((o for o in objects if o.get("name") == args.camera), None)
+        defaults = (camera or {}).get("sensor", {}).get("default_settings_json", "")
+        if camera is None:
+            fail(f"{args.camera} is not in GetObjectCatalog")
+        elif not defaults:
+            fail(f"{args.camera} has no default_settings_json; run tools/export_sensor_defaults.py")
+        else:
+            print(f"  OK   {args.camera} defaults: {len(json.loads(defaults))} keys, resolutionX={json.loads(defaults).get('resolutionX')}")
+        without = [o["name"] for o in objects if not o.get("sensor", {}).get("default_settings_json")]
+        print(f"    {len(objects)} sensor models, {len(without)} without defaults{': ' + ', '.join(without) if without else ''}")
+
         print("[1] Editing mode: mount")
         step("SetScenarioMode EDIT", mode("EDIT"))
         step("CreateEntity ss_car (DYNAMICS)", lambda: client.call(
