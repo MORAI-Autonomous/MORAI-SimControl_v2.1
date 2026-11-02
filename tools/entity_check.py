@@ -91,7 +91,6 @@ def main() -> int:
         print("[2] Move, list, state")
         step("SetEntityTransform ego_test +5 m, yaw 90", lambda: client.call(
             "SetEntityTransform", entity_id="ego_test", transform=transform(args.x + 5, args.y, 90.0)))
-        time.sleep(0.5)  # the move is applied on the next frames
         print_list(client)
         step("GetEntityState ego_test", lambda: client.call("GetEntityState", entity_id="ego_test"))
         step("GetEntityState unknown", lambda: client.call("GetEntityState", entity_id="__nobody__"),

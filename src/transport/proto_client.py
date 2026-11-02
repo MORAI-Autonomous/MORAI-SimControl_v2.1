@@ -20,8 +20,10 @@ msg_type is not in VALID_MSG_TYPES, so Proto responses must not share its socket
 not callable here: their payloads are hand-packed bytes with no schema.
 """
 
+import select
 import socket
 import struct
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from google.protobuf import descriptor_pb2, descriptor_pool, json_format, message_factory
@@ -73,6 +75,21 @@ def _reply_class():
 _Reply = _reply_class()
 
 
+@dataclass
+class ProtoReply:
+    """One answer read by ProtoClient.receive()."""
+    request_id: int
+    name: str
+    result_code: int
+    reason_name: str
+    message: str
+    response: Dict[str, Any]
+
+    @property
+    def ok(self) -> bool:
+        return self.result_code == 0
+
+
 def decode_reply(payload: bytes):
     """(code, reason, message, body) of a Proto opcode response payload."""
     reply = _Reply.FromString(payload)
@@ -91,6 +108,8 @@ class ProtoClient:
         # name -> {"opcode", "name", "style", "request_type", "response_type"}
         self.opcodes: Dict[str, Dict[str, Any]] = {}
         self._next_request_id = 1
+        # request_id -> opcode name of requests sent with send() and not answered yet
+        self._pending: Dict[int, str] = {}
 
     # ---- connection ---------------------------------------------------------
 
@@ -153,30 +172,75 @@ class ProtoClient:
     def call(self, name: str, **fields: Any) -> Dict[str, Any]:
         """Calls a Proto opcode by name. Fields use the .proto field names; the response comes back
         as a dict with the same names. A void response returns {}."""
+        op = self._proto_op(name)
+        request = json_format.ParseDict(fields, self.message_class(op["request_type"])())
+        payload = self.request(op["opcode"], request.SerializeToString(), name)
+        return self._response_dict(op, payload)
+
+    def send(self, name: str, **fields: Any) -> int:
+        """Sends a Proto request without waiting for its answer and returns its request_id; read the
+        answers with receive(). The simulator answers each request when it finishes, so the answers
+        can come back in another order. Do not call() while answers are pending: call() skips the
+        responses that are not its own."""
+        op = self._proto_op(name)
+        request = json_format.ParseDict(fields, self.message_class(op["request_type"])())
+        request_id = self._send_frame(op["opcode"], request.SerializeToString())
+        self._pending[request_id] = name
+        return request_id
+
+    def receive(self, timeout: Optional[float] = None) -> Optional[ProtoReply]:
+        """The next answer to a send(), or None when none starts arriving within timeout (None waits
+        as long as the socket timeout)."""
+        if self.sock is None:
+            raise RuntimeError("not connected")
+        while self._pending:
+            if timeout is not None and not select.select([self.sock], [], [], timeout)[0]:
+                return None
+            msg_class, msg_type, resp_id, body = self._recv_packet()
+            name = self._pending.get(resp_id)
+            # Notifications and answers to other requests can arrive on the same connection; skip them.
+            if msg_class != proto.MSG_CLASS_RESP or name is None or msg_type != self.opcodes[name]["opcode"]:
+                continue
+            del self._pending[resp_id]
+            code, reason, message, reply_body = decode_reply(body)
+            response = self._response_dict(self.opcodes[name], reply_body) if code == 0 else {}
+            return ProtoReply(resp_id, name, code, proto.ERROR_REASON_MAP.get(reason, str(reason)),
+                              message, response)
+        return None
+
+    @property
+    def pending(self) -> Dict[int, str]:
+        """request_id -> opcode name of the send() requests not answered yet."""
+        return dict(self._pending)
+
+    def _proto_op(self, name: str) -> Dict[str, Any]:
         op = self.opcodes.get(name)
         if op is None:
             raise KeyError(f"unknown opcode name: {name}")
         if op["style"] != "PROTO":
             raise ValueError(f"{name} is a {op['style']} opcode; only PROTO opcodes are callable")
+        return op
 
-        request = json_format.ParseDict(fields, self.message_class(op["request_type"])())
-        payload = self.request(op["opcode"], request.SerializeToString(), name)
+    def _response_dict(self, op: Dict[str, Any], payload: bytes) -> Dict[str, Any]:
         if not op["response_type"]:
             return {}
         response = self.message_class(op["response_type"]).FromString(payload)
         return json_format.MessageToDict(response, preserving_proto_field_name=True)
 
-    def request(self, opcode: int, payload: bytes, name: str = "") -> bytes:
-        """Sends one request and returns the response message bytes: Reply.body for Proto opcodes,
-        the payload after the ResultCode for legacy ones (domain 0x00)."""
+    def _send_frame(self, opcode: int, payload: bytes) -> int:
         if self.sock is None:
             raise RuntimeError("not connected")
         request_id = self._next_request_id
         self._next_request_id += 1
-
         header = struct.pack(proto.HEADER_FMT, proto.MAGIC, proto.MSG_CLASS_REQ, opcode,
                              len(payload), request_id, proto.FLAG)
         self.sock.sendall(header + payload)
+        return request_id
+
+    def request(self, opcode: int, payload: bytes, name: str = "") -> bytes:
+        """Sends one request and returns the response message bytes: Reply.body for Proto opcodes,
+        the payload after the ResultCode for legacy ones (domain 0x00)."""
+        request_id = self._send_frame(opcode, payload)
 
         label = name or f"0x{opcode:08X}"
         while True:
