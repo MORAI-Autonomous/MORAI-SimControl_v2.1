@@ -50,18 +50,6 @@ def step(label: str, call: Callable[[], dict], expect_reason: Optional[str] = No
     return resp
 
 
-def seen(label: str, call: Callable[[], dict]) -> Optional[dict]:
-    """Runs one call and reports the outcome without judging it."""
-    start = time.time()
-    try:
-        resp = call()
-    except ProtoCallError as e:
-        print(f"  SEEN {label}: {e.reason_name} {e.message}  ({time.time() - start:.1f}s)")
-        return None
-    print(f"  SEEN {label}: OK {resp or ''}  ({time.time() - start:.1f}s)")
-    return resp
-
-
 def status_line(client: ProtoClient) -> str:
     status = client.call("GetScenarioStatus")
     entities = client.call("ListEntities").get("entities", [])
@@ -70,12 +58,22 @@ def status_line(client: ProtoClient) -> str:
             f"ready={status.get('ready', False)} entities={len(entities)}")
 
 
+def expect_state(client: ProtoClient, label: str, expected: str) -> None:
+    """The run state read right after a call: the call answers only once its work is done."""
+    global failures
+    state = client.call("GetScenarioStatus").get("state", "SCENARIO_STATE_UNSPECIFIED")
+    ok = state == expected
+    failures += 0 if ok else 1
+    print(f"  {'OK  ' if ok else 'FAIL'} state right after {label}: {state}" + ("" if ok else f"  expected {expected}"))
+
+
 def check_completion(client: ProtoClient, end_timeout: float) -> None:
     global failures
     control = lambda action: (lambda: client.call("ControlScenario", action=f"SCENARIO_ACTION_{action}"))
 
     print("[A] A scenario that ends on its own")
     step("START", control("START"))
+    expect_state(client, "START", "SCENARIO_STATE_PLAYING")
     print(f"  ...   {status_line(client)}")
 
     start = time.time()
@@ -108,8 +106,11 @@ def check_completion(client: ProtoClient, end_timeout: float) -> None:
         time.sleep(0.2)
     print(f"  SEEN  after {time.time() - start:.1f}s: {status_line(client)}")
 
-    if seen("START again after COMPLETED", control("START")) is not None:
-        step("STOP", control("STOP"))
+    step("START again after COMPLETED", control("START"))
+    expect_state(client, "START", "SCENARIO_STATE_PLAYING")
+    # A stop right after a completed run used to read COMPLETED.
+    step("STOP", control("STOP"))
+    expect_state(client, "STOP", "SCENARIO_STATE_STOPPED")
     print(f"  ...   {status_line(client)}")
 
 
