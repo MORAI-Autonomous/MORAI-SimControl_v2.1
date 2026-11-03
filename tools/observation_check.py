@@ -115,7 +115,6 @@ def main() -> int:
 
             look = {"point": {"x": px, "y": py, "z": pz}, "distance_m": 30.0, "yaw_deg": 90.0, "pitch_deg": 30.0}
             step("look_at the point from 30 m, yaw 90, pitch 30", lambda: client.call("SetViewpoint", look_at=look))
-            time.sleep(0.2)
             la = step("GetViewpoint after look_at", view)
             if la is not None:
                 print(f"  SEEN {shown_view(la)}")
@@ -129,6 +128,7 @@ def main() -> int:
         step("look_at distance 0", lambda: client.call(
             "SetViewpoint", look_at={"point": {"x": 0, "y": 0, "z": 0}, "distance_m": 0.0}), "OUT_OF_RANGE")
         step("SetViewpoint with nothing", lambda: client.call("SetViewpoint"), "MISSING_FIELD")
+        step("SetScenarioMode EDIT", lambda: client.call("SetScenarioMode", mode="SCENARIO_MODE_EDIT"))
         step("follow while editing", lambda: client.call("SetViewpoint", follow={"entity_id": args.vehicle or "Car_1"}),
              "WRONG_MODE")
 
@@ -161,7 +161,6 @@ def main() -> int:
                 print("[5] Follow while playing")
                 step(f"follow {args.vehicle}", lambda: client.call(
                     "SetViewpoint", follow={"entity_id": args.vehicle, "mode": "VIEWPOINT_MODE_FOCUS"}))
-                time.sleep(0.5)
                 f = step("GetViewpoint while following", view)
                 if f is not None:
                     print(f"  SEEN {shown_view(f)}")
