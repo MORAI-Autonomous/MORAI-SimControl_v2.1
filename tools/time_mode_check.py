@@ -2,7 +2,8 @@ from __future__ import annotations
 
 """Time mode API (0x01020001-3) check against a running, logged-in simulator with a scenario open.
 
-Reads the setting; checks the refusals of SetTimeMode (OUT_OF_RANGE, BUSY while running) and of
+Reads the setting; checks the target_rtf presets and the refusals of SetTimeMode (OUT_OF_RANGE, BUSY
+while running) and of
 StepSimulation (NOT_RUNNING, WRONG_MODE, OUT_OF_RANGE); runs FIXED with client stepping and checks
 that each StepSimulation answer moves step_index and sim_time by exactly the steps asked for.
 The setting ends as it was; the scenario is started and stopped twice.
@@ -78,6 +79,17 @@ def main() -> int:
         step("SetTimeMode target_fps 5", set_mode(dict(original, target_fps=5)), "OUT_OF_RANGE")
         step("SetTimeMode physics_delta_time_ms 0", set_mode(dict(original, physics_delta_time_ms=0)), "OUT_OF_RANGE")
         step("SetTimeMode mode UNSPECIFIED", set_mode(dict(original, mode="TIME_MODE_UNSPECIFIED")), "OUT_OF_RANGE")
+        fixed = {"mode": "TIME_MODE_FIXED", "target_fps": 50, "physics_delta_time_ms": 10}
+        for rtf in (0, 1, 2, 4, 8):
+            got_rtf = (step(f"SetTimeMode FIXED target_rtf {rtf}", set_mode(dict(fixed, target_rtf=rtf))) or {}) \
+                .get("config", {}).get("target_rtf", 0)  # proto3 leaves 0 out
+            # Until MSVM-3077 every factor above 1 is stored, and read back, as unlimited (0).
+            check(f"target_rtf {rtf} reads back as {0 if rtf != 1 else 1}", got_rtf == (0 if rtf != 1 else 1),
+                  f"got {got_rtf}")
+        for rtf in (0.25, 0.5, 3, 20):
+            step(f"SetTimeMode FIXED target_rtf {rtf}", set_mode(dict(fixed, target_rtf=rtf)), "OUT_OF_RANGE")
+        step("target_rtf 3 ignored with client_stepping",
+             set_mode(dict(fixed, target_rtf=3, client_stepping=True)))
         step("StepSimulation while stopped", do_step(1), "NOT_RUNNING")
 
         print(f"[3] FIXED with client stepping, {args.fps} fps")
