@@ -3,14 +3,14 @@ from __future__ import annotations
 """ManualControl (0x01040009) check against a running, logged-in simulator with a scenario open.
 
 Checks the refusals (MISSING_FIELD, OUT_OF_RANGE, NOT_RUNNING, ENTITY_NOT_FOUND, WRONG_MODE for a
-kinematic vehicle), then drives a temporary DYNAMICS vehicle: throttle until it moves, steer left
+kinematic vehicle, and for a vehicle the scenario's agent drives when --agent-vehicle names one), then drives a temporary DYNAMICS vehicle: throttle until it moves, steer left
 until it turns left (yaw grows), brake until it stops. The vehicles are temporary (created while
 playing) and gone after the stop; nothing is saved.
 
     python tools/manual_control_check.py --vehicle gv_car_hdioniq5_2023 --x 250 --y -300
 
 Pick a free, straight, flat stretch of road for --x/--y (map frame metres) with room to drive about
-30 m east.
+30 m east. --agent-vehicle: a DYNAMICS vehicle of the open scenario with its agent on (Preset On).
 """
 
 import argparse
@@ -71,6 +71,7 @@ def main() -> int:
     ap.add_argument("--vehicle", required=True, help="vehicle model name with both driving modes")
     ap.add_argument("--x", type=float, required=True, help="free road, map x (m)")
     ap.add_argument("--y", type=float, required=True, help="free road, map y (m)")
+    ap.add_argument("--agent-vehicle", help="scenario vehicle driven by its agent (DYNAMICS, Preset On)")
     ap.add_argument("--timeout", type=float, default=310.0)
     args = ap.parse_args()
 
@@ -100,6 +101,8 @@ def main() -> int:
         print("[3] Refusals while running")
         step("ManualControl unknown entity", drive("mc_nobody", t=0.5), "ENTITY_NOT_FOUND")
         step("ManualControl kinematic vehicle", drive("mc_kin", t=0.5), "WRONG_MODE")
+        if args.agent_vehicle:
+            step(f"ManualControl agent-driven {args.agent_vehicle}", drive(args.agent_vehicle, t=0.5), "WRONG_MODE")
 
         print("[4] Drive mc_dyn")
         start = state(client, "mc_dyn")
