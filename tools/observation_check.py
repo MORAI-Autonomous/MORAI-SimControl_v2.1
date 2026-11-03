@@ -55,6 +55,17 @@ def xyz(v: dict) -> tuple[float, float, float]:
     return v.get("x", 0.0), v.get("y", 0.0), v.get("z", 0.0)
 
 
+def off_ray(origin: dict, through: dict, point: dict) -> float:
+    """Distance of point from the ray origin -> through, in metres."""
+    o, t, p = xyz(origin), xyz(through), xyz(point)
+    d = [t[i] - o[i] for i in range(3)]
+    n = math.sqrt(sum(c * c for c in d)) or 1.0
+    d = [c / n for c in d]
+    v = [p[i] - o[i] for i in range(3)]
+    along = sum(v[i] * d[i] for i in range(3))
+    return math.sqrt(max(sum(c * c for c in v) - along * along, 0.0))
+
+
 def dist2d(a: dict, b: dict) -> float:
     (ax, ay, _), (bx, by, _) = xyz(a), xyz(b)
     return math.hypot(ax - bx, ay - by)
@@ -123,8 +134,9 @@ def main() -> int:
                 check("camera pitch looks down 30", abs(abs(rot.get("y", 0.0)) - 30.0) < 2.0, f"{rot.get('y', 0.0):.1f}")
                 lc = la.get("center", {})
                 if lc.get("hit"):
-                    check("center near the point", dist2d(lc.get("location", {}), center["location"]) < 2.0,
-                          f"{dist2d(lc.get('location', {}), center['location']):.2f} m")
+                    # Something between the camera and the point (a vehicle) may be hit first: check the ray.
+                    off = off_ray(la["camera"]["location"], lc.get("location", {}), center["location"])
+                    check("the point lies on the center ray", off < 0.5, f"{off:.2f} m off")
         step("look_at distance 0", lambda: client.call(
             "SetViewpoint", look_at={"point": {"x": 0, "y": 0, "z": 0}, "distance_m": 0.0}), "OUT_OF_RANGE")
         step("SetViewpoint with nothing", lambda: client.call("SetViewpoint"), "MISSING_FIELD")
