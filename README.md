@@ -1,8 +1,8 @@
 # MORAI Interface Console
 
-[![TCP API Check](https://github.com/MORAI-Autonomous/MORAI-SimControl_v2.1/actions/workflows/tcp-api-check.yml/badge.svg)](https://github.com/MORAI-Autonomous/MORAI-SimControl_v2.1/actions/workflows/tcp-api-check.yml)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
 MORAI Interface Console is a Python GUI application for exercising, monitoring,
 and validating MORAI Simulator interfaces. It is intended for both MORAI
@@ -90,7 +90,9 @@ names, `bytes` fields (images) as base64.
 `GetApiInfo` lists what the running simulator build supports; do not hard-code the
 list above.
 
-The specification lives in the simulator repository (interfaceplugins):
+The specification lives in the simulator repository (interfaceplugins). These
+links are for MORAI developers; customers can ask their MORAI contact for the
+specification.
 
 - [`Docs/AutomationApi.md`](https://gitlab.morai.ai/sim-v2/interfaceplugins/-/blob/main/Docs/AutomationApi.md):
   transport, states and modes, units and coordinate frames, entities, settings,
@@ -205,7 +207,7 @@ config/                          Local runtime state
 
 ## Validation
 
-Offline, no simulator needed (CI runs the legacy TCP doc and payload checks):
+Offline, no simulator needed:
 
 ```bash
 python tools/gen_tcp_docs.py --check
