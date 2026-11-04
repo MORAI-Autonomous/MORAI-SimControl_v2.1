@@ -71,8 +71,11 @@ def main() -> int:
         saved = source_of(args.ego)
         print(f"  saved control source {saved}")
         check("EGO saved as MANUAL or EXTERNAL_AD", saved in (MANUAL, EXTERNAL), str(saved))
-        step("SetScenarioMode PLAY", lambda: client.call("SetScenarioMode", mode="SCENARIO_MODE_PLAY"))
-        step("ControlScenario START", control("START"))
+        if client.call("GetSimulatorSummary").get("scenario_state") == "SCENARIO_STATE_PLAYING":
+            print("  already running: skip START (the saved control source above may be this run's)")
+        else:
+            step("SetScenarioMode PLAY", lambda: client.call("SetScenarioMode", mode="SCENARIO_MODE_PLAY"))
+            step("ControlScenario START", control("START"))
         time.sleep(1.0)
         if source_of(args.ego) != EXTERNAL:
             step("switch to EXTERNAL_AD", switch(args.ego, EXTERNAL))
