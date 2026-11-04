@@ -2,15 +2,18 @@ from __future__ import annotations
 
 """ManualControl (0x01040009) check against a running, logged-in simulator with a scenario open.
 
-Checks the refusals (MISSING_FIELD, OUT_OF_RANGE, NOT_RUNNING, ENTITY_NOT_FOUND, WRONG_MODE for a
-kinematic vehicle, and for a vehicle the scenario's agent drives when --agent-vehicle names one), then drives a temporary DYNAMICS vehicle: throttle until it moves, steer left
-until it turns left (yaw grows), brake until it stops. The vehicles are temporary (created while
+Checks the control source (VehicleConfig.control_source: a new vehicle has NONE, MANUAL is EGO
+only, it cannot change while playing) and the refusals (MISSING_FIELD, OUT_OF_RANGE, NOT_RUNNING,
+ENTITY_NOT_FOUND, WRONG_MODE for a kinematic vehicle and for one not driven from outside), then
+drives a temporary DYNAMICS EXTERNAL_AD vehicle: throttle until it moves, steer left until it turns
+left (yaw grows), brake until it stops. The vehicles are temporary (created while
 playing) and gone after the stop; nothing is saved.
 
     python tools/manual_control_check.py --vehicle gv_car_hdioniq5_2023 --x 250 --y -300
 
 Pick a free, straight, flat stretch of road for --x/--y (map frame metres) with room to drive about
-30 m east. --agent-vehicle: a DYNAMICS vehicle of the open scenario with its agent on (Preset On).
+30 m east. --other-vehicle: a vehicle of the open scenario whose control source is not EXTERNAL_AD
+(e.g. an NPC driven by its agent).
 """
 
 import argparse
@@ -71,7 +74,7 @@ def main() -> int:
     ap.add_argument("--vehicle", required=True, help="vehicle model name with both driving modes")
     ap.add_argument("--x", type=float, required=True, help="free road, map x (m)")
     ap.add_argument("--y", type=float, required=True, help="free road, map y (m)")
-    ap.add_argument("--agent-vehicle", help="scenario vehicle driven by its agent (DYNAMICS, Preset On)")
+    ap.add_argument("--other-vehicle", help="scenario vehicle whose control source is not EXTERNAL_AD")
     ap.add_argument("--timeout", type=float, default=310.0)
     args = ap.parse_args()
 
@@ -90,19 +93,28 @@ def main() -> int:
 
         print("[2] Temporary vehicles facing east, then START")
         pose = lambda dy: {"location": {"x": args.x, "y": args.y + dy}, "rotation": {"z": 0.0}}
-        step("CreateEntity mc_dyn (DYNAMICS)", lambda: client.call(
-            "CreateEntity", entity_id="mc_dyn", model_name=args.vehicle, initial_transform=pose(0),
-            vehicle_config={"driving_mode": "VEHICLE_DRIVING_MODE_DYNAMICS"}))
-        step("CreateEntity mc_kin (KINEMATICS)", lambda: client.call(
-            "CreateEntity", entity_id="mc_kin", model_name=args.vehicle, initial_transform=pose(10),
-            vehicle_config={"driving_mode": "VEHICLE_DRIVING_MODE_KINEMATICS"}))
+        create = lambda name, dy, config: (lambda: client.call(
+            "CreateEntity", entity_id=name, model_name=args.vehicle, initial_transform=pose(dy), vehicle_config=config))
+        dyn, kin = "VEHICLE_DRIVING_MODE_DYNAMICS", "VEHICLE_DRIVING_MODE_KINEMATICS"
+        ext = "VEHICLE_CONTROL_SOURCE_EXTERNAL_AD"
+        step("CreateEntity MANUAL for an NPC", create("mc_manual", -20, {
+            "driving_mode": dyn, "control_source": "VEHICLE_CONTROL_SOURCE_MANUAL"}), "OUT_OF_RANGE")
+        step("CreateEntity mc_dyn (DYNAMICS, EXTERNAL_AD)", create("mc_dyn", 0, {"driving_mode": dyn, "control_source": ext}))
+        step("CreateEntity mc_kin (KINEMATICS, EXTERNAL_AD)", create("mc_kin", 10, {"driving_mode": kin, "control_source": ext}))
+        step("CreateEntity mc_none (DYNAMICS, no control source)", create("mc_none", -10, {"driving_mode": dyn}))
         step("ControlScenario START", control("START"))
 
-        print("[3] Refusals while running")
+        print("[3] Control source and refusals while running")
+        for name, want in (("mc_dyn", ext), ("mc_none", "VEHICLE_CONTROL_SOURCE_NONE")):
+            got = client.call("GetEntitySettings", entity_id=name).get("vehicle_config", {}).get("control_source")
+            check(f"{name} control source", got == want, f"{got}")
+        step("SetEntitySettings control source while playing", lambda: client.call(
+            "SetEntitySettings", entity_id="mc_none", vehicle_config={"control_source": ext}), "WRONG_MODE")
         step("ManualControl unknown entity", drive("mc_nobody", t=0.5), "ENTITY_NOT_FOUND")
         step("ManualControl kinematic vehicle", drive("mc_kin", t=0.5), "WRONG_MODE")
-        if args.agent_vehicle:
-            step(f"ManualControl agent-driven {args.agent_vehicle}", drive(args.agent_vehicle, t=0.5), "WRONG_MODE")
+        step("ManualControl vehicle with no control source", drive("mc_none", t=0.5), "WRONG_MODE")
+        if args.other_vehicle:
+            step(f"ManualControl {args.other_vehicle} (not EXTERNAL_AD)", drive(args.other_vehicle, t=0.5), "WRONG_MODE")
 
         print("[4] Drive mc_dyn")
         start = state(client, "mc_dyn")
