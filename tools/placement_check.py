@@ -55,6 +55,10 @@ def xy(v: dict) -> tuple[float, float]:
     return v.get("x", 0.0), v.get("y", 0.0)
 
 
+def dist(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
 def shown(p: dict) -> str:
     loc, rot = p.get("pose", {}).get("location", {}), p.get("pose", {}).get("rotation", {})
     return (f"({loc.get('x', 0):.1f}, {loc.get('y', 0):.1f}, {loc.get('z', 0):.2f}) yaw {rot.get('z', 0):.1f}  "
@@ -113,7 +117,8 @@ def main() -> int:
         one = step("in_view lane 1", find(in_view={"lane_number": 1}))
         on_lane(client, "in_view lane 1", one)
         if one is not None:
-            check("lane 1, outside junctions when there is one", one.get("lane_number") == 1, str(one.get("lane_number")))
+            check("lane 1, outside junctions", one.get("lane_number") == 1 and not one.get("junction_id"),
+                  f"lane {one.get('lane_number')} {one.get('junction_id', '') or 'outside'}")
 
         print("[2] Latitude and longitude")
         origin = client.call("GetSimulatorSummary").get("map_origin", {})
@@ -123,7 +128,7 @@ def main() -> int:
                 "point": {"geographic": {"latitude": geo["latitude"], "longitude": geo["longitude"]}}}), None)
             m = step("near_point at the map origin (0, 0)", find(near_point={"point": {"location": {"x": 0, "y": 0, "z": 0}}}))
             if g is not None and m is not None:
-                dg = math.dist(xy(g["pose"]["location"]), xy(m["pose"]["location"]))
+                dg = dist(xy(g["pose"]["location"]), xy(m["pose"]["location"]))
                 check("both give the same place", dg < 1.0, f"{dg:.2f} m apart")
         else:
             print("  map origin has no latitude / longitude: skipped")
@@ -135,13 +140,15 @@ def main() -> int:
         if r1 is not None and r2 is not None:
             check("same seed, same place", r1["pose"] == r2["pose"])
             check("outside junctions", not r1.get("junction_id"))
+            rd = dist(xy(r1["pose"]["location"]), xy(at))
+            check("within the default 100 m of the view's middle", rd <= 100.0, f"{rd:.1f} m")
 
         print("[4] Nearest junction")
         j = step("near_junction", find(near_junction={"point": {"location": at}}))
         if j is not None:
             print(f"  SEEN {shown(j)}")
             jc = j.get("junction", {})
-            dj = math.dist(xy(j["pose"]["location"]), xy(jc.get("center", {})))
+            dj = dist(xy(j["pose"]["location"]), xy(jc.get("center", {})))
             check("pose at the junction's middle", bool(jc.get("junction_id")) and dj < 0.01, f"{jc.get('junction_id')} {dj:.2f} m")
 
         if args.entity:
@@ -150,7 +157,7 @@ def main() -> int:
             ahead = step("10 m ahead", find(relative={"entity_id": args.entity, "ahead_m": 10}))
             on_lane(client, "ahead", ahead)
             if ahead is not None:
-                d = math.dist(xy(here), xy(ahead["pose"]["location"]))
+                d = dist(xy(here), xy(ahead["pose"]["location"]))
                 check("about 10 m away (straight line, so a bend shortens it)", 7.0 < d < 10.5, f"{d:.1f} m")
                 check("the entity itself not counted as nearest", ahead.get("nearest_entity_id") != args.entity)
             behind = step("10 m behind", find(relative={"entity_id": args.entity, "ahead_m": -10}))
