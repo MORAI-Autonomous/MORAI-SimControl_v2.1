@@ -149,7 +149,10 @@ def main() -> int:
             print(f"  SEEN {shown(j)}")
             jc = j.get("junction", {})
             dj = dist(xy(j["pose"]["location"]), xy(jc.get("center", {})))
-            check("pose at the junction's middle", bool(jc.get("junction_id")) and dj < 0.01, f"{jc.get('junction_id')} {dj:.2f} m")
+            check("on a lane of that junction, near its middle",
+                  bool(jc.get("junction_id")) and j.get("junction_id") == jc.get("junction_id") and dj < 5.0,
+                  f"{jc.get('junction_id')} {dj:.2f} m from the middle")
+            on_lane(client, "near_junction", j)
 
         if args.entity:
             print(f"[5] From {args.entity}")
