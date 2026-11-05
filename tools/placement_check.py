@@ -154,6 +154,8 @@ def main() -> int:
         if args.entity:
             print(f"[5] From {args.entity}")
             here = client.call("GetEntityState", entity_id=args.entity)["transform"]["location"]
+            own = step("its own lane (ahead 0)", find(relative={"entity_id": args.entity}))
+            on_lane(client, "own", own)
             ahead = step("10 m ahead", find(relative={"entity_id": args.entity, "ahead_m": 10}))
             on_lane(client, "ahead", ahead)
             if ahead is not None:
@@ -164,14 +166,14 @@ def main() -> int:
             on_lane(client, "behind", behind)
             for side, name in ((-1, "left"), (1, "right")):
                 # The 1st lane has no lane on its left (the center line); the outermost none on its right
-                none_left = side < 0 and ahead is not None and ahead.get("lane_number") == 1
+                none_left = side < 0 and own is not None and own.get("lane_number") == 1
                 b = step(f"lane on the {name}", find(relative={"entity_id": args.entity, "lane_offset": side}),
                          "PLACEMENT_NOT_FOUND" if none_left else None)
                 if b is not None and b:
                     on_lane(client, name, b)
-                    if ahead is not None:
-                        check(f"{name} lane number", b.get("lane_number") == ahead.get("lane_number") + side,
-                              f"{ahead.get('lane_number')} -> {b.get('lane_number')}")
+                    if own is not None:
+                        check(f"{name} lane number", b.get("lane_number") == own.get("lane_number") + side,
+                              f"{own.get('lane_number')} -> {b.get('lane_number')}")
 
         print("[6] Refusals")
         step("no mode", find(), "MISSING_FIELD")
