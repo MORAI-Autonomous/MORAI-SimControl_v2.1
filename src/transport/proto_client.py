@@ -169,23 +169,24 @@ class ProtoClient:
 
     # ---- calls --------------------------------------------------------------
 
-    def call(self, name: str, **fields: Any) -> Dict[str, Any]:
-        """Calls a Proto opcode by name. Fields use the .proto field names; the response comes back
-        as a dict with the same names. A void response returns {}."""
-        op = self._proto_op(name)
+    def call(self, op_name: str, **fields: Any) -> Dict[str, Any]:
+        """Calls a Proto opcode by name (op_name, so a request field may be called name). Fields use the
+        .proto field names; the response comes back as a dict with the same names. A void response
+        returns {}."""
+        op = self._proto_op(op_name)
         request = json_format.ParseDict(fields, self.message_class(op["request_type"])())
-        payload = self.request(op["opcode"], request.SerializeToString(), name)
+        payload = self.request(op["opcode"], request.SerializeToString(), op_name)
         return self._response_dict(op, payload)
 
-    def send(self, name: str, **fields: Any) -> int:
+    def send(self, op_name: str, **fields: Any) -> int:
         """Sends a Proto request without waiting for its answer and returns its request_id; read the
         answers with receive(). The simulator answers each request when it finishes, so the answers
         can come back in another order. Do not call() while answers are pending: call() skips the
         responses that are not its own."""
-        op = self._proto_op(name)
+        op = self._proto_op(op_name)
         request = json_format.ParseDict(fields, self.message_class(op["request_type"])())
         request_id = self._send_frame(op["opcode"], request.SerializeToString())
-        self._pending[request_id] = name
+        self._pending[request_id] = op_name
         return request_id
 
     def receive(self, timeout: Optional[float] = None) -> Optional[ProtoReply]:
