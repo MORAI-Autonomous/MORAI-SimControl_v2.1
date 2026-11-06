@@ -105,6 +105,8 @@ def main() -> int:
                 else:
                     check("a topic was chosen", n.get("topic", "").startswith("/morai/"), n.get("topic", ""))
                 check("60 Hz by default", n.get("hz") == 60)
+                if not linked and any(t.endswith("Entity") for t in tpl.get("data_types", [])):
+                    check("warns that no entity is linked", any("No entity is linked" in w for w in r.get("warnings", [])), str(r.get("warnings")))
 
         if args.entity:
             tpl = first("NETWORK_PROTOCOL_UDP", "NETWORK_DIRECTION_RECEIVE")
