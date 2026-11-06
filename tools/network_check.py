@@ -69,7 +69,7 @@ def main() -> int:
 
     with ProtoClient(args.ip, args.port, timeout=args.timeout) as client:
         client.load_schema()
-        call = lambda name, **kw: (lambda: client.call(name, **kw))
+        call = lambda op, **kw: (lambda: client.call(op, **kw))
         made = []
 
         print("[1] Templates")
