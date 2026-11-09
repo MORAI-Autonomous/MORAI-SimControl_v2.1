@@ -32,3 +32,6 @@ prototypes
 
 # generated viewport icon
 assets/logo_console.ico
+
+# Measurement results (rtf_check, determinism_check); they differ per PC
+/measurements/
