@@ -81,7 +81,7 @@ def main() -> int:
     ap.add_argument("--rtf", type=float, nargs="+", default=[0.25, 0.5, 1, 2, 4, 0])
     ap.add_argument("--seconds", type=float, default=10.0, help="real seconds measured per case")
     ap.add_argument("--warmup", type=float, default=2.0, help="real seconds before measuring")
-    ap.add_argument("--out", help="also write the table to this Markdown file")
+    ap.add_argument("--out", help="also write the table to this Markdown file (a bare name goes to measurements/rtf/)")
     ap.add_argument("--label", default="", help="a title for the table (build, map)")
     args = ap.parse_args()
 
@@ -116,8 +116,13 @@ def main() -> int:
     print()
     print(chr(10).join(lines))
     if args.out:
-        Path(args.out).write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
-        print(f"written to {args.out}")
+        out = Path(args.out)
+        if out.parent == Path("."):
+            # A bare file name goes to measurements/rtf/ (git-ignored: results differ per PC)
+            out = Path(__file__).resolve().parents[1] / "measurements" / "rtf" / out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+        print(f"written to {out}")
     return 0
 
 

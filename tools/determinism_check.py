@@ -175,7 +175,7 @@ def main() -> int:
     # folder when the editor is launched from the engine
     ap.add_argument("--log-root", nargs="+", default=[r"D:\Dev\clone_morai_world_ue5.8\SimulationLogs",
                                                      r"C:\Program Files\Epic Games\UE_5.8\SimulationLogs"])
-    ap.add_argument("--out", help="also write the tables to this Markdown file")
+    ap.add_argument("--out", help="also write the tables to this Markdown file (a bare name goes to measurements/determinism/)")
     ap.add_argument("--label", default="")
     args = ap.parse_args()
     if args.mode == "variable" or args.stepped:
@@ -208,6 +208,9 @@ def main() -> int:
         if kind == "pdt":
             n = math.ceil(tick_ms / value - 1e-9)
             return f"PDT {value} ms ({n} x {tick_ms / n:.3f} ms)"
+        if value == 0:
+            n = math.ceil(tick_ms / 10 - 1e-9)  # automatic: steps of 10 ms at most
+            return f"auto ({n} x {tick_ms / n:.3f} ms)"
         return f"{value} substeps ({tick_ms / value:.3f} ms)"
 
     def rtf_name(rtf):
@@ -245,8 +248,13 @@ def main() -> int:
     print()
     print(chr(10).join(lines))
     if args.out:
-        Path(args.out).write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
-        print(f"written to {args.out}")
+        out = Path(args.out)
+        if out.parent == Path("."):
+            # A bare file name goes to measurements/determinism/ (git-ignored: results differ per PC)
+            out = Path(__file__).resolve().parents[1] / "measurements" / "determinism" / out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+        print(f"written to {out}")
     return 0
 
 

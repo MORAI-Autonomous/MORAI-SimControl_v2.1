@@ -124,6 +124,11 @@ of each script says what it needs (logged in, a map open, the editing mode, ...)
 | `observation_check.py` | Viewpoint, `ScreenToWorld`, captures, camera images | `python tools/observation_check.py --vehicle Car_1 --camera Camera_1` |
 | `road_info_check.py` | Lanes and junctions around a point, lane connections | `python tools/road_info_check.py` |
 | `legacy_regression.py` | The 21 legacy TCP opcodes | `python tools/legacy_regression.py` |
+| `rtf_check.py` | Real-time factor reached per target FPS and factor | `python tools/rtf_check.py --fps 20 25 --rtf 1 2 0 --out <name>.md` |
+| `determinism_check.py` | Repeated runs compared bit for bit (statelogs) | `python tools/determinism_check.py --vehicles Car_1 Car_2 --repeat 2 --out <name>.md` |
+
+`rtf_check.py` and `determinism_check.py` measure, so their results depend on the PC. Given a bare
+file name, `--out` writes to `measurements/rtf/` or `measurements/determinism/`, which git ignores.
 
 `entity_pose_check.py` (`--vehicle <model> --x <x> --y <y>`) does not judge: it
 prints how the simulator applies a given pose (`SEEN` lines), for the specification.
