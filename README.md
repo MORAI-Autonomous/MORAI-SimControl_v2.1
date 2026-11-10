@@ -126,6 +126,7 @@ of each script says what it needs (logged in, a map open, the editing mode, ...)
 | `legacy_regression.py` | The 21 legacy TCP opcodes | `python tools/legacy_regression.py` |
 | `rtf_check.py` | Real-time factor reached per target FPS and factor | `python tools/rtf_check.py --fps 20 25 --rtf 1 2 0 --out <name>.md` |
 | `determinism_check.py` | Repeated runs compared bit for bit (statelogs) | `python tools/determinism_check.py --vehicles Car_1 Car_2 --repeat 2 --out <name>.md` |
+| `h264_check.py` | H.264 camera output (Camera H264 template over UDP), decoded with PyAV | `python tools/h264_check.py --port <port> --show` |
 
 `rtf_check.py` and `determinism_check.py` measure, so their results depend on the PC. Given a bare
 file name, `--out` writes to `measurements/rtf/` or `measurements/determinism/`, which git ignores.
