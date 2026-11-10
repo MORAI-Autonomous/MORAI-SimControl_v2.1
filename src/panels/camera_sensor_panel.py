@@ -17,6 +17,7 @@ from receivers.camera_bbox_receiver import (
     draw_bbox_3d_canvas,
 )
 from receivers.camera_depth_receiver import CameraDepthReceiver
+from receivers.camera_h264_receiver import CameraH264Receiver
 from receivers.camera_receiver import CameraReceiver
 from receivers.camera_semantic_receiver import CameraSemanticReceiver
 from receivers.camera_sensor_receiver import CameraSensorReceiver, draw_bbox_overlays
@@ -44,8 +45,9 @@ _TPL_INSTANCE = "Instance Cam.tmpl"
 _TPL_RGB_BBOX = "Camera With 2D_3D Bounding Box.tmpl"
 _TPL_BBOX_2D = "Camera Bounding Box 2D.tmpl"
 _TPL_BBOX_3D = "Camera Bounding Box 3D.tmpl"
+_TPL_H264 = "Camera H264.tmpl"
 _TEMPLATE_ITEMS = [
-    _TPL_RGB, _TPL_DEPTH, _TPL_SEMANTIC, _TPL_INSTANCE, _TPL_RGB_BBOX, _TPL_BBOX_2D, _TPL_BBOX_3D,
+    _TPL_RGB, _TPL_DEPTH, _TPL_SEMANTIC, _TPL_INSTANCE, _TPL_RGB_BBOX, _TPL_BBOX_2D, _TPL_BBOX_3D, _TPL_H264,
 ]
 _DEPTH_VIEW_SIMULATOR = "Simulator"
 _DEPTH_VIEW_GRAYSCALE = "Grayscale"
@@ -292,6 +294,13 @@ def _start_slot(slot: int) -> None:
             port=port,
             on_packet=lambda packet, s=slot: _on_instance_packet(s, packet),
         )
+    elif template_name == _TPL_H264:
+        state.receiver_kind = "h264"
+        state.receiver = CameraH264Receiver(
+            ip=ip,
+            port=port,
+            on_frame=lambda frame, info, s=slot: _on_h264_frame(s, frame, info),
+        )
     elif template_name in (_TPL_BBOX_2D, _TPL_BBOX_3D):
         mode = "2d" if template_name == _TPL_BBOX_2D else "3d"
         state.receiver_kind = f"bbox{mode}"
@@ -381,6 +390,36 @@ def _on_rgb_frame(slot: int, frame: np.ndarray) -> None:
         fps=fps,
         type_text="RGB",
         info_text="Raw RGB",
+        rx_t=now,
+    )
+
+
+def _on_h264_frame(slot: int, frame: np.ndarray, info: dict) -> None:
+    state = _slots[slot]
+    now = time.monotonic()
+    state.last_rx_t = now
+    if now - state.last_frame_t < _FRAME_INTERVAL:
+        return
+    state.last_frame_t = now
+
+    src_h, src_w = frame.shape[:2]
+    fps = float(state.receiver.fps if state.receiver is not None else 0.0)
+    if now - state.last_debug_log_t >= 1.0:
+        state.last_debug_log_t = now
+        log.append(
+            f"[CameraSensor:{slot + 1}][H264] frame={src_w}x{src_h} fps={fps:.1f} "
+            f"{info['mbps']:.2f}Mbps key={info['keyframes']} gaps={info['gaps']} "
+            f"errors={info['decode_errors']}",
+            "INFO",
+        )
+    _render_slot_image(
+        slot=slot,
+        display_bgr=frame,
+        src_w=src_w,
+        src_h=src_h,
+        fps=fps,
+        type_text="H.264",
+        info_text=f"#{info['frame_index']} {info['mbps']:.1f} Mbps, gaps {info['gaps']}",
         rx_t=now,
     )
 
@@ -664,6 +703,8 @@ def _receiver_type_text(kind: str) -> str:
         return "Semantic"
     if kind == "instance":
         return "Instance"
+    if kind == "h264":
+        return "H.264"
     return "-"
 
 
