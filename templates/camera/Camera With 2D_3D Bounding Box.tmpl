@@ -13,8 +13,8 @@
                     { "name": "camera_id", "relationName": "CameraEntity", "variableName": "id", "variableType": "STRING", "length": 64 },
                     { "name": "timestamp_seconds", "relationName": "CameraEntity", "variableName": "time_stamp.seconds", "variableType": "INT64" },
                     { "name": "timestamp_nanos", "relationName": "CameraEntity", "variableName": "time_stamp.nanos", "variableType": "INT32" },
-                    { "name": "image size", "relationName": "CameraEntity", "variableName": "camera_attributes.camera_sensor_data.image_size", "variableType": "INT32" },
-                    { "name": "image datas", "relationName": "CameraEntity", "variableName": "camera_attributes.camera_sensor_data.image_data", "variableType": "BYTES", "fieldOutputFormat": "JPG" }
+                    { "name": "image size", "relationName": "CameraEntity", "variableName": "camera_attributes.compressed.image_size", "variableType": "INT32" },
+                    { "name": "image datas", "relationName": "CameraEntity", "variableName": "camera_attributes.compressed.image_data", "variableType": "BYTES", "fieldOutputFormat": "JPG" }
                 ]
             },
             {

@@ -12,7 +12,8 @@ _CHUNK_HEADER_FMT = "<IHH"
 _CHUNK_HEADER_SIZE = struct.calcsize(_CHUNK_HEADER_FMT)
 _RECV_BUF = 65535
 _ASSEMBLY_TIMEOUT = 5.0
-_DEPTH_HEADER_FMT = "<ii5s?iI"
+# width/height are FLOAT in the "Camera Depth" template (camera_attributes.size.x/y)
+_DEPTH_HEADER_FMT = "<ff5s?iI"
 _DEPTH_HEADER_SIZE = struct.calcsize(_DEPTH_HEADER_FMT)
 _DEPTH_SCALE_M = 200.0 / 255.0
 
@@ -188,8 +189,8 @@ class CameraDepthReceiver(threading.Thread):
             self._debug(f"header unpack failed: {e}", key="unpack", interval_sec=1.0)
             return None
 
-        width = int(width_i)
-        height = int(height_i)
+        width = int(round(width_i))
+        height = int(round(height_i))
         encoding = encoding_raw.split(b"\x00", 1)[0].decode("ascii", errors="ignore")
 
         if width <= 0 or height <= 0:

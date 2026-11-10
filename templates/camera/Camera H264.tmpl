@@ -1,0 +1,62 @@
+{
+  "version": "1.0.0-alpha",
+  "messageTemplate": {
+    "name": "Camera H264",
+    "isControl": false,
+    "isSensor": true,
+    "description": "One H.264 access unit per frame (Annex-B, SPS/PPS on keyframes). Decode from a keyframe; a gap in frame index means lost frames - wait for the next keyframe.",
+    "segmentList": [
+      {
+        "type": "FIELDS",
+        "relationName": "CameraEntity",
+        "fieldList": [
+          {
+            "name": "is keyframe",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.h264.is_keyframe",
+            "variableType": "BOOL",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "frame index",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.h264.frame_index",
+            "variableType": "UINT64",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "width",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.h264.image_size.x",
+            "variableType": "UINT32",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "height",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.h264.image_size.y",
+            "variableType": "UINT32",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          },
+          {
+            "name": "access unit",
+            "relationName": "CameraEntity",
+            "variableName": "camera_attributes.h264.data",
+            "variableType": "BYTES",
+            "length": 0,
+            "defaultValue": "",
+            "equation": ""
+          }
+        ]
+      }
+    ]
+  }
+}
