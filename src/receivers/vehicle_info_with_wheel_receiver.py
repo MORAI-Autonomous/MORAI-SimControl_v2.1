@@ -17,6 +17,12 @@ VEHICLE_INFO_PORT = 9091
 VEHICLE_INFO_FMT = "<qi24s18f"
 VEHICLE_INFO_SIZE = struct.calcsize(VEHICLE_INFO_FMT)  # 108 bytes
 
+# Vehicle state after the 18 floats (MSVM-3121): int32 control_model, int32 control_source
+CONTROL_FMT = "<ii"
+CONTROL_SIZE = struct.calcsize(CONTROL_FMT)  # 8 bytes
+CONTROL_MODEL_NAMES = {0: "UNSPECIFIED", 1: "KINEMATICS", 2: "DYNAMICS"}
+CONTROL_SOURCE_NAMES = {0: "UNSPECIFIED", 1: "NONE", 2: "INTERNAL_AI", 3: "MANUAL", 4: "EXTERNAL_AD"}
+
 # Extra tail payload:
 # int32 wheel_count, then wheel_count * (float32 x,y,z)
 WHEEL_COUNT_FMT = "<i"
@@ -67,8 +73,13 @@ def parse_vehicle_info_payload(data: bytes):
         "raw_size": len(data),
     }
 
+    if len(data) >= VEHICLE_INFO_SIZE + CONTROL_SIZE:
+        model, source = struct.unpack_from(CONTROL_FMT, data, VEHICLE_INFO_SIZE)
+        out["control_model"] = CONTROL_MODEL_NAMES.get(model, model)
+        out["control_source"] = CONTROL_SOURCE_NAMES.get(source, source)
+
     # 3) wheel tail이 없을 수도 있으니, 남은 바이트 체크
-    offset = VEHICLE_INFO_SIZE
+    offset = VEHICLE_INFO_SIZE + CONTROL_SIZE  # wheels follow the control fields
     if len(data) < offset + WHEEL_COUNT_SIZE:
         # wheel 정보가 없는 패킷으로 간주 (기존 호환)
         return out

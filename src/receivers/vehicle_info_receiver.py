@@ -17,6 +17,12 @@ VEHICLE_INFO_PORT = 9097
 VEHICLE_INFO_FMT = "<qi24s18f"
 VEHICLE_INFO_SIZE = struct.calcsize(VEHICLE_INFO_FMT)  # 108 bytes
 
+# Vehicle state after the 18 floats (MSVM-3121): int32 control_model, int32 control_source
+CONTROL_FMT = "<ii"
+CONTROL_SIZE = struct.calcsize(CONTROL_FMT)  # 8 bytes
+CONTROL_MODEL_NAMES = {0: "UNSPECIFIED", 1: "KINEMATICS", 2: "DYNAMICS"}
+CONTROL_SOURCE_NAMES = {0: "UNSPECIFIED", 1: "NONE", 2: "INTERNAL_AI", 3: "MANUAL", 4: "EXTERNAL_AD"}
+
 PRINT_INTERVAL_SEC = 0.2  # 출력 rate-limit (0이면 매 패킷 출력)
 
 
@@ -40,7 +46,7 @@ def parse_vehicle_info_payload(data: bytes):
     ang = floats[12:15]
     ctrl = floats[15:18]
 
-    return {
+    out = {
         "seconds": seconds,
         "nanos": nanos,
         "id": vehicle_id,
@@ -52,6 +58,11 @@ def parse_vehicle_info_payload(data: bytes):
         "control": {"throttle": ctrl[0], "brake": ctrl[1], "steer_angle": ctrl[2]},
         "raw_size": len(data),
     }
+    if len(data) >= VEHICLE_INFO_SIZE + CONTROL_SIZE:
+        model, source = struct.unpack_from(CONTROL_FMT, data, VEHICLE_INFO_SIZE)
+        out["control_model"] = CONTROL_MODEL_NAMES.get(model, model)
+        out["control_source"] = CONTROL_SOURCE_NAMES.get(source, source)
+    return out
 
 
 class VehicleInfoReceiver(threading.Thread):
