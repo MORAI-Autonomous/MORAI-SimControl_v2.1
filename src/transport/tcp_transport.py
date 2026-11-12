@@ -152,26 +152,41 @@ def build_transform_control_by_id_payload(
     )
 
 
-def build_set_trajectory_payload(
+def build_set_route_payload(
     entity_id: str,
-    follow_mode: int,
-    trajectory_name: str,
+    routing_type: int,
     points: List[Tuple[float, float, float, float]],
+    following_mode: int = 0,
+    time_mode: int = 0,
+    closed_loop: bool = False,
+    target_speed: float = 0.0,
 ) -> bytes:
+    """0x1304 SetRoute (MSVM-3120). points are (x, y, z, time); speed and triggers stay unset here.
+    A ROUTE takes no timing (the simulator refuses it), so its times and modes are sent as 0."""
+    if routing_type == 1:
+        following_mode, time_mode = 0, 0
+        points = [(x, y, z, 0.0) for x, y, z, _ in points]
     return pack_message_payload(
-        proto.MSG_TYPE_SET_TRAJECTORY_COMMAND,
+        proto.MSG_TYPE_SET_ROUTE_COMMAND,
         {
             "entity_id": entity_id,
-            "follow_mode": follow_mode,
-            "trajectory_name": trajectory_name,
-            "point_count": len(points),
+            "routing_type": routing_type,
+            "following_mode": following_mode,
+            "time_mode": time_mode,
+            "closed_loop": 1 if closed_loop else 0,
+            "target_speed": target_speed,
+            "waypoint_count": len(points),
         },
         repeated_items=[
             {
-                "points[].x": x,
-                "points[].y": y,
-                "points[].z": z,
-                "points[].time": t,
+                "waypoints[].x": x,
+                "waypoints[].y": y,
+                "waypoints[].z": z,
+                "waypoints[].time": t,
+                "waypoints[].speed": 0.0,
+                "waypoints[].trigger": 0,
+                "waypoints[].trigger_value": 0.0,
+                "waypoints[].trigger_target": "",
             }
             for x, y, z, t in points
         ],
@@ -378,22 +393,26 @@ def send_transform_control_by_id(
     _send_packet(sock, request_id, proto.MSG_TYPE_TRANSFORM_CONTROL_BY_ID_COMMAND, payload)
 
 
-def send_set_trajectory(
+def send_set_route(
     sock: socket.socket,
     request_id: int,
     entity_id: str,
-    follow_mode: int,
-    trajectory_name: str,
+    routing_type: int,
     points: List[Tuple[float, float, float, float]],
+    following_mode: int = 0,
+    time_mode: int = 0,
+    closed_loop: bool = False,
+    target_speed: float = 0.0,
 ) -> None:
-    payload = build_set_trajectory_payload(entity_id, follow_mode, trajectory_name, points)
+    payload = build_set_route_payload(entity_id, routing_type, points, following_mode, time_mode,
+                                      closed_loop, target_speed)
     print(
-        f"[SEND][TCP] SetTrajectory payload_size={len(payload)} "
+        f"[SEND][TCP] SetRoute payload_size={len(payload)} "
         f"packet_size={proto.HEADER_SIZE + len(payload)} "
         f"points={len(points)} rid={request_id}"
     )
-    _send_packet(sock, request_id, proto.MSG_TYPE_SET_TRAJECTORY_COMMAND, payload,
-                 f"SetTrajectory(0x1304) id={entity_id} points={len(points)}")
+    _send_packet(sock, request_id, proto.MSG_TYPE_SET_ROUTE_COMMAND, payload,
+                 f"SetRoute(0x1304) id={entity_id} type={routing_type} points={len(points)}")
 
 
 def send_delete_object(sock: socket.socket, request_id: int, entity_id: str) -> None:

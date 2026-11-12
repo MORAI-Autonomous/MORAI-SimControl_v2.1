@@ -195,21 +195,38 @@ def build() -> None:
         dpg.add_spacer(height=2)
         dpg.add_button(label="Send", callback=_on_transform_control)
 
-    _subsection("Set Trajectory")
+    _subsection("Set Route")
     with dpg.group():
         dpg.add_spacer(height=2)
         with dpg.group(horizontal=True):
-            dpg.add_text("Mode", color=(160, 160, 160, 255))
+            dpg.add_text("Type", color=(160, 160, 160, 255))
             dpg.add_combo(
-                tag="tr_follow_mode",
-                items=object_enums.enum_labels(trajectory_samples.TRAJECTORY_FOLLOW_MODE_ITEMS),
-                default_value=object_enums.enum_label_for_value(
-                    trajectory_samples.TRAJECTORY_FOLLOW_MODE_ITEMS, 2, 2),
-                width=130,
+                tag="tr_routing_type",
+                items=object_enums.enum_labels(trajectory_samples.ROUTING_TYPE_ITEMS),
+                default_value=object_enums.enum_label_for_value(trajectory_samples.ROUTING_TYPE_ITEMS, 2, 2),
+                width=120,
             )
             dpg.add_spacer(width=8)
-            dpg.add_text("Name", color=(160, 160, 160, 255))
-            dpg.add_input_text(tag="tr_name", default_value="Route_1", width=140)
+            dpg.add_checkbox(tag="tr_closed_loop", label="Closed Loop", default_value=False)
+        with dpg.group(horizontal=True):
+            dpg.add_text("Follow", color=(160, 160, 160, 255))
+            dpg.add_combo(
+                tag="tr_follow_mode",
+                items=object_enums.enum_labels(trajectory_samples.ROUTE_FOLLOWING_MODE_ITEMS),
+                default_value=object_enums.enum_label_for_value(trajectory_samples.ROUTE_FOLLOWING_MODE_ITEMS, 1, 1),
+                width=110,
+            )
+            dpg.add_text("Time", color=(160, 160, 160, 255))
+            dpg.add_combo(
+                tag="tr_time_mode",
+                items=object_enums.enum_labels(trajectory_samples.ROUTE_TIME_MODE_ITEMS),
+                default_value=object_enums.enum_label_for_value(trajectory_samples.ROUTE_TIME_MODE_ITEMS, 2, 2),
+                width=110,
+            )
+        with dpg.group(horizontal=True):
+            dpg.add_text("Route speed (m/s)", color=(160, 160, 160, 255))
+            dpg.add_input_float(tag="tr_target_speed", default_value=0.0, step=0, width=82, format="%.2f")
+            dpg.add_text("ROUTE only, 0 = vehicle speed; TRAJECTORY times by t", color=(120, 120, 120, 255))
         with dpg.group(horizontal=True):
             dpg.add_text("Sample", color=(160, 160, 160, 255))
             dpg.add_combo(
@@ -233,7 +250,7 @@ def build() -> None:
                     )
         dpg.add_spacer(height=2)
         with dpg.group(horizontal=True):
-            dpg.add_button(label="Send", callback=_on_set_trajectory)
+            dpg.add_button(label="Send", callback=_on_set_route)
             dpg.add_text("0x1304", color=(140, 140, 140, 255))
 
     _load_state()
@@ -512,22 +529,21 @@ def _load_trajectory_sample() -> None:
                 dpg.set_value(tag, value)
 
 
-def _on_set_trajectory() -> None:
+def _on_set_route() -> None:
     entity_id = str(dpg.get_value("obj_entity_id")).strip()
-    trajectory_name = str(dpg.get_value("tr_name")).strip()
     if not entity_id:
-        log.append("[Object] SetTrajectory skipped: empty entity id", "WARN")
-        return
-    if not trajectory_name:
-        log.append("[Object] SetTrajectory skipped: empty trajectory name", "WARN")
+        log.append("[Object] SetRoute skipped: empty entity id", "WARN")
         return
 
     _save_state()
-    follow_mode = object_enums.enum_value_from_label(
-        trajectory_samples.TRAJECTORY_FOLLOW_MODE_ITEMS,
-        dpg.get_value("tr_follow_mode"),
-        2,
-    )
+    routing_type = object_enums.enum_value_from_label(
+        trajectory_samples.ROUTING_TYPE_ITEMS, dpg.get_value("tr_routing_type"), 2)
+    following_mode = object_enums.enum_value_from_label(
+        trajectory_samples.ROUTE_FOLLOWING_MODE_ITEMS, dpg.get_value("tr_follow_mode"), 1)
+    time_mode = object_enums.enum_value_from_label(
+        trajectory_samples.ROUTE_TIME_MODE_ITEMS, dpg.get_value("tr_time_mode"), 2)
+    closed_loop = bool(dpg.get_value("tr_closed_loop"))
+    target_speed = float(dpg.get_value("tr_target_speed")) if routing_type == 1 else 0.0
     points = []
     for idx in range(1, len(trajectory_samples.TRAJECTORY_SAMPLES[0][1]) + 1):
         points.append((
@@ -538,13 +554,15 @@ def _on_set_trajectory() -> None:
         ))
 
     _dispatch(
-        proto.MSG_TYPE_SET_TRAJECTORY_COMMAND,
-        lambda rid, eid=entity_id, mode=follow_mode, name=trajectory_name, pts=points:
-            tcp.send_set_trajectory(_tcp_sock, rid, eid, mode, name, pts),
+        proto.MSG_TYPE_SET_ROUTE_COMMAND,
+        lambda rid, eid=entity_id, rt=routing_type, pts=points, fm=following_mode, tm=time_mode,
+            cl=closed_loop, ts=target_speed:
+            tcp.send_set_route(_tcp_sock, rid, eid, rt, pts, fm, tm, cl, ts),
     )
     log.append(
-        "[Object] SetTrajectory requested "
-        f"id={entity_id} mode={follow_mode} name={trajectory_name!r} points={len(points)}",
+        "[Object] SetRoute requested "
+        f"id={entity_id} type={routing_type} follow={following_mode} time={time_mode} "
+        f"closed_loop={closed_loop} target_speed={target_speed} points={len(points)}",
         "INFO",
     )
 
@@ -576,8 +594,11 @@ def _save_state() -> None:
             "tc_rz": dpg.get_value("tc_rz"),
             "tc_steer": dpg.get_value("tc_steer"),
             "tc_speed": dpg.get_value("tc_speed"),
+            "tr_routing_type": dpg.get_value("tr_routing_type"),
             "tr_follow_mode": dpg.get_value("tr_follow_mode"),
-            "tr_name": dpg.get_value("tr_name"),
+            "tr_time_mode": dpg.get_value("tr_time_mode"),
+            "tr_closed_loop": dpg.get_value("tr_closed_loop"),
+            "tr_target_speed": dpg.get_value("tr_target_speed"),
             "tr_sample": dpg.get_value("tr_sample"),
             "tr_p1_x": dpg.get_value("tr_p1_x"),
             "tr_p1_y": dpg.get_value("tr_p1_y"),
@@ -622,7 +643,8 @@ def _load_state() -> None:
             "tc_rz",
             "tc_steer",
             "tc_speed",
-            "tr_name",
+            "tr_closed_loop",
+            "tr_target_speed",
             "tr_sample",
             "tr_p1_x",
             "tr_p1_y",
@@ -638,7 +660,9 @@ def _load_state() -> None:
         _load_enum_state(data, "co_entity_type", object_enums.ENTITY_TYPE_ITEMS, 1)
         _load_enum_state(data, "co_driving_mode", object_enums.VEHICLE_DRIVING_MODE_ITEMS, 2)
         _load_enum_state(data, "co_ground_vehicle_model", object_enums.GROUND_VEHICLE_MODEL_ITEMS, 12)
-        _load_enum_state(data, "tr_follow_mode", trajectory_samples.TRAJECTORY_FOLLOW_MODE_ITEMS, 2)
+        _load_enum_state(data, "tr_routing_type", trajectory_samples.ROUTING_TYPE_ITEMS, 2)
+        _load_enum_state(data, "tr_follow_mode", trajectory_samples.ROUTE_FOLLOWING_MODE_ITEMS, 1)
+        _load_enum_state(data, "tr_time_mode", trajectory_samples.ROUTE_TIME_MODE_ITEMS, 2)
     except Exception as e:
         print(f"[ObjectControl] load state error: {e}")
 
