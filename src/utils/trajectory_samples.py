@@ -5,9 +5,21 @@ from typing import Tuple
 TrajectoryPoint = Tuple[float, float, float, float]
 TrajectorySample = Tuple[str, Tuple[TrajectoryPoint, ...]]
 
-TRAJECTORY_FOLLOW_MODE_ITEMS = (
-    (1, "POSITION"),
-    (2, "FOLLOW"),
+# 0x1304 SetRoute enums: the entity_control.proto values (MSVM-3120)
+ROUTING_TYPE_ITEMS = (
+    (1, "ROUTE"),
+    (2, "TRAJECTORY"),
+)
+
+ROUTE_FOLLOWING_MODE_ITEMS = (
+    (1, "FOLLOW"),
+    (2, "POSITION"),
+)
+
+ROUTE_TIME_MODE_ITEMS = (
+    (1, "NONE"),
+    (2, "ABSOLUTE"),
+    (3, "RELATIVE"),
 )
 
 TRAJECTORY_SAMPLES: Tuple[TrajectorySample, ...] = (

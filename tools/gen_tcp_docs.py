@@ -83,7 +83,6 @@ def validate_schema_against_protocol_defs() -> None:
     )
 
     msg_1201 = get_message(0x1201)
-    _expect(proto.SET_TRAJECTORY_FOLLOW_MODE_SIZE == 4, "internal protocol size invariant changed")
     _expect(get_min_payload_size(msg_1201) == 21, "0x1201 payload size mismatch")
 
     msg_1302 = get_message(0x1302)
@@ -95,7 +94,8 @@ def validate_schema_against_protocol_defs() -> None:
     _expect(proto.TRANSFORM_CONTROL_BY_ID_MIN_SIZE == get_min_payload_size(msg_1303), "0x1303 min size mismatch")
 
     msg_1304 = get_message(0x1304)
-    _expect(proto.SET_TRAJECTORY_MIN_SIZE == get_min_payload_size(msg_1304), "0x1304 min size mismatch")
+    # SetRoute: entity_id length(4) + routing/following/time mode(4 x 3) + closed_loop(1) + target_speed(8) + count(4)
+    _expect(get_min_payload_size(msg_1304) == 29, "0x1304 min size mismatch")
 
     msg_1402 = get_message(0x1402)
     _expect(get_min_payload_size(msg_1402) == 4, "0x1402 min size mismatch")

@@ -2,8 +2,8 @@
 
 > 이 Markdown/HTML 문서는 자동 생성됩니다. 생성된 문서를 직접 편집하지 말고 코드와 스크립트에서 수정한 뒤 다시 생성하세요.
 >
-> - 생성 시각: `2026-10-27 17:11 +0900`
-> - 기준 브랜치: `feature/hwjung/msvm-3044_error_message`
+> - 생성 시각: `2026-11-12 12:54 +0900`
+> - 기준 브랜치: `feature/hwjung/msvm-3120_set_route`
 
 ## Common Header
 
@@ -38,7 +38,7 @@ Every TCP packet uses this 16-byte header before the payload described below.
 | [`0x1301`](#api-0x1301) | [`CreateObject`](#api-0x1301) | `36 bytes` | `8 + 4 + N bytes (N = object_id UTF-8 byte length)` |
 | [`0x1302`](#api-0x1302) | [`ManualControlById`](#api-0x1302) | `4 + N + 24 bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
 | [`0x1303`](#api-0x1303) | [`TransformControlById`](#api-0x1303) | `4 + N + 36 bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
-| [`0x1304`](#api-0x1304) | [`SetTrajectory`](#api-0x1304) | `4 + N1 + 4 + 4 + N2 + 4 bytes (N1 = entity_id UTF-8 byte length, N2 = trajectory_name UTF-8 byte length) + 32 bytes * item_count` | `8 bytes` |
+| [`0x1304`](#api-0x1304) | [`SetRoute`](#api-0x1304) | `4 + N + 25 bytes (N = entity_id UTF-8 byte length) + variable bytes * item_count` | `8 bytes` |
 | [`0x1305`](#api-0x1305) | [`DeleteObject`](#api-0x1305) | `N bytes (N = entity_id UTF-8 byte length)` | `8 bytes` |
 | [`0x1306`](#api-0x1306) | [`GetVehicleInfo`](#api-0x1306) | `4 + N bytes (N = entity_id UTF-8 byte length)` | `8 bytes on failure; 96 + N bytes on success (N = entity_id UTF-8 byte length)` |
 | [`0x1401`](#api-0x1401) | [`ActiveSuiteStatus`](#api-0x1401) | `0 bytes` | `8 + 4 + N1 + 4 + N2 + 4 bytes (N1 = active_suite_name UTF-8 byte length, N2 = active_scenario_name UTF-8 byte length) + variable bytes * item_count` |
@@ -477,44 +477,51 @@ Wire layout: `[uint32 result_code] [uint32 detail_code]`
 | `detail_code` | `uint32` | Additional result detail |
 
 <a id="api-0x1304"></a>
-## `0x1304` SetTrajectory
+## `0x1304` SetRoute
 
 ### Req
 
-- Payload: `4 + N1 + 4 + 4 + N2 + 4 bytes (N1 = entity_id UTF-8 byte length, N2 = trajectory_name UTF-8 byte length) + 32 bytes * item_count`
-- Builder: `tcp.send_set_trajectory()`
+- Payload: `4 + N + 25 bytes (N = entity_id UTF-8 byte length) + variable bytes * item_count`
+- Builder: `tcp.send_set_route()`
 
-Send a named trajectory and follow mode to a target entity.
+Give a running vehicle a route or a trajectory (SetRouteRequest, hand-packed; same as Proto 0x0104000A).
 
-Wire layout: `[uint32 entity_id_len][utf-8 * entity_id_len] [int32 follow_mode] [uint32 trajectory_name_len][utf-8 * trajectory_name_len] [uint32 point_count]`
+Wire layout: `[uint32 entity_id_len][utf-8 * entity_id_len] [int32 routing_type] [int32 following_mode] [int32 time_mode] [uint8 closed_loop] [float64 target_speed] [uint32 waypoint_count]`
 
 | Field | Type | Description |
 |------|------|-------------|
 | `entity_id_len` | `uint32` | entity_id UTF-8 byte length |
 | `entity_id` | `utf-8 bytes` | Target entity ID |
-| `follow_mode` | `int32` | 1 = POSITION, 2 = FOLLOW |
-| `trajectory_name_len` | `uint32` | trajectory_name UTF-8 byte length |
-| `trajectory_name` | `utf-8 bytes` | Trajectory identifier |
-| `point_count` | `uint32` | Number of trajectory points that follow |
+| `routing_type` | `int32` | 1 = ROUTE (road network), 2 = TRAJECTORY (points as given) |
+| `following_mode` | `int32` | TRAJECTORY: 0 = default (FOLLOW), 1 = FOLLOW, 2 = POSITION |
+| `time_mode` | `int32` | TRAJECTORY: 0 = default (ABSOLUTE), 1 = NONE, 2 = ABSOLUTE, 3 = RELATIVE |
+| `closed_loop` | `uint8` | 1 = back to the start and around again |
+| `target_speed` | `float64` | ROUTE: m/s, 0 keeps the vehicle's speed |
+| `waypoint_count` | `uint32` | - |
 
 Repeat layout:
 
 | Field | Type | Description |
 |------|------|-------------|
-| `points[].x` | `float64` | Trajectory point X component |
-| `points[].y` | `float64` | Trajectory point Y component |
-| `points[].z` | `float64` | Trajectory point Z component |
-| `points[].time` | `float64` | Trajectory point time value |
+| `waypoints[].x` | `float64` | Map frame, m |
+| `waypoints[].y` | `float64` | - |
+| `waypoints[].z` | `float64` | - |
+| `waypoints[].time` | `float64` | TRAJECTORY: s, by time_mode |
+| `waypoints[].speed` | `float64` | TRAJECTORY: m/s of the leg, instead of time |
+| `waypoints[].trigger` | `int32` | 0 = NONE, 1 = DURATION, 2 = DISTANCE |
+| `waypoints[].trigger_value` | `float64` | s for DURATION, m for DISTANCE |
+| `waypoints[].trigger_target_len` | `uint32` | waypoints[].trigger_target UTF-8 byte length |
+| `waypoints[].trigger_target` | `utf-8 bytes` | DISTANCE: the entity to wait for, else empty |
 
 Notes:
-- Each trajectory point is serialized as four float64 values.
+- Enums are the entity_control.proto values. The payload ends with the last waypoint; the vehicle starts from where it is. Needs a running scenario and control source INTERNAL_AI.
 
 ### Resp
 
 - Payload: `8 bytes`
 - Parser: `tcp.parse_result_code()`
 
-Return result code for a set-trajectory request.
+Return result code for a set-route request (detail_code is the ErrorReason).
 
 Wire layout: `[uint32 result_code] [uint32 detail_code]`
 

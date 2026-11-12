@@ -175,8 +175,8 @@ def prompt_delete_object() -> dict:
     }
 
 
-def prompt_set_trajectory() -> dict:
-    print("\n-- Set Trajectory -----------------------------")
+def prompt_set_route() -> dict:
+    print("\n-- Set Route (0x1304) -------------------------")
     sample_options = {
         idx: name
         for idx, (name, _) in enumerate(trajectory_samples.TRAJECTORY_SAMPLES, start=1)
@@ -186,12 +186,12 @@ def prompt_set_trajectory() -> dict:
     points = list(trajectory_samples.get_sample(sample_name))
     return {
         "entity_id": _ask_str("entity id", "Car_1"),
-        "follow_mode": _ask_select(
-            "follow_mode",
-            object_enums.enum_options(trajectory_samples.TRAJECTORY_FOLLOW_MODE_ITEMS),
-            2,
-        ),
-        "trajectory_name": _ask_str("trajectory name", "Route_1"),
+        "routing_type": _ask_select(
+            "routing_type", object_enums.enum_options(trajectory_samples.ROUTING_TYPE_ITEMS), 2),
+        "following_mode": _ask_select(
+            "following_mode", object_enums.enum_options(trajectory_samples.ROUTE_FOLLOWING_MODE_ITEMS), 1),
+        "time_mode": _ask_select(
+            "time_mode", object_enums.enum_options(trajectory_samples.ROUTE_TIME_MODE_ITEMS), 2),
         "points": points,
     }
 

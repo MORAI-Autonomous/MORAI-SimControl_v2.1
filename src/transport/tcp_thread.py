@@ -283,21 +283,21 @@ class Receiver(threading.Thread):
                 else:
                     log.append(f"CreateObject parse_failed rid={request_id}", "WARN")
 
-            # SetTrajectory (0x1304)
+            # SetRoute (0x1304)
             elif msg_class == proto.MSG_CLASS_RESP \
-                    and msg_type == proto.MSG_TYPE_SET_TRAJECTORY_COMMAND:
+                    and msg_type == proto.MSG_TYPE_SET_ROUTE_COMMAND:
                 parsed = tcp.parse_result_code(payload)
                 if parsed:
                     result_code, detail_code = parsed
                     level = "RECV" if result_code == 0 else "WARN"
                     log.append(
-                        f"SetTrajectory rid={request_id} "
+                        f"SetRoute rid={request_id} "
                         f"result={result_code}({result_to_string(result_code)}) "
                         f"detail={detail_to_string(detail_code)}",
                         level
                     )
                 else:
-                    log.append(f"SetTrajectory parse_failed rid={request_id}", "WARN")
+                    log.append(f"SetRoute parse_failed rid={request_id}", "WARN")
 
             # DeleteObject (0x1305)
             elif msg_class == proto.MSG_CLASS_RESP \
